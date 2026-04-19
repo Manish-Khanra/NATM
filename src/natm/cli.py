@@ -38,9 +38,15 @@ def main() -> int:
     final_row = summary.iloc[-1]
     print(f"Scenario: {scenario.name}")
     print(f"Years simulated: {len(history)}")
+    print(f"Final carbon price: {final_row['carbon_price']:.2f}")
     print(
         "Final shares: "
         f"aviation={final_row['aviation_alternative_share']:.2%}, "
         f"maritime={final_row['maritime_alternative_share']:.2%}"
+    )
+    print(
+        "Final transition pressure: "
+        f"aviation={final_row['aviation_transition_pressure']:.2%}, "
+        f"maritime={final_row['maritime_transition_pressure']:.2%}"
     )
     return 0
