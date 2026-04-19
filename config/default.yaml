@@ -1,0 +1,18 @@
+name: baseline-transition
+start_year: 2025
+end_year: 2035
+
+aviation:
+  initial_fleet: 25000
+  annual_growth_rate: 0.030
+  retirement_rate: 0.045
+  alternative_share: 0.020
+  adoption_sensitivity: 0.120
+
+maritime:
+  initial_fleet: 60000
+  annual_growth_rate: 0.025
+  retirement_rate: 0.040
+  alternative_share: 0.040
+  adoption_sensitivity: 0.090
+

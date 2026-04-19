@@ -2,11 +2,10 @@
 
 NATM stands for NavAero Transition Model.
 
-This project was initialized inside `MANISH_REPO/NATM` with:
-
-- a local Git repository
-- a local virtual environment in `.venv`
-- a minimal Python package layout under `src/natm`
+This repository contains the first development scaffold for a joint aviation and
+maritime transition model. The starter version focuses on a simple scenario
+loader, a lightweight transition simulation, and a command-line entry point we
+can grow into a fuller agent-based model.
 
 ## Quick Start
 
@@ -14,12 +13,26 @@ This project was initialized inside `MANISH_REPO/NATM` with:
 
 ```powershell
 .venv\Scripts\Activate.ps1
-python --version
+python -m pip install -e .[dev]
+natm --config config/default.yaml --output outputs/baseline.csv
 ```
 
-## Next Steps
+### Run Tests
 
-1. Install project dependencies into `.venv`.
-2. Add the first model modules and configuration files.
-3. Make the initial Git commit.
+```powershell
+pytest
+```
 
+## Project Layout
+
+- `src/natm/core/scenario.py`: scenario schema and YAML loader
+- `src/natm/core/agents.py`: sector transition logic
+- `src/natm/core/model.py`: simulation runner and tabular output
+- `src/natm/cli.py`: command-line entry point
+- `config/default.yaml`: baseline scenario
+
+## Near-Term Next Steps
+
+1. Replace the starter heuristics with calibrated aviation and maritime data.
+2. Expand the sector agents into richer firm, fleet, or route-level entities.
+3. Add policy levers, energy pathways, and reporting outputs.
