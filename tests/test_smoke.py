@@ -29,10 +29,7 @@ def _set_scenario_value(
     **scope: str,
 ) -> None:
     long_frame = scenario_table._long.copy()
-    mask = (
-        (long_frame["variable_name"] == variable_name)
-        & (long_frame["year"] == year)
-    )
+    mask = (long_frame["variable_name"] == variable_name) & (long_frame["year"] == year)
     for column, scope_value in scope.items():
         requested = str(scope_value).strip()
         mask &= long_frame[column].fillna("").astype(str).str.strip().eq(requested)
@@ -93,9 +90,8 @@ def _set_capacity_matched_demand(model: NATMModel, year: int) -> None:
         )
 
     long_frame = scenario_table._long.copy()
-    delivery_mask = (
-        (long_frame["variable_name"] == "planned_delivery_count")
-        & (long_frame["year"] == year)
+    delivery_mask = (long_frame["variable_name"] == "planned_delivery_count") & (
+        long_frame["year"] == year
     )
     long_frame.loc[delivery_mask, "value"] = 0.0
     scenario_table._long = long_frame.reset_index(drop=True)
@@ -214,17 +210,23 @@ def test_stronger_policy_accelerates_adoption() -> None:
     stronger_long.loc[
         stronger_long["variable_name"] == "clean_fuel_subsidy",
         "value",
-    ] = pd.to_numeric(
-        stronger_long.loc[stronger_long["variable_name"] == "clean_fuel_subsidy", "value"],
-        errors="coerce",
-    ) + 0.08
+    ] = (
+        pd.to_numeric(
+            stronger_long.loc[stronger_long["variable_name"] == "clean_fuel_subsidy", "value"],
+            errors="coerce",
+        )
+        + 0.08
+    )
     stronger_long.loc[
         stronger_long["variable_name"] == "adoption_mandate",
         "value",
-    ] = pd.to_numeric(
-        stronger_long.loc[stronger_long["variable_name"] == "adoption_mandate", "value"],
-        errors="coerce",
-    ) + 0.10
+    ] = (
+        pd.to_numeric(
+            stronger_long.loc[stronger_long["variable_name"] == "adoption_mandate", "value"],
+            errors="coerce",
+        )
+        + 0.10
+    )
     stronger_table._long = stronger_long
     stronger_table._cache.clear()
 
@@ -311,11 +313,13 @@ def test_higher_market_share_gets_more_growth_aircraft() -> None:
     _set_capacity_matched_demand(model, planning_year)
 
     lufthansa = next(
-        agent for agent in model.agents_by_type[AviationPassengerAirlineAgent]
+        agent
+        for agent in model.agents_by_type[AviationPassengerAirlineAgent]
         if agent.operator_name == "Lufthansa"
     )
     eurowings = next(
-        agent for agent in model.agents_by_type[AviationPassengerAirlineAgent]
+        agent
+        for agent in model.agents_by_type[AviationPassengerAirlineAgent]
         if agent.operator_name == "Eurowings"
     )
     scenario_table = model.aviation_passenger_inputs.scenario_table
@@ -365,7 +369,8 @@ def test_planned_deliveries_cover_gap_before_endogenous_growth() -> None:
     _set_capacity_matched_demand(model, planning_year)
 
     lufthansa = next(
-        agent for agent in model.agents_by_type[AviationPassengerAirlineAgent]
+        agent
+        for agent in model.agents_by_type[AviationPassengerAirlineAgent]
         if agent.operator_name == "Lufthansa"
     )
     scenario_table = model.aviation_passenger_inputs.scenario_table

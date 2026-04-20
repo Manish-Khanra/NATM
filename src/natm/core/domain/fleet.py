@@ -173,9 +173,7 @@ class Fleet:
             evaluation.secondary_energy_quantity
         )
         self._frame.loc[row_index, "chargeable_emission"] = evaluation.chargeable_emission
-        self._frame.loc[row_index, "remaining_ets_allocation"] = (
-            evaluation.remaining_ets_allowance
-        )
+        self._frame.loc[row_index, "remaining_ets_allocation"] = evaluation.remaining_ets_allowance
         self._frame.loc[row_index, "economic_utility"] = evaluation.economic_utility
         self._frame.loc[row_index, "environmental_utility"] = evaluation.environmental_utility
         self._frame.loc[row_index, "total_utility"] = evaluation.total_utility
@@ -229,8 +227,6 @@ class Fleet:
             "investment_logic",
         ]
         remaining_columns = [
-            column
-            for column in fleet_snapshot.columns
-            if column not in preferred_order
+            column for column in fleet_snapshot.columns if column not in preferred_order
         ]
         return fleet_snapshot[preferred_order + remaining_columns]

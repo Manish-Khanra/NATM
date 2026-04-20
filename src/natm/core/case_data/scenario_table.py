@@ -89,8 +89,7 @@ class ScenarioTable:
         **scope: str,
     ) -> pd.DataFrame:
         rows = self._long.loc[
-            (self._long["variable_name"] == variable_name)
-            & (self._long["year"] == year),
+            (self._long["variable_name"] == variable_name) & (self._long["year"] == year),
         ].copy()
         if rows.empty:
             return rows.reset_index(drop=True)
@@ -101,10 +100,7 @@ class ScenarioTable:
             if requested_text == "":
                 rows = rows.loc[candidate_values == ""]
             else:
-                rows = rows.loc[
-                    (candidate_values == "")
-                    | (candidate_values == requested_text)
-                ]
+                rows = rows.loc[(candidate_values == "") | (candidate_values == requested_text)]
 
         if rows.empty:
             return rows.reset_index(drop=True)
@@ -143,8 +139,7 @@ class ScenarioTable:
             return self._cache[cache_key]
 
         rows = self._long.loc[
-            (self._long["variable_name"] == variable_name)
-            & (self._long["year"] == year),
+            (self._long["variable_name"] == variable_name) & (self._long["year"] == year),
         ]
         if rows.empty:
             self._cache[cache_key] = default

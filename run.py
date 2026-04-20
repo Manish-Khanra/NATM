@@ -28,6 +28,7 @@ AVAILABLE_EXAMPLES = {
     },
 }
 
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Launch a NATM case and write outputs into outputs/<selected_example>/.",

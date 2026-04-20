@@ -152,8 +152,8 @@ class LegacyWeightedUtilityLogic(AviationPassengerDecisionLogic):
         primary_emission = primary_energy_quantity * float(
             technology_row["primary_energy_emission_factor"],
         )
-        secondary_emission = (
-            secondary_energy_quantity * float(technology_row["secondary_energy_emission_factor"])
+        secondary_emission = secondary_energy_quantity * float(
+            technology_row["secondary_energy_emission_factor"]
         )
         total_emission = primary_emission + secondary_emission
 
@@ -164,10 +164,9 @@ class LegacyWeightedUtilityLogic(AviationPassengerDecisionLogic):
         covered_emission = min(remaining_ets_allowance, total_emission)
         chargeable_emission = max(total_emission - covered_emission, 0.0)
         remaining_ets_allowance = max(remaining_ets_allowance - total_emission, 0.0)
-        energy_cost = (
-            primary_energy_quantity * float(primary_price)
-            + secondary_energy_quantity * float(secondary_price)
-        )
+        energy_cost = primary_energy_quantity * float(
+            primary_price
+        ) + secondary_energy_quantity * float(secondary_price)
         emission_cost = chargeable_emission * carbon_price
         return OperationMetrics(
             total_cost=energy_cost + emission_cost,
@@ -264,13 +263,10 @@ class LegacyWeightedUtilityLogic(AviationPassengerDecisionLogic):
         )
 
         passenger_mass = (
-            (
-                float(technology_row["economy_seats"]) * float(economy_occupancy)
-                + float(technology_row["business_seats"]) * float(business_occupancy)
-                + float(technology_row["first_class_seats"]) * float(first_occupancy)
-            )
-            * AVERAGE_PASSENGER_WEIGHT_KG
-        )
+            float(technology_row["economy_seats"]) * float(economy_occupancy)
+            + float(technology_row["business_seats"]) * float(business_occupancy)
+            + float(technology_row["first_class_seats"]) * float(first_occupancy)
+        ) * AVERAGE_PASSENGER_WEIGHT_KG
         spare_cargo_mass = max(
             float(technology_row["mtow"]) - float(technology_row["oew"]) - passenger_mass,
             0.0,
@@ -420,11 +416,7 @@ class LegacyWeightedUtilityLogic(AviationPassengerDecisionLogic):
             1.0 if float(technology_row["secondary_energy_emission_factor"]) == 0.0 else 0.0
         )
         return (
-            0.10 * hc
-            + 0.10 * co
-            + 0.10 * nox
-            + 0.10 * smoke
-            + 0.30 * (co2_primary + co2_secondary)
+            0.10 * hc + 0.10 * co + 0.10 * nox + 0.10 * smoke + 0.30 * (co2_primary + co2_secondary)
         )
 
     def is_candidate_available(

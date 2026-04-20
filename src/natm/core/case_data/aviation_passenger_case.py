@@ -153,21 +153,23 @@ class AviationPassengerCaseData:
             .drop_duplicates(subset=["operator_name", "operator_country", "segment"])
             .loc[:, ["operator_name", "operator_country", "segment"]]
         )
-        demand_scope = (
-            fleet_scope.drop_duplicates(subset=["operator_country", "segment"])
-            .loc[:, ["operator_country", "segment"]]
-        )
+        demand_scope = fleet_scope.drop_duplicates(subset=["operator_country", "segment"]).loc[
+            :, ["operator_country", "segment"]
+        ]
 
         missing_demand: list[str] = []
         for year in years:
             for row in demand_scope.itertuples(index=False):
-                if scenario_table.value(
-                    "passenger_km_demand",
-                    year,
-                    country=row.operator_country,
-                    segment=row.segment,
-                    default=None,
-                ) is None:
+                if (
+                    scenario_table.value(
+                        "passenger_km_demand",
+                        year,
+                        country=row.operator_country,
+                        segment=row.segment,
+                        default=None,
+                    )
+                    is None
+                ):
                     missing_demand.append(
                         f"{year}:{row.operator_country}/{row.segment}",
                     )
@@ -175,14 +177,17 @@ class AviationPassengerCaseData:
         missing_share: list[str] = []
         for year in years:
             for row in fleet_scope.itertuples(index=False):
-                if scenario_table.value(
-                    "operator_market_share",
-                    year,
-                    country=row.operator_country,
-                    operator_name=row.operator_name,
-                    segment=row.segment,
-                    default=None,
-                ) is None:
+                if (
+                    scenario_table.value(
+                        "operator_market_share",
+                        year,
+                        country=row.operator_country,
+                        operator_name=row.operator_name,
+                        segment=row.segment,
+                        default=None,
+                    )
+                    is None
+                ):
                     missing_share.append(
                         f"{year}:{row.operator_name}/{row.operator_country}/{row.segment}",
                     )

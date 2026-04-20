@@ -49,8 +49,7 @@ class OperationMetrics:
 class AviationPassengerDecisionLogic(Protocol):
     name: str
 
-    def step(self, agent: AviationPassengerAirlineAgent, year: int) -> None:
-        ...
+    def step(self, agent: AviationPassengerAirlineAgent, year: int) -> None: ...
 
     def annual_operation_metrics(
         self,
@@ -59,5 +58,4 @@ class AviationPassengerDecisionLogic(Protocol):
         technology_row: pd.Series,
         year: int,
         free_ets_balance: float | None = None,
-    ) -> OperationMetrics:
-        ...
+    ) -> OperationMetrics: ...

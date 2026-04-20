@@ -330,17 +330,12 @@ class NATMModel(mesa.Model):
             return
 
         detailed_agents = [
-            agent
-            for agent in aviation_agents
-            if isinstance(agent, AviationPassengerAirlineAgent)
+            agent for agent in aviation_agents if isinstance(agent, AviationPassengerAirlineAgent)
         ]
         if not detailed_agents:
             return
 
-        yearly_snapshots = [
-            agent.fleet_snapshot(self.current_year)
-            for agent in detailed_agents
-        ]
+        yearly_snapshots = [agent.fleet_snapshot(self.current_year) for agent in detailed_agents]
         self._aircraft_history_frames.append(
             pd.concat(yearly_snapshots, ignore_index=True),
         )
