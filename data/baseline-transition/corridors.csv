@@ -1,0 +1,6 @@
+origin_country,destination_country,sector_name,connectivity,clean_fuel_corridor
+Germany,France,aviation,0.82,0.34
+Germany,Ireland,aviation,0.76,0.29
+France,Ireland,aviation,0.68,0.31
+France,Germany,aviation,0.82,0.34
+Ireland,Germany,aviation,0.76,0.29

@@ -5,13 +5,22 @@ from dataclasses import asdict, dataclass
 import mesa
 import pandas as pd
 
-from natm.core.agents import (
+from natm.core.agent_types import (
     AviationOperatorAgent,
+    AviationPassengerAirlineAgent,
     MaritimeOperatorAgent,
-    OperatorProfile,
     SectorMarketContext,
 )
-from natm.core.scenario import NATMScenario, SectorParameters
+from natm.core.aviation_passenger_loader import load_aviation_passenger_case
+from natm.core.environment import TransitionEnvironment
+from natm.core.outputs import (
+    AircraftStockExporter,
+    AviationEnergyEmissionsExporter,
+    AviationInvestmentExporter,
+    AviationTechnologyExporter,
+)
+from natm.core.policy import PolicySignal, SectorPolicySignal
+from natm.core.scenario import NATMScenario
 
 
 def _mean(values: list[float]) -> float:
@@ -24,6 +33,9 @@ def _mean(values: list[float]) -> float:
 class YearSnapshot:
     year: int
     carbon_price: float
+    environment_aviation_infrastructure: float
+    environment_maritime_infrastructure: float
+    environment_policy_alignment: float
     aviation_total_assets: float
     aviation_alternative_share: float
     aviation_transition_pressure: float
@@ -48,7 +60,7 @@ class YearSnapshot:
 class NATMModel(mesa.Model):
     """Mesa-native NATM model with multiple operator agents per sector."""
 
-    sector_agent_classes = {
+    default_sector_agent_classes = {
         "aviation": AviationOperatorAgent,
         "maritime": MaritimeOperatorAgent,
     }
@@ -56,18 +68,40 @@ class NATMModel(mesa.Model):
     def __init__(self, scenario: NATMScenario, *, seed: int | None = None) -> None:
         super().__init__(seed=seed)
         self.scenario = scenario
+        self.enabled_sectors = scenario.enabled_sectors
+        self.sector_agent_classes = dict(self.default_sector_agent_classes)
+        self.environment = TransitionEnvironment.from_csvs(
+            countries_path=scenario.environment_input_path("countries"),
+            corridors_path=scenario.environment_input_path("corridors"),
+        )
+        self.aviation_passenger_inputs = None
 
-        aviation_profiles = self._build_operator_profiles("aviation", scenario.aviation)
-        maritime_profiles = self._build_operator_profiles("maritime", scenario.maritime)
-
-        AviationOperatorAgent.create_agents(self, len(aviation_profiles), profile=aviation_profiles)
-        MaritimeOperatorAgent.create_agents(self, len(maritime_profiles), profile=maritime_profiles)
+        for sector_name in self.enabled_sectors:
+            if sector_name == "aviation" and self._has_aviation_passenger_case_inputs():
+                self._create_aviation_passenger_agents()
+                continue
+            raise NotImplementedError(
+                "This NATM configuration currently expects a case-defined aviation passenger "
+                "setup with the standard CSV files in the case folder.",
+            )
+        for agent in self.agents:
+            self.environment.ensure_country(agent.operator_country)
 
         self.current_sector_context = self._build_sector_context()
+        self._aircraft_history_frames: list[pd.DataFrame] = []
         self.datacollector = mesa.DataCollector(
             model_reporters={
                 "year": "current_year",
                 "carbon_price": lambda m: m.current_policy_signal.carbon_price,
+                "environment_aviation_infrastructure": lambda m: m.environment_average(
+                    "aviation_infrastructure",
+                ),
+                "environment_maritime_infrastructure": lambda m: m.environment_average(
+                    "maritime_infrastructure",
+                ),
+                "environment_policy_alignment": lambda m: m.environment_average(
+                    "policy_alignment",
+                ),
                 "aviation_total_assets": lambda m: m.sector_total_assets("aviation"),
                 "aviation_alternative_share": lambda m: m.sector_alternative_share("aviation"),
                 "aviation_transition_pressure": lambda m: m.sector_mean(
@@ -111,6 +145,7 @@ class NATMModel(mesa.Model):
             },
             agent_reporters={
                 "operator_name": "operator_name",
+                "operator_country": "operator_country",
                 "sector_name": "sector_name",
                 "year": "current_year",
                 "conventional_assets": "conventional_assets",
@@ -124,11 +159,13 @@ class NATMModel(mesa.Model):
                 "policy_support": "policy_support",
                 "mandate_share": "mandate_share",
                 "peer_influence": "peer_influence",
+                "investment_logic": lambda agent: getattr(agent, "investment_logic_name", ""),
             },
         )
 
         self.history = [self._snapshot()]
         self.datacollector.collect(self)
+        self._record_detailed_outputs()
 
     @property
     def current_year(self) -> int:
@@ -136,10 +173,42 @@ class NATMModel(mesa.Model):
 
     @property
     def current_policy_signal(self):
-        return self.scenario.policy_signal(self.current_year)
+        if self.aviation_passenger_inputs is not None:
+            carbon_price = self.aviation_passenger_inputs.scenario_table.value(
+                "carbon_price",
+                self.current_year,
+                default=0.0,
+            )
+            aviation_clean_fuel_subsidy = self.aviation_passenger_inputs.scenario_table.value(
+                "clean_fuel_subsidy",
+                self.current_year,
+                default=0.0,
+            )
+            aviation_adoption_mandate = self.aviation_passenger_inputs.scenario_table.value(
+                "adoption_mandate",
+                self.current_year,
+                default=0.0,
+            )
+            return PolicySignal(
+                carbon_price=float(carbon_price or 0.0),
+                aviation=SectorPolicySignal(
+                    clean_fuel_subsidy=float(aviation_clean_fuel_subsidy or 0.0),
+                    adoption_mandate=float(aviation_adoption_mandate or 0.0),
+                ),
+                maritime=SectorPolicySignal(clean_fuel_subsidy=0.0, adoption_mandate=0.0),
+            )
+        return PolicySignal(
+            carbon_price=0.0,
+            aviation=SectorPolicySignal(clean_fuel_subsidy=0.0, adoption_mandate=0.0),
+            maritime=SectorPolicySignal(clean_fuel_subsidy=0.0, adoption_mandate=0.0),
+        )
 
     def get_sector_agents(self, sector_name: str):
-        return self.agents_by_type[self.sector_agent_classes[sector_name]]
+        agent_class = self.sector_agent_classes[sector_name]
+        try:
+            return self.agents_by_type[agent_class]
+        except KeyError:
+            return []
 
     def sector_total_assets(self, sector_name: str) -> float:
         return sum(agent.total_assets for agent in self.get_sector_agents(sector_name))
@@ -157,86 +226,39 @@ class NATMModel(mesa.Model):
         agents = list(self.get_sector_agents(sector_name))
         return _mean([getattr(agent, attribute) for agent in agents])
 
-    def _bounded_multiplier(
-        self,
-        base: float,
-        variation: float,
-        minimum: float,
-        maximum: float,
-    ) -> float:
-        scaled = base * (1.0 + self.rng.uniform(-variation, variation))
-        return min(maximum, max(minimum, scaled))
+    def environment_average(self, attribute: str) -> float:
+        return _mean([getattr(state, attribute) for state in self.environment.countries.values()])
 
-    def _build_operator_profiles(
-        self,
-        sector_name: str,
-        params: SectorParameters,
-    ) -> list[OperatorProfile]:
-        raw_sizes = self.rng.lognormal(
-            mean=0.0,
-            sigma=max(params.fleet_variation, 1e-6),
-            size=params.operator_count,
+    def _has_aviation_passenger_case_inputs(self) -> bool:
+        if not self.scenario.is_sector_enabled("aviation"):
+            return False
+        if not self.scenario.is_application_enabled("aviation", "passenger"):
+            return False
+        case_path = self.scenario.base_path
+        required_files = (
+            case_path / "aviation_fleet_stock.csv",
+            case_path / "aviation_technology_catalog.csv",
+            case_path / "aviation_scenario.csv",
         )
-        size_shares = raw_sizes / raw_sizes.sum()
+        return all(path.exists() for path in required_files)
 
-        profiles: list[OperatorProfile] = []
-        for index, share in enumerate(size_shares, start=1):
-            initial_total_assets = float(params.initial_fleet) * float(share)
-            initial_alternative_share = self._bounded_multiplier(
-                params.alternative_share,
-                params.sensitivity_variation,
-                0.0,
-                0.95,
+    def _create_aviation_passenger_agents(self) -> None:
+        self.aviation_passenger_inputs = load_aviation_passenger_case(self.scenario.base_path)
+        self.aviation_passenger_inputs.validate_capacity_planning_inputs(
+            self.scenario.start_year,
+            self.scenario.end_year,
+        )
+        self.sector_agent_classes["aviation"] = AviationPassengerAirlineAgent
+        grouped_fleet = self.aviation_passenger_inputs.grouped_operator_fleet()
+        for (operator_name, operator_country), fleet_df in grouped_fleet:
+            AviationPassengerAirlineAgent(
+                self,
+                operator_name=operator_name,
+                operator_country=operator_country,
+                fleet_frame=fleet_df,
+                technology_catalog=self.aviation_passenger_inputs.technology_catalog,
+                scenario_table=self.aviation_passenger_inputs.scenario_table,
             )
-            adoption_sensitivity = self._bounded_multiplier(
-                params.adoption_sensitivity,
-                params.sensitivity_variation,
-                0.0,
-                1.0,
-            )
-            conventional_energy_cost = self._bounded_multiplier(
-                params.conventional_energy_cost,
-                params.cost_variation,
-                0.01,
-                10.0,
-            )
-            alternative_energy_cost = self._bounded_multiplier(
-                params.alternative_energy_cost,
-                params.cost_variation,
-                0.01,
-                10.0,
-            )
-            infrastructure_readiness = self._bounded_multiplier(
-                params.infrastructure_readiness,
-                params.readiness_variation,
-                0.0,
-                1.0,
-            )
-            peer_influence = self._bounded_multiplier(
-                params.peer_influence,
-                params.sensitivity_variation,
-                0.0,
-                1.0,
-            )
-
-            profiles.append(
-                OperatorProfile(
-                    operator_name=f"{sector_name[:3]}_{index:02d}",
-                    conventional_assets=initial_total_assets * (1.0 - initial_alternative_share),
-                    alternative_assets=initial_total_assets * initial_alternative_share,
-                    annual_growth_rate=params.annual_growth_rate,
-                    retirement_rate=params.retirement_rate,
-                    adoption_sensitivity=adoption_sensitivity,
-                    conventional_energy_cost=conventional_energy_cost,
-                    alternative_energy_cost=alternative_energy_cost,
-                    emissions_intensity=params.emissions_intensity,
-                    infrastructure_readiness=infrastructure_readiness,
-                    infrastructure_build_rate=params.infrastructure_build_rate,
-                    learning_rate=params.learning_rate,
-                    peer_influence=peer_influence,
-                )
-            )
-        return profiles
 
     def _build_sector_context(self) -> dict[str, SectorMarketContext]:
         contexts: dict[str, SectorMarketContext] = {}
@@ -259,6 +281,13 @@ class NATMModel(mesa.Model):
         return YearSnapshot(
             year=self.current_year,
             carbon_price=policy_signal.carbon_price,
+            environment_aviation_infrastructure=self.environment_average(
+                "aviation_infrastructure",
+            ),
+            environment_maritime_infrastructure=self.environment_average(
+                "maritime_infrastructure",
+            ),
+            environment_policy_alignment=self.environment_average("policy_alignment"),
             aviation_total_assets=self.sector_total_assets("aviation"),
             aviation_alternative_share=self.sector_alternative_share("aviation"),
             aviation_transition_pressure=self.sector_mean("aviation", "transition_pressure"),
@@ -295,17 +324,42 @@ class NATMModel(mesa.Model):
             maritime_mandate_share=self.sector_mean("maritime", "mandate_share"),
         )
 
+    def _record_detailed_outputs(self) -> None:
+        aviation_agents = list(self.get_sector_agents("aviation"))
+        if not aviation_agents:
+            return
+
+        detailed_agents = [
+            agent
+            for agent in aviation_agents
+            if isinstance(agent, AviationPassengerAirlineAgent)
+        ]
+        if not detailed_agents:
+            return
+
+        yearly_snapshots = [
+            agent.fleet_snapshot(self.current_year)
+            for agent in detailed_agents
+        ]
+        self._aircraft_history_frames.append(
+            pd.concat(yearly_snapshots, ignore_index=True),
+        )
+
     def step(self) -> None:
         if self.current_year > self.scenario.end_year:
             self.running = False
             return
 
         self.current_sector_context = self._build_sector_context()
-        self.agents_by_type[AviationOperatorAgent].shuffle_do("step")
-        self.agents_by_type[MaritimeOperatorAgent].shuffle_do("step")
+        for sector_name in self.enabled_sectors:
+            sector_agents = self.get_sector_agents(sector_name)
+            if hasattr(sector_agents, "shuffle_do"):
+                sector_agents.shuffle_do("step")
+        self.environment.update(self.current_policy_signal, list(self.agents))
 
         self.history.append(self._snapshot())
         self.datacollector.collect(self)
+        self._record_detailed_outputs()
 
         if self.current_year >= self.scenario.end_year:
             self.running = False
@@ -320,3 +374,15 @@ class NATMModel(mesa.Model):
     def to_agent_frame(self) -> pd.DataFrame:
         agent_frame = self.datacollector.get_agent_vars_dataframe().reset_index()
         return agent_frame.rename(columns={"Step": "step", "AgentID": "agent_id"})
+
+    def to_aircraft_frame(self) -> pd.DataFrame:
+        return AircraftStockExporter().export(self)
+
+    def to_aviation_technology_frame(self) -> pd.DataFrame:
+        return AviationTechnologyExporter().export(self)
+
+    def to_aviation_energy_emissions_frame(self) -> pd.DataFrame:
+        return AviationEnergyEmissionsExporter().export(self)
+
+    def to_aviation_investment_frame(self) -> pd.DataFrame:
+        return AviationInvestmentExporter().export(self)

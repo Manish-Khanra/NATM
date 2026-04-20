@@ -4,12 +4,14 @@ from dataclasses import dataclass
 
 import mesa
 
+from natm.core.agent_types.base import BaseOperatorAgent
 from natm.core.policy import SectorPolicySignal
 
 
 @dataclass(frozen=True)
 class OperatorProfile:
     operator_name: str
+    operator_country: str
     conventional_assets: float
     alternative_assets: float
     annual_growth_rate: float
@@ -31,13 +33,15 @@ class SectorMarketContext:
     average_transition_pressure: float
 
 
-class TransportOperatorAgent(mesa.Agent):
+class TransportOperatorAgent(BaseOperatorAgent):
     sector_name = "transport"
 
     def __init__(self, model: mesa.Model, profile: OperatorProfile) -> None:
-        super().__init__(model)
-        self.operator_name = profile.operator_name
-
+        super().__init__(
+            model,
+            operator_name=profile.operator_name,
+            operator_country=profile.operator_country,
+        )
         self.conventional_assets = profile.conventional_assets
         self.alternative_assets = profile.alternative_assets
         self.annual_growth_rate = profile.annual_growth_rate
@@ -54,23 +58,6 @@ class TransportOperatorAgent(mesa.Agent):
         self.transition_pressure = self.alternative_share
         self.effective_conventional_cost = self.conventional_energy_cost
         self.effective_alternative_cost = self.alternative_energy_cost
-        self.policy_support = 0.0
-        self.mandate_share = 0.0
-
-    @property
-    def total_assets(self) -> float:
-        return self.conventional_assets + self.alternative_assets
-
-    @property
-    def alternative_share(self) -> float:
-        total = self.total_assets
-        if total == 0:
-            return 0.0
-        return self.alternative_assets / total
-
-    @property
-    def current_year(self) -> int:
-        return self.model.current_year
 
     @property
     def current_policy_signal(self) -> SectorPolicySignal:
@@ -84,6 +71,7 @@ class TransportOperatorAgent(mesa.Agent):
         policy_signal = self.current_policy_signal
         carbon_price = self.model.current_policy_signal.carbon_price
         market_context = self.market_context
+        environment_signal = self.environment_signal
 
         total_assets = self.total_assets
         target_assets = total_assets * (1 + self.annual_growth_rate)
@@ -99,6 +87,7 @@ class TransportOperatorAgent(mesa.Agent):
             self.alternative_energy_cost
             * learning_multiplier
             * (1.0 - policy_signal.clean_fuel_subsidy)
+            * (1.0 - 0.20 * environment_signal.clean_fuel_availability)
         )
 
         denominator = max(
@@ -119,8 +108,9 @@ class TransportOperatorAgent(mesa.Agent):
             + 0.35 * market_context.average_transition_pressure
         )
         blended_infrastructure = (
-            0.55 * self.infrastructure_readiness
-            + 0.45 * market_context.average_infrastructure_readiness
+            0.40 * self.infrastructure_readiness
+            + 0.35 * market_context.average_infrastructure_readiness
+            + 0.25 * environment_signal.infrastructure_readiness
         )
 
         self.infrastructure_readiness = min(
@@ -148,6 +138,15 @@ class TransportOperatorAgent(mesa.Agent):
             0.55 * policy_signal.clean_fuel_subsidy + 0.45 * policy_signal.adoption_mandate,
         )
         peer_pressure = self.peer_influence * peer_signal
+        world_pressure = (
+            0.35 * environment_signal.clean_fuel_availability
+            + 0.35 * environment_signal.policy_alignment
+            + 0.30 * environment_signal.corridor_exposure
+        )
+        blended_support = min(
+            1.0,
+            0.75 * self.policy_support + 0.25 * world_pressure,
+        )
         projected_share = min(
             0.99,
             max(
@@ -157,7 +156,7 @@ class TransportOperatorAgent(mesa.Agent):
                 + self.adoption_sensitivity * (1.0 - self.alternative_share)
                 + 0.24 * cost_advantage
                 + 0.18 * self.infrastructure_readiness
-                + 0.16 * self.policy_support
+                + 0.16 * blended_support
                 + 0.12 * peer_pressure,
             ),
         )
@@ -168,7 +167,7 @@ class TransportOperatorAgent(mesa.Agent):
                 0.20 * self.alternative_share
                 + 0.25 * max(cost_advantage, -0.25)
                 + 0.18 * self.infrastructure_readiness
-                + 0.17 * self.policy_support
+                + 0.17 * blended_support
                 + 0.20 * peer_pressure,
             ),
         )
@@ -179,6 +178,7 @@ class TransportOperatorAgent(mesa.Agent):
         self.conventional_assets = surviving_conventional + conventional_additions
         self.alternative_assets = surviving_alternative + alternative_additions
         self.mandate_share = policy_signal.adoption_mandate
+        self.policy_support = blended_support
 
 
 class AviationOperatorAgent(TransportOperatorAgent):
