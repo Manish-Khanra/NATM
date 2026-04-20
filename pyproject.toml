@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "natm"
 version = "0.1.0"
-description = "NavAero Transition Model starter package"
+description = "Technology transition diffusion model for aviation and maritime systems"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

@@ -2,14 +2,27 @@
 
 NATM stands for NavAero Transition Model.
 
-This repository contains the first development scaffold for a transport
-transition model. The starter version focuses on a simple scenario loader, a
-lightweight transition simulation, and a command-line entry point we can grow
-into a fuller agent-based model. The implementation now uses Mesa-native
-`Model`, `AgentSet`, `Agent`, and `DataCollector` architecture with multiple
-operator agents in each sector. The current `baseline-transition` case is set up
-as an aviation-passenger test case, while the codebase still keeps room for
-future maritime cases.
+NATM is a technology transition diffusion model for aviation and maritime
+transport systems. It is designed to simulate how operators adopt new aircraft,
+vessels, fuels, and related technologies over time under changing policy,
+cost, infrastructure, and operational conditions.
+
+The model is built as a Mesa-based agent-based simulation with explicit agents,
+case data, decision-logic plugins, fleet management, environment state, and
+structured outputs. The goal is to provide a cleaner and more maintainable
+architecture than the earlier Melodie-based implementation, while still
+capturing the business and policy dynamics behind technology diffusion.
+
+In practical terms, NATM is intended to help explore questions such as:
+
+- how quickly alternative technologies diffuse across operators
+- how policy and fuel prices affect investment decisions
+- how much fuel demand shifts by energy carrier over time
+- how emissions and investment costs evolve during the transition
+
+The current `baseline-transition` case is set up as an aviation-passenger test
+case, while the architecture is designed to extend to aviation cargo and
+maritime applications as the model grows.
 
 ## Installation
 
@@ -18,7 +31,7 @@ NATM requires Python `3.11` or newer.
 ### First-Time Setup (PowerShell)
 
 ```powershell
-git clone <your-repo-url>
+git clone https://github.com/Manish-Khanra/NATM.git
 cd NATM
 python -m venv .venv
 .venv\Scripts\Activate.ps1

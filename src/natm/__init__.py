@@ -1,4 +1,4 @@
-"""NavAero Transition Model package."""
+"""NavAero Transition Model for aviation and maritime technology diffusion."""
 
 from natm.core.agent_types import (
     AviationOperatorAgent,
