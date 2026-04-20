@@ -86,67 +86,70 @@ Current groups used by the baseline case:
 This list reflects the variables currently read by the NATM aviation-passenger
 model.
 
+### Column meaning in the tables below
+
+- `Definition`: what the variable means in the model
+- `Required scope columns`: scope columns that should be filled for a correct row
+- `Optional scope columns`: extra columns you may fill when you want a more
+  specific row to override a generic one
+- `Other required columns`: additional non-scope columns that must still be
+  filled correctly, usually `variable_group` and `unit`
+
 ### Required for capacity planning
 
 These are required by the current aviation-passenger case validation.
 
-| variable_name | Recommended variable_group | Required scope | Notes |
-| --- | --- | --- | --- |
-| `passenger_km_demand` | `market` | `country`, `segment` | Total annual passenger-km demand for that country and segment. |
-| `operator_market_share` | `market` | `country`, `operator_name`, `segment` | Airline share used to allocate country-segment passenger-km demand. |
+| variable_name | Definition | Recommended variable_group | Required scope columns | Optional scope columns | Other required columns |
+| --- | --- | --- | --- | --- | --- |
+| `passenger_km_demand` | Total annual passenger-km demand that must be served in a given country and segment. | `market` | `country`, `segment` | none | `unit` should describe passenger-km |
+| `operator_market_share` | Fixed airline share used to allocate country-segment passenger-km demand to an operator. | `market` | `country`, `operator_name`, `segment` | none | `unit` should be `share` |
 
 ### Optional planned deliveries
 
-| variable_name | Recommended variable_group | Required scope | Optional scope | Notes |
-| --- | --- | --- | --- | --- |
-| `planned_delivery_count` | `delivery` | `country`, `operator_name`, `segment` | `technology_name` | Number of aircraft delivered in that year before endogenous growth logic runs. If `technology_name` is provided, the planned delivery is forced to that technology. |
+| variable_name | Definition | Recommended variable_group | Required scope columns | Optional scope columns | Other required columns |
+| --- | --- | --- | --- | --- | --- |
+| `planned_delivery_count` | Number of aircraft delivered in that year before endogenous growth logic runs. | `delivery` | `country`, `operator_name`, `segment` | `technology_name` | `unit` should be `aircraft_count` |
 
 ### Prices and policy
 
-| variable_name | Recommended variable_group | Required scope | Optional scope | Notes |
-| --- | --- | --- | --- | --- |
-| `carbon_price` | `policy` | none | none | Global carbon price for the year. |
-| `clean_fuel_subsidy` | `policy` | none | none | Aviation-wide clean fuel subsidy share. |
-| `adoption_mandate` | `policy` | none | none | Aviation-wide adoption mandate share. |
-| `saf_mandate` | `policy` | none | `secondary_energy_carrier`, `saf_pathway` | SAF mandate share used for drop-in fuels. |
-| `ets_allocation_factor` | `policy` | `operator_name` | none | Operator-specific ETS free allocation reduction factor. |
-| `primary_energy_price` | `price` | `country`, `primary_energy_carrier` | none | Primary energy price used in annual operating cost. |
-| `secondary_energy_price` | `price` | `country`, `secondary_energy_carrier` | `saf_pathway` | Secondary energy price, including SAF and battery cases. |
+| variable_name | Definition | Recommended variable_group | Required scope columns | Optional scope columns | Other required columns |
+| --- | --- | --- | --- | --- | --- |
+| `carbon_price` | Global carbon price applied to chargeable emissions. | `policy` | none | none | `unit` should describe carbon price |
+| `clean_fuel_subsidy` | Aviation-wide subsidy share applied to alternative clean-fuel energy costs. | `policy` | none | none | `unit` should be `share` |
+| `adoption_mandate` | Aviation-wide adoption or mandate pressure used in the transition logic. | `policy` | none | none | `unit` should be `share` |
+| `saf_mandate` | SAF blending mandate used for drop-in fuel logic. | `policy` | none | `secondary_energy_carrier`, `saf_pathway` | `unit` should be `share` |
+| `ets_allocation_factor` | Operator-specific factor controlling the reduction of free ETS allocation. | `policy` | `operator_name` | none | `unit` should be `share` |
+| `primary_energy_price` | Price of the primary energy carrier used by a technology. | `price` | `country`, `primary_energy_carrier` | none | `unit` should describe the energy price basis |
+| `secondary_energy_price` | Price of the secondary energy carrier used by a technology, including SAF and battery cases. | `price` | `country`, `secondary_energy_carrier` | `saf_pathway` | `unit` should describe the energy price basis |
 
 ### Demand and revenue
 
-| variable_name | Recommended variable_group | Required scope | Notes |
-| --- | --- | --- | --- |
-| `economy_occupancy` | `demand` | `operator_name` | Economy occupancy share. |
-| `business_occupancy` | `demand` | `operator_name` | Business occupancy share. |
-| `first_occupancy` | `demand` | `operator_name` | First-class occupancy share. |
-| `economy_income` | `demand` | `operator_name` | Economy income in the configured `unit`. |
-| `business_income` | `demand` | `operator_name` | Business income in the configured `unit`. |
-| `first_income` | `demand` | `operator_name` | First-class income in the configured `unit`. |
-| `freight_rate` | `demand` | `operator_name` | Freight revenue rate for belly cargo. |
+| variable_name | Definition | Recommended variable_group | Required scope columns | Optional scope columns | Other required columns |
+| --- | --- | --- | --- | --- | --- |
+| `economy_occupancy` | Economy-class occupancy share used in revenue and effective load factor calculations. | `demand` | `operator_name` | none | `unit` should be `share` |
+| `business_occupancy` | Business-class occupancy share used in revenue and effective load factor calculations. | `demand` | `operator_name` | none | `unit` should be `share` |
+| `first_occupancy` | First-class occupancy share used in revenue and effective load factor calculations. | `demand` | `operator_name` | none | `unit` should be `share` |
+| `economy_income` | Economy passenger income or yield input used in annual revenue. | `demand` | `operator_name` | none | `unit` should describe the income basis |
+| `business_income` | Business passenger income or yield input used in annual revenue. | `demand` | `operator_name` | none | `unit` should describe the income basis |
+| `first_income` | First-class passenger income or yield input used in annual revenue. | `demand` | `operator_name` | none | `unit` should describe the income basis |
+| `freight_rate` | Belly cargo revenue rate used in annual revenue. | `demand` | `operator_name` | none | `unit` should describe the freight-rate basis |
 
 ### Technology cost and availability
 
-| variable_name | Recommended variable_group | Required scope | Optional scope | Notes |
-| --- | --- | --- | --- | --- |
-| `technology_dynamic_price_index` | `cost_index` | `segment`, `technology_name` | none | Dynamic multiplier added to technology capex. |
-| `technology_availability` | `availability` | `segment`, `technology_name` | none | Flag indicating whether the technology is commercially available that year. |
-| `infrastructure_availability` | `availability` | `country`, `segment`, `technology_name` | none | Flag indicating whether the airport/fuel/infrastructure setup is available. |
-| `saf_availability` | `availability` | `country`, `segment`, `technology_name`, `secondary_energy_carrier` | `saf_pathway` | Flag controlling SAF-specific pathway availability. |
+| variable_name | Definition | Recommended variable_group | Required scope columns | Optional scope columns | Other required columns |
+| --- | --- | --- | --- | --- | --- |
+| `technology_dynamic_price_index` | Dynamic multiplier added to the base technology capex for a given year. | `cost_index` | `segment`, `technology_name` | none | `unit` should be `share` |
+| `technology_availability` | Commercial availability flag for a technology in that year. | `availability` | `segment`, `technology_name` | none | `unit` should indicate a flag |
+| `infrastructure_availability` | Availability flag for the required airport, fuel, or infrastructure setup. | `availability` | `country`, `segment`, `technology_name` | none | `unit` should indicate a flag |
+| `saf_availability` | Availability flag for a specific SAF-enabled technology or pathway. | `availability` | `country`, `segment`, `technology_name`, `secondary_energy_carrier` | `saf_pathway` | `unit` should indicate a flag |
 
 ### Branch and blend logic
 
-| variable_name | Recommended variable_group | Required scope | Optional scope | Notes |
-| --- | --- | --- | --- | --- |
-| `secondary_energy_cap_active` | `branch` | `country`, `segment`, `technology_name`, `secondary_energy_carrier` | `saf_pathway` | Flag controlling whether a technology can use its secondary energy stream. |
-| `drop_in_mandate_active` | `branch` | `country`, `segment`, `technology_name`, `secondary_energy_carrier` | `saf_pathway` | Flag controlling whether drop-in mandate logic is active. |
-| `maximum_secondary_energy_share` | `branch` | `country`, `segment`, `technology_name`, `secondary_energy_carrier` | `saf_pathway` | Max usable secondary energy share for the technology in that scope. |
-
-### Deprecated for aviation growth
-
-| variable_name | Status | Notes |
-| --- | --- | --- |
-| `market_growth` | Deprecated | The current aviation-passenger growth logic no longer uses this variable. It may remain in old case files for reference only. |
+| variable_name | Definition | Recommended variable_group | Required scope columns | Optional scope columns | Other required columns |
+| --- | --- | --- | --- | --- | --- |
+| `secondary_energy_cap_active` | Flag controlling whether a technology can use its configured secondary energy stream. | `branch` | `country`, `segment`, `technology_name`, `secondary_energy_carrier` | `saf_pathway` | `unit` should indicate a flag |
+| `drop_in_mandate_active` | Flag controlling whether drop-in mandate logic is active for that technology/pathway scope. | `branch` | `country`, `segment`, `technology_name`, `secondary_energy_carrier` | `saf_pathway` | `unit` should indicate a flag |
+| `maximum_secondary_energy_share` | Maximum usable secondary-energy share for a technology in that scope. | `branch` | `country`, `segment`, `technology_name`, `secondary_energy_carrier` | `saf_pathway` | `unit` should be `share` |
 
 ## Practical Guidance
 
@@ -168,3 +171,8 @@ for all of the variable families above, including:
 - demand allocation through `passenger_km_demand` and `operator_market_share`
 - optional growth overrides through `planned_delivery_count`
 - policy, price, availability, and branch controls for technology adoption
+
+Removed from the active baseline case:
+
+- `market_growth`
+  The current aviation-passenger model no longer uses it for fleet expansion.
