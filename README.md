@@ -67,6 +67,7 @@ pytest
 - `src/natm/core/outputs/`: exporter classes for detailed simulation outputs
 - `src/natm/core/storage/`: optional SQLite-backed storage for case inputs and run outputs
 - `src/natm/cli.py`: command-line entry point
+- `docs/architecture.md`: detailed system architecture and runtime flow
 - `docs/aviation-scenario-reference.md`: reference for `aviation_scenario.csv`, including variable groups, variable names, and scope rules
 - `docs/aviation-passenger-mesa-port.md`: port plan from the old Melodie aviation-passenger model
 - `docs/aviation-passenger-render-gap-map.md`: strict old-vs-new aviation-passenger fidelity checklist
@@ -86,6 +87,8 @@ logic is `legacy_weighted_utility`.
 
 For the full scenario CSV contract, see
 `docs/aviation-scenario-reference.md`.
+
+For the system-level architecture, see `docs/architecture.md`.
 
 ## What The Model Now Captures
 
