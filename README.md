@@ -11,19 +11,34 @@ operator agents in each sector. The current `baseline-transition` case is set up
 as an aviation-passenger test case, while the codebase still keeps room for
 future maritime cases.
 
+## Installation
+
+NATM requires Python `3.11` or newer.
+
+### First-Time Setup (PowerShell)
+
+```powershell
+git clone <your-repo-url>
+cd NATM
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e .[dev]
+```
+
+If your default `python` does not point to Python `3.11+`, use a specific
+interpreter such as:
+
+```powershell
+py -3.11 -m venv .venv
+```
+
 ## Quick Start
 
-### PowerShell
+### Run The Model
 
 ```powershell
 .venv\Scripts\Activate.ps1
-python -m pip install -e .[dev]
-natm --case baseline-transition --output outputs/baseline.csv
-```
-
-If you want the easiest VS Code entrypoint, run:
-
-```powershell
 python run.py
 ```
 
@@ -34,6 +49,12 @@ outputs/<selected_example>/
 ```
 
 including `model_summary.csv`, the detailed CSV tables, and `natm_runs.sqlite`.
+
+If you want to run a case directly through the CLI instead:
+
+```powershell
+natm --case baseline-transition --output outputs/baseline.csv
+```
 
 To export the richer Mesa result tables as well:
 
@@ -47,11 +68,53 @@ To persist both case inputs and run outputs into SQLite:
 natm --case baseline-transition --output outputs/baseline.csv --details-dir outputs/baseline-details --sqlite-db outputs/natm_runs.sqlite
 ```
 
+### Pre-Commit Setup
+
+Install the hooks once per clone:
+
+```powershell
+.venv\Scripts\Activate.ps1
+pre-commit install
+```
+
+Run them manually across the whole repository:
+
+```powershell
+pre-commit run --all-files
+```
+
 ### Run Tests
 
 ```powershell
 pytest
 ```
+
+### Typical Development Flow
+
+```powershell
+.venv\Scripts\Activate.ps1
+pre-commit run --all-files
+pytest
+python run.py
+```
+
+## Outputs
+
+The default `run.py` launcher writes outputs to:
+
+```text
+outputs/<selected_example>/
+```
+
+This folder contains:
+
+- `model_summary.csv`
+- `agents.csv`
+- `aircraft.csv`
+- `aviation_technology.csv`
+- `aviation_energy_emissions.csv`
+- `aviation_investments.csv`
+- `natm_runs.sqlite`
 
 ## Project Layout
 
