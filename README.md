@@ -67,6 +67,7 @@ pytest
 - `src/natm/core/outputs/`: exporter classes for detailed simulation outputs
 - `src/natm/core/storage/`: optional SQLite-backed storage for case inputs and run outputs
 - `src/natm/cli.py`: command-line entry point
+- `docs/aviation-scenario-reference.md`: reference for `aviation_scenario.csv`, including variable groups, variable names, and scope rules
 - `docs/aviation-passenger-mesa-port.md`: port plan from the old Melodie aviation-passenger model
 - `docs/aviation-passenger-render-gap-map.md`: strict old-vs-new aviation-passenger fidelity checklist
 - `data/<case-name>/scenario.yaml`: case configuration
@@ -82,6 +83,9 @@ templates for the future 3-file structure:
 The fleet stock input can also carry an `investment_logic` column so each
 airline agent can select its decision method by name. The current built-in
 logic is `legacy_weighted_utility`.
+
+For the full scenario CSV contract, see
+`docs/aviation-scenario-reference.md`.
 
 ## What The Model Now Captures
 
