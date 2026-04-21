@@ -4,7 +4,7 @@ import csv
 from dataclasses import dataclass
 from pathlib import Path
 
-from natm.core.policy import PolicySignal
+from navaero_transition_model.core.policy import PolicySignal
 
 
 def _mean(values: list[float]) -> float:

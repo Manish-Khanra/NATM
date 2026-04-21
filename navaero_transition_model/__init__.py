@@ -1,42 +1,50 @@
-from natm.core.agent_types import (
+"""NavAero Transition Model for aviation and maritime technology diffusion."""
+
+from navaero_transition_model.core.agent_types import (
     AviationOperatorAgent,
     AviationPassengerAirlineAgent,
     BaseOperatorAgent,
     MaritimeOperatorAgent,
     TransportOperatorAgent,
 )
-from natm.core.aviation_passenger_loader import (
+from navaero_transition_model.core.case_data import (
+    AviationPassengerCaseData,
+    ScenarioTable,
+    TechnologyCatalog,
+)
+from navaero_transition_model.core.database import SQLiteSimulationStore
+from navaero_transition_model.core.decision_logic import (
+    AviationPassengerDecisionLogic,
+    LegacyWeightedUtilityLogic,
+    build_aviation_passenger_decision_logic,
+)
+from navaero_transition_model.core.environment import TransitionEnvironment
+from navaero_transition_model.core.fleet_management import Fleet
+from navaero_transition_model.core.loaders import (
+    AviationPassengerCaseLoader,
     AviationPassengerInputs,
     load_aviation_passenger_case,
     load_aviation_passenger_fleet_stock,
     load_aviation_scenario,
     load_aviation_technology_catalog,
 )
-from natm.core.case_data import AviationPassengerCaseData, ScenarioTable, TechnologyCatalog
-from natm.core.decision_logic import (
-    AviationPassengerDecisionLogic,
-    LegacyWeightedUtilityLogic,
-    build_aviation_passenger_decision_logic,
-)
-from natm.core.domain.fleet import Fleet
-from natm.core.environment import TransitionEnvironment
-from natm.core.model import NATMModel
-from natm.core.outputs import (
+from navaero_transition_model.core.model import NATMModel
+from navaero_transition_model.core.policy import PolicySettings, RampValue, SectorPolicySettings
+from navaero_transition_model.core.reporting import (
     AircraftStockExporter,
     AviationEnergyEmissionsExporter,
     AviationInvestmentExporter,
     AviationTechnologyExporter,
     DetailedOutputWriter,
 )
-from natm.core.policy import PolicySettings, RampValue, SectorPolicySettings
-from natm.core.scenario import NATMScenario
-from natm.core.storage import SQLiteSimulationStore
+from navaero_transition_model.core.scenario import NATMScenario
 
 __all__ = [
     "AviationOperatorAgent",
     "AviationPassengerAirlineAgent",
     "AviationPassengerCaseData",
     "AviationPassengerDecisionLogic",
+    "AviationPassengerCaseLoader",
     "AviationPassengerInputs",
     "AircraftStockExporter",
     "AviationEnergyEmissionsExporter",

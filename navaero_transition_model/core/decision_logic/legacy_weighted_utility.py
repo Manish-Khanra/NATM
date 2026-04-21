@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
-from natm.core.decision_logic.base import (
+from navaero_transition_model.core.decision_logic.base import (
     AviationPassengerDecisionLogic,
     CandidateEvaluation,
     OperationMetrics,
@@ -13,7 +13,9 @@ from natm.core.decision_logic.base import (
 )
 
 if TYPE_CHECKING:
-    from natm.core.agent_types.aviation_passenger_airline import AviationPassengerAirlineAgent
+    from navaero_transition_model.core.agent_types.aviation_passenger_airline import (
+        AviationPassengerAirlineAgent,
+    )
 
 
 AVERAGE_PASSENGER_WEIGHT_KG = 100.0

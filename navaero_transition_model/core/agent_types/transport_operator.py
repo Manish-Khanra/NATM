@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 import mesa
 
-from natm.core.agent_types.base import BaseOperatorAgent
-from natm.core.policy import SectorPolicySignal
+from navaero_transition_model.core.agent_types.base import BaseOperatorAgent
+from navaero_transition_model.core.policy import SectorPolicySignal
 
 
 @dataclass(frozen=True)

@@ -10,15 +10,15 @@ log = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 CASE_ROOT = PROJECT_ROOT / "data"
-OUTPUT_ROOT = PROJECT_ROOT / "outputs"
-SRC_ROOT = PROJECT_ROOT / "src"
+OUTPUT_ROOT = PROJECT_ROOT / "simulation_results"
+SRC_ROOT = PROJECT_ROOT
 
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 if TYPE_CHECKING:
-    from natm.core.model import NATMModel
-    from natm.core.scenario import NATMScenario
+    from navaero_transition_model.core.model import NATMModel
+    from navaero_transition_model.core.scenario import NATMScenario
 
 # Define the available named simulations here.
 AVAILABLE_EXAMPLES = {
@@ -31,7 +31,9 @@ AVAILABLE_EXAMPLES = {
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Launch a NATM case and write outputs into outputs/<selected_example>/.",
+        description=(
+            "Launch a NATM case and write outputs into simulation_results/<selected_example>/."
+        ),
     )
     parser.add_argument(
         "--example",
@@ -47,7 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output-name",
         default=None,
-        help="Optional custom output folder name under outputs/.",
+        help="Optional custom output folder name under simulation_results/.",
     )
     parser.add_argument(
         "--no-summary",
@@ -82,8 +84,8 @@ def export_run_outputs(
     export_details: bool,
     export_sqlite: bool,
 ) -> Path | None:
-    from natm.core.outputs import DetailedOutputWriter
-    from natm.core.storage import SQLiteSimulationStore
+    from navaero_transition_model.core.database import SQLiteSimulationStore
+    from navaero_transition_model.core.reporting import DetailedOutputWriter
 
     summary = model.to_frame()
     sqlite_path: Path | None = None
@@ -110,9 +112,9 @@ def run_named_example(
     export_sqlite: bool = True,
 ) -> int:
     try:
-        from natm.cli import resolve_case_config
-        from natm.core.model import NATMModel
-        from natm.core.scenario import NATMScenario
+        from navaero_transition_model.cli import resolve_case_config
+        from navaero_transition_model.core.model import NATMModel
+        from navaero_transition_model.core.scenario import NATMScenario
     except ModuleNotFoundError as exc:
         if exc.name == "mesa":
             raise SystemExit(
@@ -185,10 +187,10 @@ if __name__ == "__main__":
     # Optional direct case override. Keep as None to use the case from the example.
     selected_case = None
 
-    # Optional output folder name under outputs/. Keep as None to use selected_example.
+    # Optional output folder name under simulation_results/. Keep as None to use selected_example.
     output_name = None
 
-    # Choose which outputs to write into outputs/<selected_example>/.
+    # Choose which outputs to write into simulation_results/<selected_example>/.
     export_summary = True
     export_details = True
     export_sqlite = True

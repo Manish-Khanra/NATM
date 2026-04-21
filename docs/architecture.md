@@ -1,4 +1,4 @@
-# NATM Architecture
+﻿# NATM Architecture
 
 This document describes the current software architecture of NATM as it exists
 in the repository today.
@@ -20,7 +20,7 @@ NATM is organized around six layers:
 
 In the current codebase, the active end-to-end path is:
 
-`run.py` or `python -m natm`  
+`run.py` or `python -m navaero_transition_model`  
 -> `NATMScenario`  
 -> `AviationPassengerCaseData`  
 -> `NATMModel`  
@@ -34,36 +34,36 @@ In the current codebase, the active end-to-end path is:
 
 - [run.py](C:/Manish_REPO/NATM/run.py:1)
   Reference-style launcher for VS Code and simple named examples.
-- [cli.py](C:/Manish_REPO/NATM/src/natm/cli.py:1)
-  Standard command-line entrypoint used by `python -m natm`.
+- [cli.py](C:/Manish_REPO/NATM/navaero_transition_model/cli.py:1)
+  Standard command-line entrypoint used by `python -m navaero_transition_model`.
 
 ### Core simulation
 
-- [model.py](C:/Manish_REPO/NATM/src/natm/core/model.py:1)
+- [model.py](C:/Manish_REPO/NATM/navaero_transition_model/core/model.py:1)
   Top-level Mesa `Model` implementation.
-- [agent_types](C:/Manish_REPO/NATM/src/natm/core/agent_types)
+- [agent_types](C:/Manish_REPO/NATM/navaero_transition_model/core/agent_types)
   Agent hierarchy and agent-related shared types.
-- [decision_logic](C:/Manish_REPO/NATM/src/natm/core/decision_logic)
+- [decision_logic](C:/Manish_REPO/NATM/navaero_transition_model/core/decision_logic)
   Pluggable technology-adoption and investment logic.
-- [domain](C:/Manish_REPO/NATM/src/natm/core/domain)
+- [fleet_management](C:/Manish_REPO/NATM/navaero_transition_model/core/fleet_management)
   Domain objects such as fleet management.
-- [environment.py](C:/Manish_REPO/NATM/src/natm/core/environment.py:1)
+- [environment.py](C:/Manish_REPO/NATM/navaero_transition_model/core/environment.py:1)
   Shared world/environment state.
 
 ### Input and scenario handling
 
-- [scenario.py](C:/Manish_REPO/NATM/src/natm/core/scenario.py:1)
+- [scenario.py](C:/Manish_REPO/NATM/navaero_transition_model/core/scenario.py:1)
   Minimal case YAML loader.
-- [case_data](C:/Manish_REPO/NATM/src/natm/core/case_data)
+- [case_data](C:/Manish_REPO/NATM/navaero_transition_model/core/case_data)
   Fleet stock, technology catalog, and scenario-table abstractions.
-- [aviation_passenger_loader.py](C:/Manish_REPO/NATM/src/natm/core/aviation_passenger_loader.py:1)
+- [loaders](C:/Manish_REPO/NATM/navaero_transition_model/core/loaders)
   Thin compatibility wrapper around the case-data layer.
 
-### Reporting and storage
+### Reporting and database writing
 
-- [outputs/aviation.py](C:/Manish_REPO/NATM/src/natm/core/outputs/aviation.py:1)
+- [reporting/aviation_reports.py](C:/Manish_REPO/NATM/navaero_transition_model/core/reporting/aviation_reports.py:1)
   Detailed output exporters.
-- [sqlite_store.py](C:/Manish_REPO/NATM/src/natm/core/storage/sqlite_store.py:1)
+- [sqlite_store.py](C:/Manish_REPO/NATM/navaero_transition_model/core/database/sqlite_store.py:1)
   SQLite persistence for inputs and outputs.
 
 ## 3. Runtime Flow
@@ -73,11 +73,11 @@ In the current codebase, the active end-to-end path is:
 There are two supported launch paths:
 
 - `python run.py`
-- `python -m natm --case <case-name>`
+- `python -m navaero_transition_model --case <case-name>`
 
 `run.py` is the more user-friendly launcher for daily work. It resolves a named
 example to a case folder under `data/`, runs the model, and writes outputs to
-`outputs/<selected_example>/`.
+`simulation_results/<selected_example>/`.
 
 ### 3.2 Case loading
 
@@ -150,7 +150,7 @@ occurs in the following simulation year.
 
 ### 4.1 Model
 
-[NATMModel](C:/Manish_REPO/NATM/src/natm/core/model.py:43) is the top-level Mesa
+[NATMModel](C:/Manish_REPO/NATM/navaero_transition_model/core/model.py:43) is the top-level Mesa
 container. It is responsible for:
 
 - loading case data
@@ -258,7 +258,7 @@ are parameterized.
 
 ### 6.1 Fleet
 
-`Fleet` is a domain object that owns the airline’s aircraft dataframe and
+`Fleet` is a domain object that owns the airlineâ€™s aircraft dataframe and
 encapsulates fleet operations.
 
 Responsibilities:
@@ -282,7 +282,7 @@ coordination instead of low-level row mutation.
 ### 7.1 Decision-logic boundary
 
 Decision logic is intentionally modeled as a plugin-style layer under
-`src/natm/core/decision_logic/`.
+`navaero_transition_model/core/decision_logic/`.
 
 The active implementation is:
 
@@ -462,7 +462,7 @@ The current architecture follows these principles:
 
 - Mesa-native model and agents for simulation lifecycle
 - case-based inputs instead of ID-heavy relational spreadsheets
-- object-oriented domain separation for fleets, catalogs, scenarios, outputs, and storage
+- object-oriented domain separation for fleets, catalogs, scenarios, reporting, and database writing
 - pluggable decision logic instead of hard-wiring one investment rule into the agent
 - flat CSV outputs plus optional SQLite for analysis and persistence
 - minimal YAML, richer CSVs
@@ -484,14 +484,20 @@ deliberately simple:
 For someone new to the codebase, this is the best order:
 
 1. [run.py](C:/Manish_REPO/NATM/run.py:1)
-2. [cli.py](C:/Manish_REPO/NATM/src/natm/cli.py:1)
-3. [scenario.py](C:/Manish_REPO/NATM/src/natm/core/scenario.py:1)
-4. [aviation_passenger_case.py](C:/Manish_REPO/NATM/src/natm/core/case_data/aviation_passenger_case.py:1)
-5. [model.py](C:/Manish_REPO/NATM/src/natm/core/model.py:1)
-6. [aviation_passenger_airline.py](C:/Manish_REPO/NATM/src/natm/core/agent_types/aviation_passenger_airline.py:1)
-7. [legacy_weighted_utility.py](C:/Manish_REPO/NATM/src/natm/core/decision_logic/legacy_weighted_utility.py:1)
-8. [fleet.py](C:/Manish_REPO/NATM/src/natm/core/domain/fleet.py:1)
-9. [aviation.py](C:/Manish_REPO/NATM/src/natm/core/outputs/aviation.py:1)
-10. [sqlite_store.py](C:/Manish_REPO/NATM/src/natm/core/storage/sqlite_store.py:1)
+2. [cli.py](C:/Manish_REPO/NATM/navaero_transition_model/cli.py:1)
+3. [scenario.py](C:/Manish_REPO/NATM/navaero_transition_model/core/scenario.py:1)
+4. [aviation_passenger_case.py](C:/Manish_REPO/NATM/navaero_transition_model/core/case_data/aviation_passenger_case.py:1)
+5. [model.py](C:/Manish_REPO/NATM/navaero_transition_model/core/model.py:1)
+6. [aviation_passenger_airline.py](C:/Manish_REPO/NATM/navaero_transition_model/core/agent_types/aviation_passenger_airline.py:1)
+7. [legacy_weighted_utility.py](C:/Manish_REPO/NATM/navaero_transition_model/core/decision_logic/legacy_weighted_utility.py:1)
+8. [fleet.py](C:/Manish_REPO/NATM/navaero_transition_model/core/fleet_management/fleet.py:1)
+9. [aviation_reports.py](C:/Manish_REPO/NATM/navaero_transition_model/core/reporting/aviation_reports.py:1)
+10. [sqlite_store.py](C:/Manish_REPO/NATM/navaero_transition_model/core/database/sqlite_store.py:1)
 
 That path follows the same order the system itself uses during a run.
+
+
+
+
+
+

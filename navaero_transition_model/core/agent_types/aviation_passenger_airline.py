@@ -5,10 +5,13 @@ from typing import Any
 import mesa
 import pandas as pd
 
-from natm.core.agent_types.base import BaseOperatorAgent
-from natm.core.case_data import ScenarioTable, TechnologyCatalog
-from natm.core.decision_logic import build_aviation_passenger_decision_logic, clamp
-from natm.core.domain.fleet import Fleet
+from navaero_transition_model.core.agent_types.base import BaseOperatorAgent
+from navaero_transition_model.core.case_data import ScenarioTable, TechnologyCatalog
+from navaero_transition_model.core.decision_logic import (
+    build_aviation_passenger_decision_logic,
+    clamp,
+)
+from navaero_transition_model.core.fleet_management import Fleet
 
 
 class AviationPassengerAirlineAgent(BaseOperatorAgent):

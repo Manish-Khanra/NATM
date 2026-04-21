@@ -4,7 +4,7 @@ from typing import Any
 
 import mesa
 
-from natm.core.environment import CountryEnvironmentSignal
+from navaero_transition_model.core.environment import CountryEnvironmentSignal
 
 
 class BaseOperatorAgent(mesa.Agent):

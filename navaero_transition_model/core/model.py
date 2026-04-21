@@ -5,22 +5,22 @@ from dataclasses import asdict, dataclass
 import mesa
 import pandas as pd
 
-from natm.core.agent_types import (
+from navaero_transition_model.core.agent_types import (
     AviationOperatorAgent,
     AviationPassengerAirlineAgent,
     MaritimeOperatorAgent,
     SectorMarketContext,
 )
-from natm.core.aviation_passenger_loader import load_aviation_passenger_case
-from natm.core.environment import TransitionEnvironment
-from natm.core.outputs import (
+from navaero_transition_model.core.environment import TransitionEnvironment
+from navaero_transition_model.core.loaders import load_aviation_passenger_case
+from navaero_transition_model.core.policy import PolicySignal, SectorPolicySignal
+from navaero_transition_model.core.reporting import (
     AircraftStockExporter,
     AviationEnergyEmissionsExporter,
     AviationInvestmentExporter,
     AviationTechnologyExporter,
 )
-from natm.core.policy import PolicySignal, SectorPolicySignal
-from natm.core.scenario import NATMScenario
+from navaero_transition_model.core.scenario import NATMScenario
 
 
 def _mean(values: list[float]) -> float:

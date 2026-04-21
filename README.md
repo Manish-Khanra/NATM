@@ -1,4 +1,4 @@
-# NATM
+﻿# NATM
 
 NATM stands for NavAero Transition Model.
 
@@ -58,7 +58,7 @@ python run.py
 That launcher writes the results automatically into:
 
 ```text
-outputs/<selected_example>/
+simulation_results/<selected_example>/
 ```
 
 including `model_summary.csv`, the detailed CSV tables, and `natm_runs.sqlite`.
@@ -66,19 +66,19 @@ including `model_summary.csv`, the detailed CSV tables, and `natm_runs.sqlite`.
 If you want to run a case directly through the CLI instead:
 
 ```powershell
-natm --case baseline-transition --output outputs/baseline.csv
+natm --case baseline-transition --output simulation_results/baseline.csv
 ```
 
 To export the richer Mesa result tables as well:
 
 ```powershell
-natm --case baseline-transition --output outputs/baseline.csv --details-dir outputs/baseline-details
+natm --case baseline-transition --output simulation_results/baseline.csv --details-dir simulation_results/baseline-details
 ```
 
 To persist both case inputs and run outputs into SQLite:
 
 ```powershell
-natm --case baseline-transition --output outputs/baseline.csv --details-dir outputs/baseline-details --sqlite-db outputs/natm_runs.sqlite
+natm --case baseline-transition --output simulation_results/baseline.csv --details-dir simulation_results/baseline-details --sqlite-db simulation_results/natm_runs.sqlite
 ```
 
 ### Pre-Commit Setup
@@ -116,7 +116,7 @@ python run.py
 The default `run.py` launcher writes outputs to:
 
 ```text
-outputs/<selected_example>/
+simulation_results/<selected_example>/
 ```
 
 This folder contains:
@@ -131,18 +131,18 @@ This folder contains:
 
 ## Project Layout
 
-- `src/natm/core/scenario.py`: scenario schema and YAML loader
-- `src/natm/core/policy.py`: plain Python policy/config objects and yearly policy signals
-- `src/natm/core/aviation_passenger_loader.py`: compatibility loader wrapping the OO case-data layer
-- `src/natm/core/agent_types/`: parent and specialized Mesa agent classes
-- `src/natm/core/case_data/`: case/input domain objects for fleet stock, technology catalog, and scenario tables
-- `src/natm/core/decision_logic/`: pluggable investment/adoption logic implementations
-- `src/natm/core/domain/`: reusable domain objects such as fleet management
-- `src/natm/core/environment.py`: shared country-and-corridor world layer
-- `src/natm/core/model.py`: Mesa `Model`, AgentSet activation, and DataCollector output
-- `src/natm/core/outputs/`: exporter classes for detailed simulation outputs
-- `src/natm/core/storage/`: optional SQLite-backed storage for case inputs and run outputs
-- `src/natm/cli.py`: command-line entry point
+- `navaero_transition_model/core/scenario.py`: scenario schema and YAML loader
+- `navaero_transition_model/core/policy.py`: plain Python policy/config objects and yearly policy signals
+- `navaero_transition_model/core/loaders/`: loader classes and convenience functions for case ingestion
+- `navaero_transition_model/core/agent_types/`: parent and specialized Mesa agent classes
+- `navaero_transition_model/core/case_data/`: case/input domain objects for fleet stock, technology catalog, and scenario tables
+- `navaero_transition_model/core/decision_logic/`: pluggable investment/adoption logic implementations
+- `navaero_transition_model/core/fleet_management/`: fleet state and fleet-management objects
+- `navaero_transition_model/core/environment.py`: shared country-and-corridor world layer
+- `navaero_transition_model/core/model.py`: Mesa `Model`, AgentSet activation, and DataCollector output
+- `navaero_transition_model/core/database/`: optional SQLite-backed database writing for case inputs and run outputs
+- `navaero_transition_model/core/reporting/`: exporter classes for detailed simulation result tables
+- `navaero_transition_model/cli.py`: command-line entry point
 - `docs/architecture.md`: detailed system architecture and runtime flow
 - `docs/aviation-scenario-reference.md`: reference for `aviation_scenario.csv`, including variable groups, variable names, and scope rules
 - `docs/aviation-passenger-mesa-port.md`: port plan from the old Melodie aviation-passenger model
@@ -187,3 +187,6 @@ For the system-level architecture, see `docs/architecture.md`.
 1. Replace the sample aviation fleet-stock CSV with calibrated operator and fleet data.
 2. Split aviation operator agents further into fleet, route, or airport-linked Mesa agents.
 3. Add energy pathways, emissions accounting, and richer reporting outputs.
+
+
+

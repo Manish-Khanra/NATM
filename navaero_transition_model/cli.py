@@ -3,12 +3,12 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from natm.core.model import NATMModel
-from natm.core.outputs import DetailedOutputWriter
-from natm.core.scenario import NATMScenario
-from natm.core.storage import SQLiteSimulationStore
+from navaero_transition_model.core.database import SQLiteSimulationStore
+from navaero_transition_model.core.model import NATMModel
+from navaero_transition_model.core.reporting import DetailedOutputWriter
+from navaero_transition_model.core.scenario import NATMScenario
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CASE_ROOT = PROJECT_ROOT / "data"
 
 

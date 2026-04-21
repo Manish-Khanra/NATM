@@ -1,11 +1,13 @@
-from natm.core.decision_logic.base import (
+from navaero_transition_model.core.decision_logic.base import (
     AviationPassengerDecisionLogic,
     CandidateEvaluation,
     OperationMetrics,
     clamp,
     clean_scope_value,
 )
-from natm.core.decision_logic.legacy_weighted_utility import LegacyWeightedUtilityLogic
+from navaero_transition_model.core.decision_logic.legacy_weighted_utility import (
+    LegacyWeightedUtilityLogic,
+)
 
 
 def build_aviation_passenger_decision_logic(

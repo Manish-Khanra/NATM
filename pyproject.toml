@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "natm"
+name = "navaero-transition-model"
 version = "0.1.0"
 description = "Technology transition diffusion model for aviation and maritime systems"
 readme = "README.md"
@@ -23,13 +23,15 @@ dev = [
 ]
 
 [project.scripts]
-natm = "natm.cli:main"
+natm = "navaero_transition_model.cli:main"
+navaero-transition-model = "navaero_transition_model.cli:main"
 
 [tool.setuptools]
-package-dir = {"" = "src"}
+package-dir = {"" = "."}
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
+include = ["navaero_transition_model*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -39,7 +41,7 @@ addopts = "-q -p no:cacheprovider"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-src = ["src", "tests"]
+src = ["navaero_transition_model", "tests"]
 
 [tool.ruff.lint]
 select = ["B", "E", "F", "I", "UP"]

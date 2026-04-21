@@ -6,14 +6,20 @@ from pathlib import Path
 import mesa
 import pandas as pd
 import pytest
-
-from natm.cli import resolve_case_config
-from natm.core.agent_types import AviationPassengerAirlineAgent, BaseOperatorAgent
-from natm.core.aviation_passenger_loader import load_aviation_passenger_case
-from natm.core.case_data import AviationPassengerCaseData, ScenarioTable, TechnologyCatalog
-from natm.core.model import NATMModel
-from natm.core.scenario import NATMScenario
-from natm.core.storage import SQLiteSimulationStore
+from navaero_transition_model.cli import resolve_case_config
+from navaero_transition_model.core.agent_types import (
+    AviationPassengerAirlineAgent,
+    BaseOperatorAgent,
+)
+from navaero_transition_model.core.case_data import (
+    AviationPassengerCaseData,
+    ScenarioTable,
+    TechnologyCatalog,
+)
+from navaero_transition_model.core.database import SQLiteSimulationStore
+from navaero_transition_model.core.loaders import load_aviation_passenger_case
+from navaero_transition_model.core.model import NATMModel
+from navaero_transition_model.core.scenario import NATMScenario
 
 
 def load_default_scenario() -> NATMScenario:

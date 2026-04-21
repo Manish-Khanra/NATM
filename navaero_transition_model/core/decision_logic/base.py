@@ -6,7 +6,9 @@ from typing import TYPE_CHECKING, Any, Protocol
 import pandas as pd
 
 if TYPE_CHECKING:
-    from natm.core.agent_types.aviation_passenger_airline import AviationPassengerAirlineAgent
+    from navaero_transition_model.core.agent_types.aviation_passenger_airline import (
+        AviationPassengerAirlineAgent,
+    )
 
 
 def clamp(value: float, minimum: float = 0.0, maximum: float = 1.0) -> float:

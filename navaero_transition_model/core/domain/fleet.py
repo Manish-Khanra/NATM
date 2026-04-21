@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from natm.core.case_data import TechnologyCatalog
-from natm.core.decision_logic.base import CandidateEvaluation
+from navaero_transition_model.core.case_data import TechnologyCatalog
+from navaero_transition_model.core.decision_logic.base import CandidateEvaluation
 
 
 class Fleet:

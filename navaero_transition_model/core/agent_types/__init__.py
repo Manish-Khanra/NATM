@@ -1,6 +1,8 @@
-from natm.core.agent_types.aviation_passenger_airline import AviationPassengerAirlineAgent
-from natm.core.agent_types.base import BaseOperatorAgent
-from natm.core.agent_types.transport_operator import (
+from navaero_transition_model.core.agent_types.aviation_passenger_airline import (
+    AviationPassengerAirlineAgent,
+)
+from navaero_transition_model.core.agent_types.base import BaseOperatorAgent
+from navaero_transition_model.core.agent_types.transport_operator import (
     AviationOperatorAgent,
     MaritimeOperatorAgent,
     OperatorProfile,

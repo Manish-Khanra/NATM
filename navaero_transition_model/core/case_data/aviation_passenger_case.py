@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from natm.core.case_data.scenario_table import ScenarioTable
-from natm.core.case_data.technology_catalog import TechnologyCatalog
+from navaero_transition_model.core.case_data.scenario_table import ScenarioTable
+from navaero_transition_model.core.case_data.technology_catalog import TechnologyCatalog
 
 FLEET_COLUMN_ALIASES = {
     "ID": "aircraft_id",
