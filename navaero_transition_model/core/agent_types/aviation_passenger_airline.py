@@ -6,7 +6,7 @@ import mesa
 import pandas as pd
 
 from navaero_transition_model.core.agent_types.base import BaseOperatorAgent
-from navaero_transition_model.core.case_data import ScenarioTable, TechnologyCatalog
+from navaero_transition_model.core.case_inputs import ScenarioTable, TechnologyCatalog
 from navaero_transition_model.core.decision_logic import (
     build_aviation_passenger_decision_logic,
     clamp,

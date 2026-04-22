@@ -85,7 +85,7 @@ def export_run_outputs(
     export_sqlite: bool,
 ) -> Path | None:
     from navaero_transition_model.core.database import SQLiteSimulationStore
-    from navaero_transition_model.core.reporting import DetailedOutputWriter
+    from navaero_transition_model.core.result_exports import DetailedOutputWriter
 
     summary = model.to_frame()
     sqlite_path: Path | None = None

@@ -14,7 +14,7 @@ from navaero_transition_model.core.agent_types import (
 from navaero_transition_model.core.environment import TransitionEnvironment
 from navaero_transition_model.core.loaders import load_aviation_passenger_case
 from navaero_transition_model.core.policy import PolicySignal, SectorPolicySignal
-from navaero_transition_model.core.reporting import (
+from navaero_transition_model.core.result_exports import (
     AircraftStockExporter,
     AviationEnergyEmissionsExporter,
     AviationInvestmentExporter,

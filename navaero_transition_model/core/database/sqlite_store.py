@@ -74,14 +74,14 @@ class SQLiteSimulationStore:
         metadata.to_sql("runs", connection, if_exists="append", index=False)
 
     def _write_input_tables(self, connection: sqlite3.Connection, run_id: str, model) -> None:
-        case_data = getattr(model, "aviation_passenger_inputs", None)
-        if case_data is None:
+        case_inputs = getattr(model, "aviation_passenger_inputs", None)
+        if case_inputs is None:
             return
 
         input_tables = {
-            "input_aviation_fleet": case_data.fleet,
-            "input_aviation_technology_catalog": case_data.technology_catalog.to_frame(),
-            "input_aviation_scenario": case_data.scenario_wide,
+            "input_aviation_fleet": case_inputs.fleet,
+            "input_aviation_technology_catalog": case_inputs.technology_catalog.to_frame(),
+            "input_aviation_scenario": case_inputs.scenario_wide,
         }
         for table_name, dataframe in input_tables.items():
             frame = dataframe.copy()

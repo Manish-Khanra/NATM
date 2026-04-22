@@ -7,7 +7,7 @@ from navaero_transition_model.core.agent_types import (
     MaritimeOperatorAgent,
     TransportOperatorAgent,
 )
-from navaero_transition_model.core.case_data import (
+from navaero_transition_model.core.case_inputs import (
     AviationPassengerCaseData,
     ScenarioTable,
     TechnologyCatalog,
@@ -30,7 +30,7 @@ from navaero_transition_model.core.loaders import (
 )
 from navaero_transition_model.core.model import NATMModel
 from navaero_transition_model.core.policy import PolicySettings, RampValue, SectorPolicySettings
-from navaero_transition_model.core.reporting import (
+from navaero_transition_model.core.result_exports import (
     AircraftStockExporter,
     AviationEnergyEmissionsExporter,
     AviationInvestmentExporter,

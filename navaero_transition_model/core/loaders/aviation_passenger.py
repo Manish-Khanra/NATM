@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from navaero_transition_model.core.case_data import (
+from navaero_transition_model.core.case_inputs import (
     AviationPassengerCaseData,
     ScenarioTable,
     TechnologyCatalog,

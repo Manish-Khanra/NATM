@@ -5,7 +5,7 @@ from pathlib import Path
 
 from navaero_transition_model.core.database import SQLiteSimulationStore
 from navaero_transition_model.core.model import NATMModel
-from navaero_transition_model.core.reporting import DetailedOutputWriter
+from navaero_transition_model.core.result_exports import DetailedOutputWriter
 from navaero_transition_model.core.scenario import NATMScenario
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]

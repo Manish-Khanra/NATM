@@ -11,7 +11,7 @@ from navaero_transition_model.core.agent_types import (
     AviationPassengerAirlineAgent,
     BaseOperatorAgent,
 )
-from navaero_transition_model.core.case_data import (
+from navaero_transition_model.core.case_inputs import (
     AviationPassengerCaseData,
     ScenarioTable,
     TechnologyCatalog,

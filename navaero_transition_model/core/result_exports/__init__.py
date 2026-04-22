@@ -1,4 +1,4 @@
-from navaero_transition_model.core.reporting.aviation_reports import (
+from navaero_transition_model.core.result_exports.aviation_exports import (
     AircraftStockExporter,
     AviationEnergyEmissionsExporter,
     AviationInvestmentExporter,

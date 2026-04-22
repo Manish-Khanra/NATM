@@ -54,14 +54,14 @@ In the current codebase, the active end-to-end path is:
 
 - [scenario.py](C:/Manish_REPO/NATM/navaero_transition_model/core/scenario.py:1)
   Minimal case YAML loader.
-- [case_data](C:/Manish_REPO/NATM/navaero_transition_model/core/case_data)
+- [case_inputs](C:/Manish_REPO/NATM/navaero_transition_model/core/case_inputs)
   Fleet stock, technology catalog, and scenario-table abstractions.
 - [loaders](C:/Manish_REPO/NATM/navaero_transition_model/core/loaders)
   Thin compatibility wrapper around the case-data layer.
 
 ### Reporting and database writing
 
-- [reporting/aviation_reports.py](C:/Manish_REPO/NATM/navaero_transition_model/core/reporting/aviation_reports.py:1)
+- [result_exports/aviation_exports.py](C:/Manish_REPO/NATM/navaero_transition_model/core/result_exports/aviation_exports.py:1)
   Detailed output exporters.
 - [sqlite_store.py](C:/Manish_REPO/NATM/navaero_transition_model/core/database/sqlite_store.py:1)
   SQLite persistence for inputs and outputs.
@@ -486,12 +486,12 @@ For someone new to the codebase, this is the best order:
 1. [run.py](C:/Manish_REPO/NATM/run.py:1)
 2. [cli.py](C:/Manish_REPO/NATM/navaero_transition_model/cli.py:1)
 3. [scenario.py](C:/Manish_REPO/NATM/navaero_transition_model/core/scenario.py:1)
-4. [aviation_passenger_case.py](C:/Manish_REPO/NATM/navaero_transition_model/core/case_data/aviation_passenger_case.py:1)
+4. [aviation_passenger_case.py](C:/Manish_REPO/NATM/navaero_transition_model/core/case_inputs/aviation_passenger_case.py:1)
 5. [model.py](C:/Manish_REPO/NATM/navaero_transition_model/core/model.py:1)
 6. [aviation_passenger_airline.py](C:/Manish_REPO/NATM/navaero_transition_model/core/agent_types/aviation_passenger_airline.py:1)
 7. [legacy_weighted_utility.py](C:/Manish_REPO/NATM/navaero_transition_model/core/decision_logic/legacy_weighted_utility.py:1)
 8. [fleet.py](C:/Manish_REPO/NATM/navaero_transition_model/core/fleet_management/fleet.py:1)
-9. [aviation_reports.py](C:/Manish_REPO/NATM/navaero_transition_model/core/reporting/aviation_reports.py:1)
+9. [aviation_exports.py](C:/Manish_REPO/NATM/navaero_transition_model/core/result_exports/aviation_exports.py:1)
 10. [sqlite_store.py](C:/Manish_REPO/NATM/navaero_transition_model/core/database/sqlite_store.py:1)
 
 That path follows the same order the system itself uses during a run.

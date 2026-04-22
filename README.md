@@ -135,13 +135,13 @@ This folder contains:
 - `navaero_transition_model/core/policy.py`: plain Python policy/config objects and yearly policy signals
 - `navaero_transition_model/core/loaders/`: loader classes and convenience functions for case ingestion
 - `navaero_transition_model/core/agent_types/`: parent and specialized Mesa agent classes
-- `navaero_transition_model/core/case_data/`: case/input domain objects for fleet stock, technology catalog, and scenario tables
+- `navaero_transition_model/core/case_inputs/`: case input objects for fleet stock, technology catalog, and scenario tables
 - `navaero_transition_model/core/decision_logic/`: pluggable investment/adoption logic implementations
 - `navaero_transition_model/core/fleet_management/`: fleet state and fleet-management objects
 - `navaero_transition_model/core/environment.py`: shared country-and-corridor world layer
 - `navaero_transition_model/core/model.py`: Mesa `Model`, AgentSet activation, and DataCollector output
 - `navaero_transition_model/core/database/`: optional SQLite-backed database writing for case inputs and run outputs
-- `navaero_transition_model/core/reporting/`: exporter classes for detailed simulation result tables
+- `navaero_transition_model/core/result_exports/`: exporter classes for detailed simulation result tables
 - `navaero_transition_model/cli.py`: command-line entry point
 - `docs/architecture.md`: detailed system architecture and runtime flow
 - `docs/aviation-scenario-reference.md`: reference for `aviation_scenario.csv`, including variable groups, variable names, and scope rules
