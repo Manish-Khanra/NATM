@@ -9,6 +9,7 @@ from navaero_transition_model.core.agent_types import (
     AviationCargoAirlineAgent,
     AviationOperatorAgent,
     AviationPassengerAirlineAgent,
+    MaritimeCargoShiplineAgent,
     MaritimeOperatorAgent,
     SectorMarketContext,
 )
@@ -16,6 +17,7 @@ from navaero_transition_model.core.environment import TransitionEnvironment
 from navaero_transition_model.core.loaders import (
     load_aviation_cargo_case,
     load_aviation_passenger_case,
+    load_maritime_cargo_case,
 )
 from navaero_transition_model.core.policy import PolicySignal, SectorPolicySignal
 from navaero_transition_model.core.result_exports import (
@@ -23,6 +25,9 @@ from navaero_transition_model.core.result_exports import (
     AviationEnergyEmissionsExporter,
     AviationInvestmentExporter,
     AviationTechnologyExporter,
+    MaritimeEnergyEmissionsExporter,
+    MaritimeInvestmentExporter,
+    MaritimeTechnologyExporter,
 )
 from navaero_transition_model.core.scenario import NATMScenario
 
@@ -83,6 +88,7 @@ class NATMModel(mesa.Model):
         )
         self.aviation_passenger_inputs = None
         self.aviation_cargo_inputs = None
+        self.maritime_cargo_inputs = None
 
         for sector_name in self.enabled_sectors:
             if sector_name == "aviation":
@@ -95,8 +101,15 @@ class NATMModel(mesa.Model):
                     created_any = True
                 if created_any:
                     continue
+            if sector_name == "maritime":
+                created_any = False
+                if self._has_maritime_cargo_case_inputs():
+                    self._create_maritime_cargo_agents()
+                    created_any = True
+                if created_any:
+                    continue
             raise NotImplementedError(
-                "This NATM configuration currently expects a case-defined aviation application "
+                "This NATM configuration currently expects a case-defined sector/application "
                 "setup with the standard CSV files in the case folder.",
             )
         for agent in self.agents:
@@ -189,12 +202,34 @@ class NATMModel(mesa.Model):
 
     @property
     def current_policy_signal(self):
-        if self.aviation_passenger_inputs is not None or self.aviation_cargo_inputs is not None:
-            carbon_price = self._aviation_scenario_value(
+        if (
+            self.aviation_passenger_inputs is not None
+            or self.aviation_cargo_inputs is not None
+            or self.maritime_cargo_inputs is not None
+        ):
+            aviation_carbon_price = self._aviation_scenario_value(
                 "carbon_price",
                 self.current_year,
-                default=0.0,
+                default=None,
             )
+            maritime_carbon_price = self._maritime_scenario_value(
+                "carbon_tax",
+                self.current_year,
+                default=None,
+            )
+            if maritime_carbon_price is None:
+                maritime_carbon_price = self._maritime_scenario_value(
+                    "carbon_price",
+                    self.current_year,
+                    default=None,
+                )
+            carbon_candidates = [
+                float(value)
+                for value in (aviation_carbon_price, maritime_carbon_price)
+                if value is not None
+            ]
+            carbon_price = max(carbon_candidates) if carbon_candidates else 0.0
+
             aviation_clean_fuel_subsidy = self._aviation_scenario_value(
                 "clean_fuel_subsidy",
                 self.current_year,
@@ -205,13 +240,32 @@ class NATMModel(mesa.Model):
                 self.current_year,
                 default=0.0,
             )
+            maritime_clean_fuel_subsidy = self._maritime_scenario_value(
+                "clean_fuel_subsidy",
+                self.current_year,
+                default=0.0,
+            )
+            maritime_adoption_mandate = self._maritime_scenario_value(
+                "biofuel_mandate",
+                self.current_year,
+                default=None,
+            )
+            if maritime_adoption_mandate is None:
+                maritime_adoption_mandate = self._maritime_scenario_value(
+                    "adoption_mandate",
+                    self.current_year,
+                    default=0.0,
+                )
             return PolicySignal(
-                carbon_price=float(carbon_price or 0.0),
+                carbon_price=float(carbon_price),
                 aviation=SectorPolicySignal(
                     clean_fuel_subsidy=float(aviation_clean_fuel_subsidy or 0.0),
                     adoption_mandate=float(aviation_adoption_mandate or 0.0),
                 ),
-                maritime=SectorPolicySignal(clean_fuel_subsidy=0.0, adoption_mandate=0.0),
+                maritime=SectorPolicySignal(
+                    clean_fuel_subsidy=float(maritime_clean_fuel_subsidy or 0.0),
+                    adoption_mandate=float(maritime_adoption_mandate or 0.0),
+                ),
             )
         return PolicySignal(
             carbon_price=0.0,
@@ -273,6 +327,19 @@ class NATMModel(mesa.Model):
         )
         return all(path.exists() for path in required_files)
 
+    def _has_maritime_cargo_case_inputs(self) -> bool:
+        if not self.scenario.is_sector_enabled("maritime"):
+            return False
+        if not self.scenario.is_application_enabled("maritime", "cargo"):
+            return False
+        case_path = self.scenario.base_path
+        required_files = (
+            case_path / "maritime_fleet_stock.csv",
+            case_path / "maritime_technology_catalog.csv",
+            case_path / "maritime_scenario.csv",
+        )
+        return all(path.exists() for path in required_files)
+
     def _register_sector_agent_class(self, sector_name: str, agent_class: type) -> None:
         sector_classes = self.sector_agent_classes.setdefault(sector_name, [])
         if agent_class not in sector_classes:
@@ -314,6 +381,24 @@ class NATMModel(mesa.Model):
                 scenario_table=self.aviation_cargo_inputs.scenario_table,
             )
 
+    def _create_maritime_cargo_agents(self) -> None:
+        self.maritime_cargo_inputs = load_maritime_cargo_case(self.scenario.base_path)
+        self.maritime_cargo_inputs.validate_capacity_planning_inputs(
+            self.scenario.start_year,
+            self.scenario.end_year,
+        )
+        self._register_sector_agent_class("maritime", MaritimeCargoShiplineAgent)
+        grouped_fleet = self.maritime_cargo_inputs.grouped_operator_fleet()
+        for (operator_name, operator_country), fleet_df in grouped_fleet:
+            MaritimeCargoShiplineAgent(
+                self,
+                operator_name=operator_name,
+                operator_country=operator_country,
+                fleet_frame=fleet_df,
+                technology_catalog=self.maritime_cargo_inputs.technology_catalog,
+                scenario_table=self.maritime_cargo_inputs.scenario_table,
+            )
+
     def _aviation_scenario_value(
         self,
         variable_name: str,
@@ -327,6 +412,23 @@ class NATMModel(mesa.Model):
             scenario_tables.append(self.aviation_passenger_inputs.scenario_table)
         if self.aviation_cargo_inputs is not None:
             scenario_tables.append(self.aviation_cargo_inputs.scenario_table)
+        for scenario_table in scenario_tables:
+            value = scenario_table.value(variable_name, year, default=None, **scope)
+            if value is not None:
+                return value
+        return default
+
+    def _maritime_scenario_value(
+        self,
+        variable_name: str,
+        year: int,
+        *,
+        default: float | None = None,
+        **scope: str,
+    ) -> float | None:
+        scenario_tables = []
+        if self.maritime_cargo_inputs is not None:
+            scenario_tables.append(self.maritime_cargo_inputs.scenario_table)
         for scenario_table in scenario_tables:
             value = scenario_table.value(variable_name, year, default=None, **scope)
             if value is not None:
@@ -399,14 +501,16 @@ class NATMModel(mesa.Model):
 
     def _record_detailed_outputs(self) -> None:
         aviation_agents = list(self.get_sector_agents("aviation"))
-        if not aviation_agents:
-            return
 
         detailed_agents = [
             agent
             for agent in aviation_agents
             if isinstance(agent, (AviationPassengerAirlineAgent, AviationCargoAirlineAgent))
         ]
+        maritime_agents = list(self.get_sector_agents("maritime"))
+        detailed_agents.extend(
+            agent for agent in maritime_agents if isinstance(agent, MaritimeCargoShiplineAgent)
+        )
         if not detailed_agents:
             return
 
@@ -459,3 +563,12 @@ class NATMModel(mesa.Model):
 
     def to_aviation_investment_frame(self) -> pd.DataFrame:
         return AviationInvestmentExporter().export(self)
+
+    def to_maritime_technology_frame(self) -> pd.DataFrame:
+        return MaritimeTechnologyExporter().export(self)
+
+    def to_maritime_energy_emissions_frame(self) -> pd.DataFrame:
+        return MaritimeEnergyEmissionsExporter().export(self)
+
+    def to_maritime_investment_frame(self) -> pd.DataFrame:
+        return MaritimeInvestmentExporter().export(self)

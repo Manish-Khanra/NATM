@@ -20,9 +20,9 @@ In practical terms, NATM is intended to help explore questions such as:
 - how much fuel demand shifts by energy carrier over time
 - how emissions and investment costs evolve during the transition
 
-The current repository includes working aviation-passenger and aviation-cargo
-test cases, while the architecture is designed to extend further into maritime
-applications as the model grows.
+The current repository includes working aviation-passenger, aviation-cargo,
+and maritime-cargo test cases, while the architecture is designed to extend
+further into additional maritime applications as the model grows.
 
 ## Installation
 
@@ -127,12 +127,16 @@ This folder contains:
 - `aviation_technology.csv`
 - `aviation_energy_emissions.csv`
 - `aviation_investments.csv`
+- `maritime_technology.csv`
+- `maritime_energy_emissions.csv`
+- `maritime_investments.csv`
 - `natm_runs.sqlite`
 
 Named example presets currently included in [run.py](C:/Manish_REPO/NATM/run.py:1):
 
 - `small_with_aviation_passenger`
 - `small_with_aviation_cargo`
+- `small_with_maritime_cargo`
 
 ## Project Layout
 
@@ -151,6 +155,7 @@ Named example presets currently included in [run.py](C:/Manish_REPO/NATM/run.py:
 - `docs/architecture.md`: detailed system architecture and runtime flow
 - `docs/aviation-passenger-reference.md`: passenger-specific reference for `aviation_scenario.csv`
 - `docs/aviation-cargo-scenario-reference.md`: cargo-specific reference for `aviation_scenario.csv` in cargo aviation cases
+- `docs/maritime-cargo-render-gap-map.md`: old-vs-new maritime cargo fidelity checklist
 - `docs/aviation-passenger-mesa-port.md`: port plan from the old Melodie aviation-passenger model
 - `docs/aviation-passenger-render-gap-map.md`: strict old-vs-new aviation-passenger fidelity checklist
 - `data/<case-name>/scenario.yaml`: case configuration
@@ -168,6 +173,12 @@ The `baseline-cargo-transition` case uses the same aviation CSV filenames:
 - `aviation_fleet_stock.csv`
 - `aviation_technology_catalog.csv`
 - `aviation_scenario.csv`
+
+The `baseline-maritime-cargo-transition` case uses maritime-sector CSV filenames:
+
+- `maritime_fleet_stock.csv`
+- `maritime_technology_catalog.csv`
+- `maritime_scenario.csv`
 
 The fleet stock input can also carry an `investment_logic` column so each
 airline agent can select its decision method by name. The current built-in
@@ -195,7 +206,7 @@ For the system-level architecture, see `docs/architecture.md`.
 - Agent inheritance structure with reusable parent classes for future agent types
 - Object-oriented case data, technology catalog, scenario table, fleet, and output exporters
 - A shared environment layer with country states and route/corridor effects
-- Detailed aviation passenger and cargo outputs for aircraft stock, technology diffusion, energy/emissions, and investment activity
+- Detailed aviation passenger, aviation cargo, and maritime cargo outputs for stock, technology diffusion, energy/emissions, and investment activity
 
 ## Near-Term Next Steps
 

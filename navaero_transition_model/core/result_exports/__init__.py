@@ -4,6 +4,9 @@ from navaero_transition_model.core.result_exports.aviation_exports import (
     AviationInvestmentExporter,
     AviationTechnologyExporter,
     DetailedOutputWriter,
+    MaritimeEnergyEmissionsExporter,
+    MaritimeInvestmentExporter,
+    MaritimeTechnologyExporter,
 )
 
 __all__ = [
@@ -12,4 +15,7 @@ __all__ = [
     "AviationInvestmentExporter",
     "AviationTechnologyExporter",
     "DetailedOutputWriter",
+    "MaritimeEnergyEmissionsExporter",
+    "MaritimeInvestmentExporter",
+    "MaritimeTechnologyExporter",
 ]

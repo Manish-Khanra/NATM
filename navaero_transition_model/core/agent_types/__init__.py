@@ -5,6 +5,9 @@ from navaero_transition_model.core.agent_types.aviation_passenger_airline import
     AviationPassengerAirlineAgent,
 )
 from navaero_transition_model.core.agent_types.base import BaseOperatorAgent
+from navaero_transition_model.core.agent_types.maritime_cargo_shipline import (
+    MaritimeCargoShiplineAgent,
+)
 from navaero_transition_model.core.agent_types.transport_operator import (
     AviationOperatorAgent,
     MaritimeOperatorAgent,
@@ -18,6 +21,7 @@ __all__ = [
     "AviationOperatorAgent",
     "AviationPassengerAirlineAgent",
     "BaseOperatorAgent",
+    "MaritimeCargoShiplineAgent",
     "MaritimeOperatorAgent",
     "OperatorProfile",
     "SectorMarketContext",

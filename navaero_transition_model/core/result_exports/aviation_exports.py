@@ -129,6 +129,122 @@ class AviationInvestmentExporter:
         ).reset_index(drop=True)
 
 
+class MaritimeTechnologyExporter:
+    def export(self, model) -> pd.DataFrame:
+        aircraft_frame = AircraftStockExporter().export(model)
+        if aircraft_frame.empty:
+            return pd.DataFrame()
+
+        maritime_frame = aircraft_frame.loc[aircraft_frame["sector_name"] == "maritime"].copy()
+        if maritime_frame.empty:
+            return pd.DataFrame()
+
+        grouped = maritime_frame.groupby(
+            [
+                "year",
+                "application_name",
+                "operator_name",
+                "operator_country",
+                "segment",
+                "current_technology",
+                "primary_energy_carrier",
+                "secondary_energy_carrier",
+                "saf_pathway",
+            ],
+            dropna=False,
+            as_index=False,
+        ).agg(
+            vessel_count=("aircraft_id", "count"),
+            primary_energy_consumption=("primary_energy_consumption", "sum"),
+            secondary_energy_consumption=("secondary_energy_consumption", "sum"),
+            total_emission=("total_emission", "sum"),
+            chargeable_emission=("chargeable_emission", "sum"),
+        )
+        return grouped.sort_values(
+            ["year", "application_name", "operator_name", "segment", "current_technology"],
+        ).reset_index(drop=True)
+
+
+class MaritimeEnergyEmissionsExporter:
+    def export(self, model) -> pd.DataFrame:
+        technology_frame = MaritimeTechnologyExporter().export(model)
+        if technology_frame.empty:
+            return pd.DataFrame()
+
+        grouped = technology_frame.groupby(
+            [
+                "year",
+                "application_name",
+                "operator_name",
+                "operator_country",
+                "segment",
+                "current_technology",
+                "primary_energy_carrier",
+                "secondary_energy_carrier",
+                "saf_pathway",
+            ],
+            dropna=False,
+            as_index=False,
+        ).agg(
+            primary_energy_consumption=("primary_energy_consumption", "sum"),
+            secondary_energy_consumption=("secondary_energy_consumption", "sum"),
+            total_emission=("total_emission", "sum"),
+            chargeable_emission=("chargeable_emission", "sum"),
+            vessel_count=("vessel_count", "sum"),
+        )
+        return grouped.sort_values(
+            [
+                "year",
+                "application_name",
+                "operator_name",
+                "segment",
+                "current_technology",
+                "primary_energy_carrier",
+                "secondary_energy_carrier",
+            ],
+        ).reset_index(drop=True)
+
+
+class MaritimeInvestmentExporter:
+    def export(self, model) -> pd.DataFrame:
+        aircraft_frame = AircraftStockExporter().export(model)
+        if aircraft_frame.empty:
+            return pd.DataFrame()
+
+        investment_year = pd.to_numeric(
+            aircraft_frame["investment_year"],
+            errors="coerce",
+        )
+        same_year_investment = investment_year.eq(aircraft_frame["year"])
+        investment_frame = aircraft_frame.loc[
+            (aircraft_frame["sector_name"] == "maritime")
+            & investment_year.notna()
+            & same_year_investment
+            & (aircraft_frame["investment_cost_eur"] > 0.0),
+        ].copy()
+        if investment_frame.empty:
+            return pd.DataFrame()
+
+        grouped = investment_frame.groupby(
+            [
+                "year",
+                "application_name",
+                "operator_name",
+                "operator_country",
+                "segment",
+                "current_technology",
+            ],
+            dropna=False,
+            as_index=False,
+        ).agg(
+            vessel_count=("aircraft_id", "count"),
+            investment_cost_eur=("investment_cost_eur", "sum"),
+        )
+        return grouped.sort_values(
+            ["year", "application_name", "operator_name", "segment", "current_technology"],
+        ).reset_index(drop=True)
+
+
 class DetailedOutputWriter:
     def export(self, model, output_dir: Path) -> None:
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -138,6 +254,9 @@ class DetailedOutputWriter:
             "aviation_technology.csv": AviationTechnologyExporter().export(model),
             "aviation_energy_emissions.csv": AviationEnergyEmissionsExporter().export(model),
             "aviation_investments.csv": AviationInvestmentExporter().export(model),
+            "maritime_technology.csv": MaritimeTechnologyExporter().export(model),
+            "maritime_energy_emissions.csv": MaritimeEnergyEmissionsExporter().export(model),
+            "maritime_investments.csv": MaritimeInvestmentExporter().export(model),
         }
         for filename, dataframe in detail_frames.items():
             if dataframe.empty:

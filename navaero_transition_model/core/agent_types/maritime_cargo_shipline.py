@@ -8,14 +8,14 @@ import pandas as pd
 from navaero_transition_model.core.agent_types.base import BaseOperatorAgent
 from navaero_transition_model.core.case_inputs import ScenarioTable, TechnologyCatalog
 from navaero_transition_model.core.decision_logic import (
-    build_aviation_cargo_decision_logic,
+    build_maritime_cargo_decision_logic,
     clamp,
 )
 from navaero_transition_model.core.fleet_management import Fleet
 
 
-class AviationCargoAirlineAgent(BaseOperatorAgent):
-    sector_name = "aviation"
+class MaritimeCargoShiplineAgent(BaseOperatorAgent):
+    sector_name = "maritime"
     application_name = "cargo"
 
     def __init__(
@@ -58,9 +58,9 @@ class AviationCargoAirlineAgent(BaseOperatorAgent):
         self.investment_logic_name = self._fleet_text_value(
             fleet_frame,
             "investment_logic",
-            default="legacy_weighted_utility_cargo",
+            default="legacy_weighted_utility_maritime_cargo",
         )
-        self.decision_logic = build_aviation_cargo_decision_logic(self.investment_logic_name)
+        self.decision_logic = build_maritime_cargo_decision_logic(self.investment_logic_name)
         self.remaining_ets_allowance = 0.0
         self.technology_investment_cost: dict[tuple[int, str], float] = {}
         self.fleet = Fleet(
@@ -127,10 +127,10 @@ class AviationCargoAirlineAgent(BaseOperatorAgent):
         starting_ets_allowance = self.decision_logic.yearly_ets_allowance(self, year)
         self.remaining_ets_allowance = self.fleet.update_operation_metrics(
             year=year,
-            operation_metrics_fn=lambda aircraft, technology_row, target_year, ets_balance: (
+            operation_metrics_fn=lambda vessel, technology_row, target_year, ets_balance: (
                 self.decision_logic.annual_operation_metrics(
                     self,
-                    aircraft,
+                    vessel,
                     technology_row,
                     target_year,
                     ets_balance,
@@ -140,10 +140,7 @@ class AviationCargoAirlineAgent(BaseOperatorAgent):
             excluded_indices=excluded_indices,
         )
 
-    def effective_cargo_load_factor(
-        self,
-        year: int,
-    ) -> float:
+    def effective_cargo_load_factor(self, year: int) -> float:
         load_factor = self.scenario_value(
             "load_factor",
             year,
@@ -152,33 +149,44 @@ class AviationCargoAirlineAgent(BaseOperatorAgent):
         )
         return clamp(float(load_factor or 0.0))
 
-    def aircraft_freight_tonne_km_capacity(
+    def cargo_capacity_tonnes(self, technology_row: pd.Series) -> float:
+        gross_tonnage = float(technology_row.get("gross_tonnage", 0.0) or 0.0)
+        net_tonnage_share = float(technology_row.get("net_tonnage_share", 0.0) or 0.0)
+        max_tanker_size = float(technology_row.get("max_tanker_size_tonnes", 0.0) or 0.0)
+        payload_capacity_kg = float(technology_row.get("payload_capacity_kg", 0.0) or 0.0)
+
+        if gross_tonnage > 0.0 and net_tonnage_share > 0.0:
+            return gross_tonnage * net_tonnage_share
+        if max_tanker_size > 0.0:
+            return max_tanker_size
+        return payload_capacity_kg / 1000.0
+
+    def vessel_freight_tonne_km_capacity(
         self,
-        aircraft: pd.Series,
+        vessel: pd.Series,
         technology_row: pd.Series,
         year: int,
     ) -> float:
-        active_status = str(aircraft.get("status", "")).strip().lower()
+        active_status = str(vessel.get("status", "")).strip().lower()
         if active_status == "parked":
             return 0.0
 
-        payload_capacity_kg = float(technology_row.get("payload_capacity_kg", 0.0) or 0.0)
+        cargo_capacity_tonnes = self.cargo_capacity_tonnes(technology_row)
         trip_length = float(technology_row["trip_length_km"])
         trip_days = float(technology_row["trip_days_per_year"])
         load_factor = self.effective_cargo_load_factor(year)
-        payload_capacity_tonnes = payload_capacity_kg / 1000.0
-        return payload_capacity_tonnes * trip_length * trip_days * load_factor
+        return cargo_capacity_tonnes * trip_length * trip_days * load_factor
 
     def segment_freight_tonne_km_capacity(self, segment: str, year: int) -> float:
         segment_rows = self.fleet.frame.loc[self.fleet.frame["segment"] == segment]
         total_capacity = 0.0
-        for _, aircraft in segment_rows.iterrows():
+        for _, vessel in segment_rows.iterrows():
             technology_row = self.technology_row(
-                technology_name=str(aircraft["current_technology"]),
-                segment=str(aircraft["segment"]),
+                technology_name=str(vessel["current_technology"]),
+                segment=str(vessel["segment"]),
             )
-            total_capacity += self.aircraft_freight_tonne_km_capacity(
-                aircraft,
+            total_capacity += self.vessel_freight_tonne_km_capacity(
+                vessel,
                 technology_row,
                 year,
             )
@@ -223,7 +231,7 @@ class AviationCargoAirlineAgent(BaseOperatorAgent):
             return active_rows.iloc[0].copy()
         return segment_rows.iloc[0].copy()
 
-    def apply_technology_to_aircraft(
+    def apply_technology_to_vessel(
         self,
         row_index: int,
         technology_row: pd.Series,
@@ -247,7 +255,8 @@ class AviationCargoAirlineAgent(BaseOperatorAgent):
         conventional = 0
         alternative = 0
         for technology_row in current_rows:
-            if self.technology_catalog.is_conventional_row(technology_row):
+            is_conventional = self.technology_catalog.is_conventional_row(technology_row)
+            if is_conventional:
                 conventional += 1
             else:
                 alternative += 1
@@ -255,9 +264,9 @@ class AviationCargoAirlineAgent(BaseOperatorAgent):
         self.conventional_assets = float(conventional)
         self.alternative_assets = float(alternative)
         self.infrastructure_readiness = self.environment_signal.infrastructure_readiness
-        self.mandate_share = float(self.model.current_policy_signal.aviation.adoption_mandate)
+        self.mandate_share = float(self.model.current_policy_signal.maritime.adoption_mandate)
         self.policy_support = clamp(
-            0.55 * float(self.model.current_policy_signal.aviation.clean_fuel_subsidy)
+            0.55 * float(self.model.current_policy_signal.maritime.clean_fuel_subsidy)
             + 0.45 * self.mandate_share,
         )
 

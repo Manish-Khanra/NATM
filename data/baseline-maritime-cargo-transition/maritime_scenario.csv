@@ -1,0 +1,42 @@
+variable_group,variable_name,country,operator_name,segment,technology_name,primary_energy_carrier,secondary_energy_carrier,saf_pathway,unit,2025,2026,2027,2028,2029,2030,2031,2032,2033,2034,2035
+price,primary_energy_price,Germany,,,,marine_diesel,,,eur_per_kwh,0.058,0.060,0.062,0.064,0.066,0.068,0.070,0.072,0.074,0.076,0.078
+price,primary_energy_price,France,,,,marine_diesel,,,eur_per_kwh,0.059,0.061,0.063,0.065,0.067,0.069,0.071,0.073,0.075,0.077,0.079
+price,primary_energy_price,Germany,,,,ammonia,,,eur_per_kwh,0.165,0.160,0.155,0.150,0.145,0.140,0.136,0.132,0.128,0.124,0.120
+price,primary_energy_price,France,,,,ammonia,,,eur_per_kwh,0.167,0.162,0.157,0.152,0.147,0.142,0.138,0.134,0.130,0.126,0.122
+price,secondary_energy_price,Germany,,,,,biofuel,fame,eur_per_kwh,0.094,0.093,0.092,0.091,0.090,0.089,0.088,0.087,0.086,0.085,0.084
+price,secondary_energy_price,France,,,,,biofuel,fame,eur_per_kwh,0.095,0.094,0.093,0.092,0.091,0.090,0.089,0.088,0.087,0.086,0.085
+price,tertiary_energy_price,Germany,,,,,biofuel,fame,eur_per_kwh,0.094,0.093,0.092,0.091,0.090,0.089,0.088,0.087,0.086,0.085,0.084
+price,tertiary_energy_price,France,,,,,biofuel,fame,eur_per_kwh,0.095,0.094,0.093,0.092,0.091,0.090,0.089,0.088,0.087,0.086,0.085
+policy,carbon_tax,,,,,,,,eur_per_tco2,28,34,42,52,64,78,92,108,124,138,152
+policy,clean_fuel_subsidy,,,,,,,,share,0.04,0.050,0.060,0.070,0.080,0.090,0.100,0.110,0.120,0.130,0.140
+policy,biofuel_mandate,,,,,,biofuel,fame,share,0.02,0.03,0.04,0.05,0.07,0.09,0.11,0.14,0.17,0.20,0.23
+policy,ets_allocation_factor,,Hapag-Lloyd,,,,,,share,0.90,0.88,0.86,0.84,0.82,0.79,0.76,0.73,0.70,0.66,0.62
+policy,ets_allocation_factor,,CMA CGM,,,,,,share,0.90,0.88,0.86,0.84,0.82,0.79,0.76,0.73,0.70,0.66,0.62
+policy,reported_emission,,Hapag-Lloyd,,,,,,share,0.68,0.68,0.68,0.68,0.68,0.68,0.68,0.68,0.68,0.68,0.68
+policy,reported_emission,,CMA CGM,,,,,,share,0.69,0.69,0.69,0.69,0.69,0.69,0.69,0.69,0.69,0.69,0.69
+availability,technology_availability,,,regional,biofuel_regional,,,,flag,1,1,1,1,1,1,1,1,1,1,1
+availability,technology_availability,,,deepsea,biofuel_deepsea,,,,flag,1,1,1,1,1,1,1,1,1,1,1
+availability,technology_availability,,,regional,ammonia_regional,,,,flag,0,0,0,0,0,1,1,1,1,1,1
+availability,technology_availability,,,deepsea,ammonia_deepsea,,,,flag,0,0,0,0,0,0,1,1,1,1,1
+availability,infrastructure_availability,Germany,,regional,ammonia_regional,,,,flag,0,0,0,0,1,1,1,1,1,1,1
+availability,infrastructure_availability,France,,regional,ammonia_regional,,,,flag,0,0,0,0,1,1,1,1,1,1,1
+availability,infrastructure_availability,Germany,,deepsea,ammonia_deepsea,,,,flag,0,0,0,0,0,0,1,1,1,1,1
+availability,infrastructure_availability,France,,deepsea,ammonia_deepsea,,,,flag,0,0,0,0,0,0,1,1,1,1,1
+availability,biofuel_availability,Germany,,regional,biofuel_regional,,biofuel,fame,flag,1,1,1,1,1,1,1,1,1,1,1
+availability,biofuel_availability,France,,regional,biofuel_regional,,biofuel,fame,flag,1,1,1,1,1,1,1,1,1,1,1
+availability,biofuel_availability,Germany,,deepsea,biofuel_deepsea,,biofuel,fame,flag,1,1,1,1,1,1,1,1,1,1,1
+availability,biofuel_availability,France,,deepsea,biofuel_deepsea,,biofuel,fame,flag,1,1,1,1,1,1,1,1,1,1,1
+demand,freight_tonne_km_demand,Germany,,regional,,,,,tkm_per_year,640000000,652000000,664000000,676000000,688000000,700000000,712000000,724000000,736000000,748000000,760000000
+demand,freight_tonne_km_demand,Germany,,deepsea,,,,,tkm_per_year,2680000000,2730000000,2780000000,2840000000,2900000000,2960000000,3020000000,3080000000,3140000000,3200000000,3260000000
+demand,freight_tonne_km_demand,France,,regional,,,,,tkm_per_year,620000000,631000000,642000000,654000000,666000000,678000000,690000000,702000000,714000000,726000000,738000000
+demand,freight_tonne_km_demand,France,,deepsea,,,,,tkm_per_year,2520000000,2570000000,2620000000,2680000000,2740000000,2800000000,2860000000,2920000000,2980000000,3040000000,3100000000
+market,operator_market_share,Germany,Hapag-Lloyd,regional,,,,,share,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0
+market,operator_market_share,Germany,Hapag-Lloyd,deepsea,,,,,share,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0
+market,operator_market_share,France,CMA CGM,regional,,,,,share,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0
+market,operator_market_share,France,CMA CGM,deepsea,,,,,share,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0
+operations,load_factor,,Hapag-Lloyd,,,,,,share,0.74,0.74,0.75,0.75,0.76,0.76,0.77,0.77,0.78,0.78,0.79
+operations,load_factor,,CMA CGM,,,,,,share,0.73,0.73,0.74,0.74,0.75,0.75,0.76,0.76,0.77,0.77,0.78
+operations,freight_rate,,Hapag-Lloyd,,,,,,eur_per_tonne_km,0.066,0.067,0.068,0.069,0.070,0.071,0.072,0.073,0.074,0.075,0.076
+operations,freight_rate,,CMA CGM,,,,,,eur_per_tonne_km,0.065,0.066,0.067,0.068,0.069,0.070,0.071,0.072,0.073,0.074,0.075
+delivery,planned_delivery_count,Germany,Hapag-Lloyd,deepsea,biofuel_deepsea,,,,count,0,0,0,1,0,0,0,0,0,0,0
+delivery,planned_delivery_count,France,CMA CGM,regional,biofuel_regional,,,,count,0,0,1,0,0,0,0,0,0,0,0

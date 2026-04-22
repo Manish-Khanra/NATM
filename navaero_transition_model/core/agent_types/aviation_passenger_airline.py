@@ -275,11 +275,10 @@ class AviationPassengerAirlineAgent(BaseOperatorAgent):
         conventional = 0
         alternative = 0
         for technology_row in current_rows:
-            is_alternative = not str(technology_row["technology_name"]).startswith("kerosene")
-            if is_alternative:
-                alternative += 1
-            else:
+            if self.technology_catalog.is_conventional_row(technology_row):
                 conventional += 1
+            else:
+                alternative += 1
 
         self.conventional_assets = float(conventional)
         self.alternative_assets = float(alternative)

@@ -11,6 +11,7 @@ from navaero_transition_model.core.agent_types import (
     AviationCargoAirlineAgent,
     AviationPassengerAirlineAgent,
     BaseOperatorAgent,
+    MaritimeCargoShiplineAgent,
 )
 from navaero_transition_model.core.case_inputs import (
     AviationPassengerCaseData,
@@ -31,6 +32,13 @@ def load_default_scenario() -> NATMScenario:
 def load_cargo_scenario() -> NATMScenario:
     scenario_path = Path(__file__).resolve().parents[1] / resolve_case_config(
         "baseline-cargo-transition",
+    )
+    return NATMScenario.from_yaml(scenario_path)
+
+
+def load_maritime_cargo_scenario() -> NATMScenario:
+    scenario_path = Path(__file__).resolve().parents[1] / resolve_case_config(
+        "baseline-maritime-cargo-transition",
     )
     return NATMScenario.from_yaml(scenario_path)
 
@@ -494,3 +502,31 @@ def test_cargo_scenario_runs_end_to_end() -> None:
     assert "application_name" in aircraft_summary.columns
     assert set(aircraft_summary["application_name"].dropna().unique()) == {"cargo"}
     assert summary.iloc[-1]["aviation_alternative_share"] >= 0.0
+
+
+def test_maritime_cargo_scenario_runs_end_to_end() -> None:
+    scenario = load_maritime_cargo_scenario()
+    model = NATMModel(scenario, seed=42)
+
+    history = model.run()
+    summary = model.to_frame()
+    aircraft_summary = model.to_aircraft_frame()
+    technology_summary = model.to_maritime_technology_frame()
+    energy_summary = model.to_maritime_energy_emissions_frame()
+    investment_summary = model.to_maritime_investment_frame()
+
+    assert scenario.enabled_sectors == ("maritime",)
+    assert scenario.applications_for_sector("maritime") == ("cargo",)
+    assert len(history) == scenario.steps
+    assert len(model.agents) == 2
+    assert all(isinstance(agent, MaritimeCargoShiplineAgent) for agent in model.agents)
+    assert {"cargo"} == set(aircraft_summary["application_name"].dropna().unique())
+    assert {"maritime"} == set(aircraft_summary["sector_name"].dropna().unique())
+    assert "vessel_id" in aircraft_summary.columns
+    assert not technology_summary.empty
+    assert not energy_summary.empty
+    assert not investment_summary.empty
+    assert "vessel_count" in technology_summary.columns
+    assert "vessel_count" in energy_summary.columns
+    assert "vessel_count" in investment_summary.columns
+    assert summary.iloc[-1]["maritime_alternative_share"] >= 0.0

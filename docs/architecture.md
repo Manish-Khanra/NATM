@@ -3,9 +3,10 @@
 This document describes the current software architecture of NATM as it exists
 in the repository today.
 
-The current implementation is a Mesa-based aviation model with working
-passenger and cargo applications, and a general structure that can be extended
-to additional sectors and applications later.
+The current implementation is a Mesa-based transport model with working
+aviation-passenger, aviation-cargo, and maritime-cargo applications, and a
+general structure that can be extended to additional sectors and applications
+later.
 
 ## 1. Architecture Overview
 
@@ -22,9 +23,9 @@ In the current codebase, the active end-to-end path is:
 
 `run.py` or `python -m navaero_transition_model`  
 -> `NATMScenario`  
--> `AviationPassengerCaseData` or `AviationCargoCaseData`  
+-> `AviationPassengerCaseData`, `AviationCargoCaseData`, or `MaritimeCargoCaseData`  
 -> `NATMModel`  
--> `AviationPassengerAirlineAgent` or `AviationCargoAirlineAgent`  
+-> `AviationPassengerAirlineAgent`, `AviationCargoAirlineAgent`, or `MaritimeCargoShiplineAgent`  
 -> decision logic + fleet updates  
 -> `DataCollector` + detailed exporters + optional SQLite
 
@@ -122,6 +123,7 @@ planning implementation requires:
 
 - `passenger_km_demand` for aviation passenger
 - `freight_tonne_km_demand` for aviation cargo
+- `freight_tonne_km_demand` for maritime cargo
 - `operator_market_share`
 
 for all required year/scope combinations.
@@ -133,9 +135,10 @@ for all required year/scope combinations.
 1. stores the scenario
 2. creates the shared environment
 3. loads aviation-passenger case data if the case enables aviation/passenger
-4. creates one application-specific airline agent per `(operator_name, operator_country)`
-5. builds a `mesa.DataCollector`
-6. records the initial model snapshot and detailed aircraft snapshot
+4. loads aviation-cargo or maritime-cargo case data if those applications are enabled
+5. creates one application-specific operator agent per `(operator_name, operator_country)`
+6. builds a `mesa.DataCollector`
+7. records the initial model snapshot and detailed fleet snapshot
 
 ### 3.5 Simulation step
 
@@ -180,6 +183,7 @@ The current agent hierarchy is:
 - `MaritimeOperatorAgent`
 - `AviationPassengerAirlineAgent`
 - `AviationCargoAirlineAgent`
+- `MaritimeCargoShiplineAgent`
 
 Important detail:
 
@@ -208,8 +212,8 @@ aviation passenger and cargo decisions.
 
 ### 5.1 `AviationPassengerCaseData`
 
-`AviationPassengerCaseData` and `AviationCargoCaseData` are the application
-input bundles for aviation.
+`AviationPassengerCaseData`, `AviationCargoCaseData`, and
+`MaritimeCargoCaseData` are the current application input bundles.
 
 Responsibilities:
 
@@ -269,7 +273,7 @@ are parameterized.
 
 ### 6.1 Fleet
 
-`Fleet` is a domain object that owns the airlineâ€™s aircraft dataframe and
+`Fleet` is a domain object that owns the operator fleet dataframe and
 encapsulates fleet operations.
 
 Responsibilities:
@@ -311,8 +315,8 @@ agent architecture.
 `LegacyWeightedUtilityLogic` performs three major tasks each year:
 
 1. update existing fleet operating metrics
-2. replace due aircraft
-3. add growth aircraft if capacity gaps remain
+2. replace due aircraft or vessels
+3. add growth aircraft or vessels if capacity gaps remain
 
 The current technology selection combines:
 
@@ -338,9 +342,9 @@ Growth now follows this business-style flow:
 
 1. read `passenger_km_demand` or `freight_tonne_km_demand` by `country + segment`
 2. allocate that demand using `operator_market_share`
-3. compute airline segment capacity from actual fleet and effective load factor
+3. compute operator segment capacity from actual fleet and effective load factor
 4. apply `planned_delivery_count` first if present
-5. endogenously add aircraft only if a residual capacity gap remains
+5. endogenously add assets only if a residual capacity gap remains
 
 This keeps growth in the decision-logic layer while making it demand-driven
 instead of using a simple percentage-growth heuristic.
@@ -385,12 +389,15 @@ This is the right place for top-level indicators and agent aggregates.
 
 ### 9.2 Detailed exporters
 
-Detailed aviation outputs are handled by exporter classes:
+Detailed outputs are handled by exporter classes:
 
 - `AircraftStockExporter`
 - `AviationTechnologyExporter`
 - `AviationEnergyEmissionsExporter`
 - `AviationInvestmentExporter`
+- `MaritimeTechnologyExporter`
+- `MaritimeEnergyEmissionsExporter`
+- `MaritimeInvestmentExporter`
 - `DetailedOutputWriter`
 
 These exporters use the stored aircraft history snapshots to produce flat CSV
@@ -400,6 +407,9 @@ tables such as:
 - `aviation_technology.csv`
 - `aviation_energy_emissions.csv`
 - `aviation_investments.csv`
+- `maritime_technology.csv`
+- `maritime_energy_emissions.csv`
+- `maritime_investments.csv`
 
 This split keeps `DataCollector` focused on summary reporting while allowing
 rich domain-specific output tables for analysis.
@@ -415,6 +425,9 @@ It stores:
 - aviation fleet input
 - technology catalog input
 - aviation scenario input
+- maritime fleet input
+- maritime technology catalog input
+- maritime scenario input
 - model summary output
 - agent output
 - aircraft output
@@ -436,6 +449,9 @@ data/
     aviation_fleet_stock.csv
     aviation_technology_catalog.csv
     aviation_scenario.csv
+    maritime_fleet_stock.csv
+    maritime_technology_catalog.csv
+    maritime_scenario.csv
     countries.csv
     corridors.csv
 ```
@@ -455,7 +471,9 @@ Detailed behavior belongs in the CSV inputs, not in the YAML.
 - aviation sector
 - passenger application
 - cargo application
+- maritime cargo application
 - airline agents with aircraft fleets
+- shipline agents with vessel fleets
 - case-based CSV inputs
 - detailed exporter outputs
 - optional SQLite persistence
@@ -484,7 +502,7 @@ The current architecture follows these principles:
 The architecture is clean enough for growth, but some boundaries are still
 deliberately simple:
 
-- only aviation passenger and cargo are fully implemented
+- aviation passenger, aviation cargo, and maritime cargo are implemented
 - hub-level infrastructure is stored (`main_hub`) but not yet driving decisions
 - the environment is country/corridor-based, not yet airport-network-based
 - market-share allocation is currently fixed-share rather than competitive
@@ -500,14 +518,17 @@ For someone new to the codebase, this is the best order:
 3. [scenario.py](C:/Manish_REPO/NATM/navaero_transition_model/core/scenario.py:1)
 4. [aviation_passenger_case.py](C:/Manish_REPO/NATM/navaero_transition_model/core/case_inputs/aviation_passenger_case.py:1)
 5. [aviation_cargo_case.py](C:/Manish_REPO/NATM/navaero_transition_model/core/case_inputs/aviation_cargo_case.py:1)
-6. [model.py](C:/Manish_REPO/NATM/navaero_transition_model/core/model.py:1)
-7. [aviation_passenger_airline.py](C:/Manish_REPO/NATM/navaero_transition_model/core/agent_types/aviation_passenger_airline.py:1)
-8. [aviation_cargo_airline.py](C:/Manish_REPO/NATM/navaero_transition_model/core/agent_types/aviation_cargo_airline.py:1)
-9. [legacy_weighted_utility.py](C:/Manish_REPO/NATM/navaero_transition_model/core/decision_logic/legacy_weighted_utility.py:1)
-10. [legacy_weighted_utility_cargo.py](C:/Manish_REPO/NATM/navaero_transition_model/core/decision_logic/legacy_weighted_utility_cargo.py:1)
-11. [fleet.py](C:/Manish_REPO/NATM/navaero_transition_model/core/fleet_management/fleet.py:1)
-12. [aviation_exports.py](C:/Manish_REPO/NATM/navaero_transition_model/core/result_exports/aviation_exports.py:1)
-13. [sqlite_store.py](C:/Manish_REPO/NATM/navaero_transition_model/core/database/sqlite_store.py:1)
+6. [maritime_cargo_case.py](C:/Manish_REPO/NATM/navaero_transition_model/core/case_inputs/maritime_cargo_case.py:1)
+7. [model.py](C:/Manish_REPO/NATM/navaero_transition_model/core/model.py:1)
+8. [aviation_passenger_airline.py](C:/Manish_REPO/NATM/navaero_transition_model/core/agent_types/aviation_passenger_airline.py:1)
+9. [aviation_cargo_airline.py](C:/Manish_REPO/NATM/navaero_transition_model/core/agent_types/aviation_cargo_airline.py:1)
+10. [maritime_cargo_shipline.py](C:/Manish_REPO/NATM/navaero_transition_model/core/agent_types/maritime_cargo_shipline.py:1)
+11. [legacy_weighted_utility.py](C:/Manish_REPO/NATM/navaero_transition_model/core/decision_logic/legacy_weighted_utility.py:1)
+12. [legacy_weighted_utility_cargo.py](C:/Manish_REPO/NATM/navaero_transition_model/core/decision_logic/legacy_weighted_utility_cargo.py:1)
+13. [legacy_weighted_utility_maritime_cargo.py](C:/Manish_REPO/NATM/navaero_transition_model/core/decision_logic/legacy_weighted_utility_maritime_cargo.py:1)
+14. [fleet.py](C:/Manish_REPO/NATM/navaero_transition_model/core/fleet_management/fleet.py:1)
+15. [aviation_exports.py](C:/Manish_REPO/NATM/navaero_transition_model/core/result_exports/aviation_exports.py:1)
+16. [sqlite_store.py](C:/Manish_REPO/NATM/navaero_transition_model/core/database/sqlite_store.py:1)
 
 That path follows the same order the system itself uses during a run.
 

@@ -142,7 +142,7 @@ class LegacyWeightedUtilityCargoLogic(AviationCargoDecisionLogic):
         )
         carbon_price = self.current_carbon_price(agent, year)
         clean_fuel_subsidy = self.current_clean_fuel_subsidy(agent)
-        is_alternative = not str(technology_row["technology_name"]).startswith("kerosene")
+        is_alternative = not agent.technology_catalog.is_conventional_row(technology_row)
         if is_alternative and secondary_energy_quantity > 0.0:
             secondary_price = float(secondary_price) * (1.0 - clean_fuel_subsidy)
         elif is_alternative:
@@ -291,7 +291,10 @@ class LegacyWeightedUtilityCargoLogic(AviationCargoDecisionLogic):
                 initial_ets_balance,
             )
         policy_bonus = 0.0
-        if not technology_name.startswith("kerosene"):
+        if not agent.technology_catalog.is_conventional(
+            technology_name,
+            str(technology_row["segment"]),
+        ):
             policy_bonus = (
                 0.08 * self.current_clean_fuel_subsidy(agent)
                 + 0.06 * agent.model.current_policy_signal.aviation.adoption_mandate

@@ -105,6 +105,18 @@ class SQLiteSimulationStore:
                 },
             )
 
+        maritime_cargo_inputs = getattr(model, "maritime_cargo_inputs", None)
+        if maritime_cargo_inputs is not None:
+            input_tables.update(
+                {
+                    "input_maritime_cargo_fleet": maritime_cargo_inputs.fleet,
+                    "input_maritime_cargo_technology_catalog": (
+                        maritime_cargo_inputs.technology_catalog.to_frame()
+                    ),
+                    "input_maritime_cargo_scenario": maritime_cargo_inputs.scenario_wide,
+                },
+            )
+
         if not input_tables:
             return
         for table_name, dataframe in input_tables.items():
@@ -120,6 +132,9 @@ class SQLiteSimulationStore:
             "output_aviation_technology": model.to_aviation_technology_frame(),
             "output_aviation_energy_emissions": model.to_aviation_energy_emissions_frame(),
             "output_aviation_investments": model.to_aviation_investment_frame(),
+            "output_maritime_technology": model.to_maritime_technology_frame(),
+            "output_maritime_energy_emissions": model.to_maritime_energy_emissions_frame(),
+            "output_maritime_investments": model.to_maritime_investment_frame(),
         }
         for table_name, dataframe in output_tables.items():
             if dataframe.empty:

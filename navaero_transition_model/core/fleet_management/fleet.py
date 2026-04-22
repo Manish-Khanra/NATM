@@ -36,6 +36,8 @@ class Fleet:
             )
 
         self._frame["aircraft_id"] = self._frame["aircraft_id"].astype(int)
+        if "vessel_id" in self._frame.columns:
+            self._frame["vessel_id"] = self._frame["vessel_id"].fillna(self._frame["aircraft_id"])
         self._frame["replacement_year"] = self._frame.apply(
             lambda aircraft: self._initial_replacement_year(aircraft, start_year),
             axis=1,
@@ -78,7 +80,12 @@ class Fleet:
             technology_name=str(aircraft["current_technology"]),
             segment=str(aircraft["segment"]),
         )
-        age = float(aircraft.get("aircraft_age_years", 0.0))
+        age = float(
+            aircraft.get(
+                "aircraft_age_years",
+                aircraft.get("vessel_age_years", 0.0),
+            ),
+        )
         remaining_lifetime = max(int(technology["lifetime_years"] - round(age)), 0)
         return start_year + remaining_lifetime
 
@@ -133,8 +140,10 @@ class Fleet:
     def due_replacement_indices(self, year: int, *, acceleration_window: int = 0) -> list[int]:
         replacement_rows: list[int] = []
         for row_index, aircraft in self._frame.iterrows():
-            technology_name = str(aircraft["current_technology"])
-            is_conventional = technology_name.startswith("kerosene")
+            is_conventional = self.technology_catalog.is_conventional(
+                str(aircraft["current_technology"]),
+                str(aircraft["segment"]),
+            )
             due_now = int(aircraft["replacement_year"]) <= year
             early_replacement = (
                 is_conventional
@@ -165,6 +174,8 @@ class Fleet:
             technology_row["lifetime_years"],
         )
         self._frame.loc[row_index, "aircraft_age_years"] = 0.0
+        if "vessel_age_years" in self._frame.columns:
+            self._frame.loc[row_index, "vessel_age_years"] = 0.0
         self._frame.loc[row_index, "total_emission"] = evaluation.total_emission
         self._frame.loc[row_index, "primary_energy_consumption"] = (
             evaluation.primary_energy_quantity
@@ -189,6 +200,8 @@ class Fleet:
     def add_aircraft_from_template(self, template: pd.Series, *, next_aircraft_id: int) -> int:
         new_row = template.copy()
         new_row["aircraft_id"] = next_aircraft_id
+        if "vessel_id" in new_row.index:
+            new_row["vessel_id"] = next_aircraft_id
         new_row["status"] = "Active"
         self._frame = pd.concat([self._frame, pd.DataFrame([new_row])], ignore_index=True)
         return len(self._frame) - 1

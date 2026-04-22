@@ -12,6 +12,9 @@ if TYPE_CHECKING:
     from navaero_transition_model.core.agent_types.aviation_passenger_airline import (
         AviationPassengerAirlineAgent,
     )
+    from navaero_transition_model.core.agent_types.maritime_cargo_shipline import (
+        MaritimeCargoShiplineAgent,
+    )
 
 
 def clamp(value: float, minimum: float = 0.0, maximum: float = 1.0) -> float:
@@ -75,6 +78,21 @@ class AviationCargoDecisionLogic(Protocol):
         self,
         agent: AviationCargoAirlineAgent,
         aircraft: pd.Series,
+        technology_row: pd.Series,
+        year: int,
+        free_ets_balance: float | None = None,
+    ) -> OperationMetrics: ...
+
+
+class MaritimeCargoDecisionLogic(Protocol):
+    name: str
+
+    def step(self, agent: MaritimeCargoShiplineAgent, year: int) -> None: ...
+
+    def annual_operation_metrics(
+        self,
+        agent: MaritimeCargoShiplineAgent,
+        vessel: pd.Series,
         technology_row: pd.Series,
         year: int,
         free_ets_balance: float | None = None,

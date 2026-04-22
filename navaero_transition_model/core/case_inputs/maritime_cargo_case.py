@@ -9,21 +9,16 @@ from navaero_transition_model.core.case_inputs.technology_catalog import Technol
 
 FLEET_COLUMN_ALIASES = {
     "ID": "aircraft_id",
-    "Aircraft Type": "aircraft_type",
+    "Vessel ID": "aircraft_id",
+    "Vessel Type": "aircraft_type",
     "Operator": "operator_name",
     "Operator Country": "operator_country",
     "Status": "status",
     "Build Date": "build_date",
     "Build Country": "build_country",
-    "First Customer Delivery Date": "first_customer_delivery_date",
     "Delivery Date Operator": "delivery_date_operator",
     "Exit Date Operator": "exit_date_operator",
-    "Nr. of Engines": "engine_count",
-    "Engine Manufacturer": "engine_manufacturer",
-    "Engine Type": "engine_type",
-    "Config (Pax/Con)": "config_type",
-    "Seat Total": "seat_total",
-    "Haul": "haul",
+    "Segment": "segment",
     "Range (km)": "range_km",
     "Age (Years)": "aircraft_age_years",
     "Main Hub": "main_hub",
@@ -36,8 +31,7 @@ FLEET_REQUIRED_COLUMNS = (
     "operator_country",
     "status",
     "build_date",
-    "seat_total",
-    "haul",
+    "segment",
     "range_km",
     "aircraft_age_years",
     "main_hub",
@@ -65,22 +59,26 @@ def _ensure_columns(
         raise ValueError(f"{label} is missing required columns: {missing_text}")
 
 
-def normalize_aviation_cargo_fleet_stock(path: str | Path) -> pd.DataFrame:
+def normalize_maritime_cargo_fleet_stock(path: str | Path) -> pd.DataFrame:
     dataframe = _read_csv(path).rename(columns=FLEET_COLUMN_ALIASES)
-    _ensure_columns(dataframe, FLEET_REQUIRED_COLUMNS, "aviation fleet stock")
+    _ensure_columns(dataframe, FLEET_REQUIRED_COLUMNS, "maritime fleet stock")
 
     normalized = dataframe.copy()
     for column in normalized.select_dtypes(include=["object", "string"]).columns:
         normalized[column] = normalized[column].fillna("").astype(str).str.strip()
-    normalized["segment"] = normalized["haul"].str.lower().str.replace("-haul", "", regex=False)
-    normalized["is_cargo"] = normalized.get("config_type", "Con").astype(str).str.lower().eq("con")
+
+    normalized["segment"] = normalized["segment"].astype(str).str.strip().str.lower()
+    normalized["vessel_id"] = normalized["aircraft_id"]
+    normalized["vessel_type"] = normalized["aircraft_type"]
+    normalized["vessel_age_years"] = normalized["aircraft_age_years"]
+    normalized["is_cargo"] = True
     if "investment_logic" not in normalized.columns:
-        normalized["investment_logic"] = "legacy_weighted_utility_cargo"
+        normalized["investment_logic"] = "legacy_weighted_utility_maritime_cargo"
     else:
         normalized["investment_logic"] = (
             normalized["investment_logic"]
             .replace("", pd.NA)
-            .fillna("legacy_weighted_utility_cargo")
+            .fillna("legacy_weighted_utility_maritime_cargo")
         )
     normalized["operator_key"] = (
         normalized["operator_name"].astype(str).str.strip()
@@ -90,7 +88,7 @@ def normalize_aviation_cargo_fleet_stock(path: str | Path) -> pd.DataFrame:
     return normalized.reset_index(drop=True)
 
 
-class AviationCargoCaseData:
+class MaritimeCargoCaseData:
     def __init__(
         self,
         *,
@@ -105,15 +103,15 @@ class AviationCargoCaseData:
         self.scenario_table = scenario_table
 
     @classmethod
-    def from_directory(cls, case_path: str | Path) -> AviationCargoCaseData:
+    def from_directory(cls, case_path: str | Path) -> MaritimeCargoCaseData:
         case_dir = Path(case_path)
-        fleet_frame = normalize_aviation_cargo_fleet_stock(
-            case_dir / "aviation_fleet_stock.csv",
+        fleet_frame = normalize_maritime_cargo_fleet_stock(
+            case_dir / "maritime_fleet_stock.csv",
         )
         technology_catalog = TechnologyCatalog.from_csv(
-            case_dir / "aviation_technology_catalog.csv",
+            case_dir / "maritime_technology_catalog.csv",
         )
-        scenario_table = ScenarioTable.from_csv(case_dir / "aviation_scenario.csv")
+        scenario_table = ScenarioTable.from_csv(case_dir / "maritime_scenario.csv")
         return cls(
             fleet_frame=fleet_frame,
             technology_catalog=technology_catalog,
@@ -140,25 +138,29 @@ class AviationCargoCaseData:
         scenario_table = self.scenario_table
         if not scenario_table.has_rows("freight_tonne_km_demand"):
             raise ValueError(
-                "aviation cargo scenario CSV must include 'freight_tonne_km_demand' rows "
-                "for aviation cargo capacity planning.",
+                "maritime cargo scenario CSV must include 'freight_tonne_km_demand' rows "
+                "for maritime cargo capacity planning.",
             )
         if not scenario_table.has_rows("operator_market_share"):
             raise ValueError(
-                "aviation cargo scenario CSV must include 'operator_market_share' rows "
-                "for aviation cargo capacity planning.",
+                "maritime cargo scenario CSV must include 'operator_market_share' rows "
+                "for maritime cargo capacity planning.",
             )
-        if "payload_capacity_kg" not in self.technology_catalog.to_frame().columns:
+
+        technology_frame = self.technology_catalog.to_frame()
+        has_payload_capacity = "payload_capacity_kg" in technology_frame.columns
+        has_gross_tonnage = "gross_tonnage" in technology_frame.columns
+        has_tanker_size = "max_tanker_size_tonnes" in technology_frame.columns
+        if not any((has_payload_capacity, has_gross_tonnage, has_tanker_size)):
             raise ValueError(
-                "aviation cargo technology catalog must include 'payload_capacity_kg'.",
+                "maritime cargo technology catalog must include at least one capacity field: "
+                "'payload_capacity_kg', 'gross_tonnage', or 'max_tanker_size_tonnes'.",
             )
 
         years = range(int(start_year), int(end_year) + 1)
-        fleet_scope = (
-            self.fleet_frame.loc[self.fleet_frame["is_cargo"]]
-            .drop_duplicates(subset=["operator_name", "operator_country", "segment"])
-            .loc[:, ["operator_name", "operator_country", "segment"]]
-        )
+        fleet_scope = self.fleet_frame.drop_duplicates(
+            subset=["operator_name", "operator_country", "segment"],
+        ).loc[:, ["operator_name", "operator_country", "segment"]]
         demand_scope = fleet_scope.drop_duplicates(subset=["operator_country", "segment"]).loc[
             :, ["operator_country", "segment"]
         ]
@@ -176,9 +178,7 @@ class AviationCargoCaseData:
                     )
                     is None
                 ):
-                    missing_demand.append(
-                        f"{year}:{row.operator_country}/{row.segment}",
-                    )
+                    missing_demand.append(f"{year}:{row.operator_country}/{row.segment}")
 
         missing_share: list[str] = []
         for year in years:
@@ -201,12 +201,12 @@ class AviationCargoCaseData:
         if missing_demand:
             sample = ", ".join(missing_demand[:5])
             raise ValueError(
-                "aviation cargo scenario CSV is missing 'freight_tonne_km_demand' values for "
+                "maritime cargo scenario CSV is missing 'freight_tonne_km_demand' values for "
                 f"required country/segment/year combinations. Examples: {sample}",
             )
         if missing_share:
             sample = ", ".join(missing_share[:5])
             raise ValueError(
-                "aviation cargo scenario CSV is missing 'operator_market_share' values for "
+                "maritime cargo scenario CSV is missing 'operator_market_share' values for "
                 f"required operator/country/segment/year combinations. Examples: {sample}",
             )

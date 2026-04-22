@@ -40,6 +40,13 @@ TECHNOLOGY_OPTIONAL_COLUMNS = (
     "service_entry_year",
     "minimum_airport_class",
     "technology_notes",
+    "gross_tonnage",
+    "net_tonnage_share",
+    "max_tanker_size_tonnes",
+    "reported_emission_factor",
+    "carbondioxide_factor",
+    "sulphur_factor",
+    "minimum_port_class",
 )
 
 
@@ -95,14 +102,21 @@ class TechnologyCatalog:
             raise ValueError(f"Technology '{technology_name}' not found in aviation catalog")
         return candidates.iloc[0].copy()
 
+    def is_conventional_row(self, technology_row: pd.Series) -> bool:
+        technology_family = str(technology_row.get("technology_family", "")).strip().lower()
+        if technology_family:
+            return technology_family == "conventional"
+        return str(technology_row["technology_name"]).startswith("kerosene")
+
+    def is_conventional(self, technology_name: str, segment: str | None = None) -> bool:
+        return self.is_conventional_row(self.row_for(technology_name, segment))
+
     def default_for_segment(self, segment: str) -> str:
         segment_catalog = self.candidates_for_segment(segment)
         if segment_catalog.empty:
             raise ValueError(f"No technology options found for segment '{segment}'")
 
-        conventional = segment_catalog.loc[
-            segment_catalog["technology_name"].astype(str).str.startswith("kerosene"),
-        ]
+        conventional = segment_catalog.loc[segment_catalog.apply(self.is_conventional_row, axis=1),]
         if not conventional.empty:
             return str(conventional.iloc[0]["technology_name"])
         return str(segment_catalog.iloc[0]["technology_name"])
