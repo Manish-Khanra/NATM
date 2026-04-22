@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 from navaero_transition_model.cli import resolve_case_config
 from navaero_transition_model.core.agent_types import (
+    AviationCargoAirlineAgent,
     AviationPassengerAirlineAgent,
     BaseOperatorAgent,
 )
@@ -24,6 +25,13 @@ from navaero_transition_model.core.scenario import NATMScenario
 
 def load_default_scenario() -> NATMScenario:
     scenario_path = Path(__file__).resolve().parents[1] / resolve_case_config("baseline-transition")
+    return NATMScenario.from_yaml(scenario_path)
+
+
+def load_cargo_scenario() -> NATMScenario:
+    scenario_path = Path(__file__).resolve().parents[1] / resolve_case_config(
+        "baseline-cargo-transition",
+    )
     return NATMScenario.from_yaml(scenario_path)
 
 
@@ -468,3 +476,21 @@ def test_sqlite_store_writes_inputs_and_outputs(tmp_path: Path) -> None:
             (run_id,),
         ).fetchone()[0]
         assert run_count == 1
+
+
+def test_cargo_scenario_runs_end_to_end() -> None:
+    scenario = load_cargo_scenario()
+    model = NATMModel(scenario, seed=42)
+
+    history = model.run()
+    summary = model.to_frame()
+    aircraft_summary = model.to_aircraft_frame()
+
+    assert scenario.enabled_sectors == ("aviation",)
+    assert scenario.applications_for_sector("aviation") == ("cargo",)
+    assert len(history) == scenario.steps
+    assert len(model.agents) == 2
+    assert all(isinstance(agent, AviationCargoAirlineAgent) for agent in model.agents)
+    assert "application_name" in aircraft_summary.columns
+    assert set(aircraft_summary["application_name"].dropna().unique()) == {"cargo"}
+    assert summary.iloc[-1]["aviation_alternative_share"] >= 0.0

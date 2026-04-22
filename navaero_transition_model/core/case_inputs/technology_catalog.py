@@ -35,6 +35,7 @@ TECHNOLOGY_REQUIRED_COLUMNS = (
 )
 
 TECHNOLOGY_OPTIONAL_COLUMNS = (
+    "payload_capacity_kg",
     "technology_family",
     "service_entry_year",
     "minimum_airport_class",

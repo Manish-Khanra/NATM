@@ -26,6 +26,7 @@ class AviationTechnologyExporter:
         grouped = aviation_frame.groupby(
             [
                 "year",
+                "application_name",
                 "operator_name",
                 "operator_country",
                 "segment",
@@ -44,7 +45,7 @@ class AviationTechnologyExporter:
             chargeable_emission=("chargeable_emission", "sum"),
         )
         return grouped.sort_values(
-            ["year", "operator_name", "segment", "current_technology"],
+            ["year", "application_name", "operator_name", "segment", "current_technology"],
         ).reset_index(drop=True)
 
 
@@ -57,6 +58,7 @@ class AviationEnergyEmissionsExporter:
         grouped = technology_frame.groupby(
             [
                 "year",
+                "application_name",
                 "operator_name",
                 "operator_country",
                 "segment",
@@ -77,6 +79,7 @@ class AviationEnergyEmissionsExporter:
         return grouped.sort_values(
             [
                 "year",
+                "application_name",
                 "operator_name",
                 "segment",
                 "current_technology",
@@ -109,6 +112,7 @@ class AviationInvestmentExporter:
         grouped = investment_frame.groupby(
             [
                 "year",
+                "application_name",
                 "operator_name",
                 "operator_country",
                 "segment",
@@ -121,7 +125,7 @@ class AviationInvestmentExporter:
             investment_cost_eur=("investment_cost_eur", "sum"),
         )
         return grouped.sort_values(
-            ["year", "operator_name", "segment", "current_technology"],
+            ["year", "application_name", "operator_name", "segment", "current_technology"],
         ).reset_index(drop=True)
 
 

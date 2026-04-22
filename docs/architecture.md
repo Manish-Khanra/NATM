@@ -3,9 +3,9 @@
 This document describes the current software architecture of NATM as it exists
 in the repository today.
 
-The current implementation is a Mesa-based aviation-passenger model with a
-general structure that can be extended to additional sectors and applications
-later.
+The current implementation is a Mesa-based aviation model with working
+passenger and cargo applications, and a general structure that can be extended
+to additional sectors and applications later.
 
 ## 1. Architecture Overview
 
@@ -22,9 +22,9 @@ In the current codebase, the active end-to-end path is:
 
 `run.py` or `python -m navaero_transition_model`  
 -> `NATMScenario`  
--> `AviationPassengerCaseData`  
+-> `AviationPassengerCaseData` or `AviationCargoCaseData`  
 -> `NATMModel`  
--> `AviationPassengerAirlineAgent`  
+-> `AviationPassengerAirlineAgent` or `AviationCargoAirlineAgent`  
 -> decision logic + fleet updates  
 -> `DataCollector` + detailed exporters + optional SQLite
 
@@ -109,10 +109,19 @@ These are wrapped by `AviationPassengerCaseData`, which bundles:
 - a `TechnologyCatalog`
 - a `ScenarioTable`
 
+For the aviation-cargo path, `NATMModel` loads:
+
+- `aviation_fleet_stock.csv`
+- `aviation_technology_catalog.csv`
+- `aviation_scenario.csv`
+
+These are wrapped by `AviationCargoCaseData`.
+
 This layer also performs validation. In particular, the current capacity
 planning implementation requires:
 
-- `passenger_km_demand`
+- `passenger_km_demand` for aviation passenger
+- `freight_tonne_km_demand` for aviation cargo
 - `operator_market_share`
 
 for all required year/scope combinations.
@@ -124,7 +133,7 @@ for all required year/scope combinations.
 1. stores the scenario
 2. creates the shared environment
 3. loads aviation-passenger case data if the case enables aviation/passenger
-4. creates one `AviationPassengerAirlineAgent` per `(operator_name, operator_country)`
+4. creates one application-specific airline agent per `(operator_name, operator_country)`
 5. builds a `mesa.DataCollector`
 6. records the initial model snapshot and detailed aircraft snapshot
 
@@ -170,19 +179,20 @@ The current agent hierarchy is:
 - `AviationOperatorAgent`
 - `MaritimeOperatorAgent`
 - `AviationPassengerAirlineAgent`
+- `AviationCargoAirlineAgent`
 
 Important detail:
 
-- `AviationPassengerAirlineAgent` is the active agent class used by the current
-  case path.
+- `AviationPassengerAirlineAgent` and `AviationCargoAirlineAgent` are the active
+  agent classes used by the current case paths.
 - `TransportOperatorAgent` and the sector-level aviation/maritime operator
   classes remain in the architecture as reusable parent/general-purpose agent
   types for future extensions.
 
-### 4.3 Why the current aviation agent is specialized
+### 4.3 Why the current aviation agents are specialized
 
-`AviationPassengerAirlineAgent` is more detailed than the generic transport
-operator because it owns:
+The aviation application agents are more detailed than the generic transport
+operator because they own:
 
 - a per-aircraft fleet
 - a technology catalog
@@ -192,13 +202,14 @@ operator because it owns:
 - airline-specific economic/environmental preferences
 
 This is what makes NATM both Mesa-native and still domain-specific enough for
-aviation-passenger decisions.
+aviation passenger and cargo decisions.
 
 ## 5. Input Layer
 
 ### 5.1 `AviationPassengerCaseData`
 
-`AviationPassengerCaseData` is the main aviation-passenger case bundle.
+`AviationPassengerCaseData` and `AviationCargoCaseData` are the application
+input bundles for aviation.
 
 Responsibilities:
 
@@ -317,7 +328,7 @@ Important behaviors in the current logic:
 - ETS allowance accounting
 - NPV/payback-style evaluation
 - planned deliveries before endogenous additions
-- passenger-km capacity planning for growth
+- demand-driven yearly capacity planning for growth
 
 ### 7.3 Current growth architecture
 
@@ -325,7 +336,7 @@ The old `market_growth` rule is no longer active.
 
 Growth now follows this business-style flow:
 
-1. read `passenger_km_demand` by `country + segment`
+1. read `passenger_km_demand` or `freight_tonne_km_demand` by `country + segment`
 2. allocate that demand using `operator_market_share`
 3. compute airline segment capacity from actual fleet and effective load factor
 4. apply `planned_delivery_count` first if present
@@ -443,6 +454,7 @@ Detailed behavior belongs in the CSV inputs, not in the YAML.
 
 - aviation sector
 - passenger application
+- cargo application
 - airline agents with aircraft fleets
 - case-based CSV inputs
 - detailed exporter outputs
@@ -472,7 +484,7 @@ The current architecture follows these principles:
 The architecture is clean enough for growth, but some boundaries are still
 deliberately simple:
 
-- only aviation-passenger is fully implemented
+- only aviation passenger and cargo are fully implemented
 - hub-level infrastructure is stored (`main_hub`) but not yet driving decisions
 - the environment is country/corridor-based, not yet airport-network-based
 - market-share allocation is currently fixed-share rather than competitive
@@ -487,12 +499,15 @@ For someone new to the codebase, this is the best order:
 2. [cli.py](C:/Manish_REPO/NATM/navaero_transition_model/cli.py:1)
 3. [scenario.py](C:/Manish_REPO/NATM/navaero_transition_model/core/scenario.py:1)
 4. [aviation_passenger_case.py](C:/Manish_REPO/NATM/navaero_transition_model/core/case_inputs/aviation_passenger_case.py:1)
-5. [model.py](C:/Manish_REPO/NATM/navaero_transition_model/core/model.py:1)
-6. [aviation_passenger_airline.py](C:/Manish_REPO/NATM/navaero_transition_model/core/agent_types/aviation_passenger_airline.py:1)
-7. [legacy_weighted_utility.py](C:/Manish_REPO/NATM/navaero_transition_model/core/decision_logic/legacy_weighted_utility.py:1)
-8. [fleet.py](C:/Manish_REPO/NATM/navaero_transition_model/core/fleet_management/fleet.py:1)
-9. [aviation_exports.py](C:/Manish_REPO/NATM/navaero_transition_model/core/result_exports/aviation_exports.py:1)
-10. [sqlite_store.py](C:/Manish_REPO/NATM/navaero_transition_model/core/database/sqlite_store.py:1)
+5. [aviation_cargo_case.py](C:/Manish_REPO/NATM/navaero_transition_model/core/case_inputs/aviation_cargo_case.py:1)
+6. [model.py](C:/Manish_REPO/NATM/navaero_transition_model/core/model.py:1)
+7. [aviation_passenger_airline.py](C:/Manish_REPO/NATM/navaero_transition_model/core/agent_types/aviation_passenger_airline.py:1)
+8. [aviation_cargo_airline.py](C:/Manish_REPO/NATM/navaero_transition_model/core/agent_types/aviation_cargo_airline.py:1)
+9. [legacy_weighted_utility.py](C:/Manish_REPO/NATM/navaero_transition_model/core/decision_logic/legacy_weighted_utility.py:1)
+10. [legacy_weighted_utility_cargo.py](C:/Manish_REPO/NATM/navaero_transition_model/core/decision_logic/legacy_weighted_utility_cargo.py:1)
+11. [fleet.py](C:/Manish_REPO/NATM/navaero_transition_model/core/fleet_management/fleet.py:1)
+12. [aviation_exports.py](C:/Manish_REPO/NATM/navaero_transition_model/core/result_exports/aviation_exports.py:1)
+13. [sqlite_store.py](C:/Manish_REPO/NATM/navaero_transition_model/core/database/sqlite_store.py:1)
 
 That path follows the same order the system itself uses during a run.
 

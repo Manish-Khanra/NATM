@@ -1,12 +1,17 @@
-# Aviation Scenario CSV Reference
+# Aviation Cargo Scenario CSV Reference
 
-This document explains the structure of `data/<case-name>/aviation_scenario.csv`
-for the current aviation-passenger NATM implementation.
+This document explains the structure of
+`data/<case-name>/aviation_scenario.csv` for the current NATM
+aviation-cargo implementation.
+
+It is the cargo-specific companion to
+`docs/aviation-passenger-reference.md`. Use this file when preparing or checking
+cargo case inputs.
 
 ## CSV Shape
 
-The scenario table is a wide CSV with one row per scenario variable and one
-column per simulation year.
+The cargo scenario table is a wide CSV with one row per scenario variable and
+one column per simulation year.
 
 Required columns:
 
@@ -26,9 +31,9 @@ Example shape:
 
 ```csv
 variable_group,variable_name,country,operator_name,segment,technology_name,primary_energy_carrier,secondary_energy_carrier,saf_pathway,unit,2025,2026,2027
-policy,carbon_price,,,,,,,,eur_per_tco2,35,45,58
-market,passenger_km_demand,Germany,,medium,,,,,passenger_km,1980000000,2010000000,2040000000
-market,operator_market_share,Germany,Lufthansa,medium,,,,,share,0.72,0.72,0.72
+demand,freight_tonne_km_demand,Germany,,long,,,,,tkm_per_year,1950000000,1990000000,2030000000
+market,operator_market_share,Germany,Lufthansa Cargo,long,,,,,share,1.0,1.0,1.0
+operations,freight_rate,,Lufthansa Cargo,,,,,,eur_per_tonne_km,0.145,0.146,0.147
 ```
 
 ## How Scope Matching Works
@@ -39,16 +44,16 @@ Important rules:
 
 - Blank scope cells mean "generic" and can match any request.
 - More specific rows win over less specific rows.
-- `variable_group` and `unit` are stored for documentation and data management.
+- `variable_group` and `unit` are kept for data management and readability.
   They are not currently part of the lookup key.
 
 So if both of these exist:
 
 - `technology_availability` for `segment=long`
-- `technology_availability` for `segment=long, technology_name=hydrogen_long`
+- `technology_availability` for `segment=long, technology_name=hydrogen_freight_long`
 
-then the second row is used when the model asks for `hydrogen_long` in the
-`long` segment.
+then the second row is used when the model asks for
+`hydrogen_freight_long` in the `long` segment.
 
 ## Scope Columns
 
@@ -70,7 +75,7 @@ Use only the columns that matter for the variable. Leave the others blank.
 organized and should be used consistently, but the current code does not depend
 on it for lookups.
 
-Current groups used by the baseline case:
+Current groups used by the baseline cargo case:
 
 - `price`
 - `policy`
@@ -78,13 +83,11 @@ Current groups used by the baseline case:
 - `branch`
 - `demand`
 - `market`
+- `operations`
 - `delivery`
 - `cost_index`
 
-## Supported Variable Names
-
-This list reflects the variables currently read by the NATM aviation-passenger
-model.
+## Supported Cargo Variable Names
 
 ### Column meaning in the tables below
 
@@ -95,20 +98,20 @@ model.
 - `Other required columns`: additional non-scope columns that must still be
   filled correctly, usually `variable_group` and `unit`
 
-### Required for capacity planning
+### Required for cargo capacity planning
 
-These are required by the current aviation-passenger case validation.
+These are required by the current aviation-cargo case validation.
 
 | variable_name | Definition | Recommended variable_group | Required scope columns | Optional scope columns | Other required columns |
 | --- | --- | --- | --- | --- | --- |
-| `passenger_km_demand` | Total annual passenger-km demand that must be served in a given country and segment. | `market` | `country`, `segment` | none | `unit` should describe passenger-km |
-| `operator_market_share` | Fixed airline share used to allocate country-segment passenger-km demand to an operator. | `market` | `country`, `operator_name`, `segment` | none | `unit` should be `share` |
+| `freight_tonne_km_demand` | Total annual freight demand that must be served in a given country and segment, expressed as yearly tonne-kilometers. | `demand` | `country`, `segment` | none | `unit` should be `tkm_per_year` |
+| `operator_market_share` | Fixed airline share used to allocate country-segment cargo demand to an operator. | `market` | `country`, `operator_name`, `segment` | none | `unit` should be `share` |
 
 ### Optional planned deliveries
 
 | variable_name | Definition | Recommended variable_group | Required scope columns | Optional scope columns | Other required columns |
 | --- | --- | --- | --- | --- | --- |
-| `planned_delivery_count` | Number of aircraft delivered in that year before endogenous growth logic runs. | `delivery` | `country`, `operator_name`, `segment` | `technology_name` | `unit` should be `aircraft_count` |
+| `planned_delivery_count` | Number of cargo aircraft delivered in that year before endogenous growth logic runs. | `delivery` | `country`, `operator_name`, `segment` | `technology_name` | `unit` should be `count` |
 
 ### Prices and policy
 
@@ -120,19 +123,14 @@ These are required by the current aviation-passenger case validation.
 | `saf_mandate` | SAF blending mandate used for drop-in fuel logic. | `policy` | none | `secondary_energy_carrier`, `saf_pathway` | `unit` should be `share` |
 | `ets_allocation_factor` | Operator-specific factor controlling the reduction of free ETS allocation. | `policy` | `operator_name` | none | `unit` should be `share` |
 | `primary_energy_price` | Price of the primary energy carrier used by a technology. | `price` | `country`, `primary_energy_carrier` | none | `unit` should describe the energy price basis |
-| `secondary_energy_price` | Price of the secondary energy carrier used by a technology, including SAF and battery cases. | `price` | `country`, `secondary_energy_carrier` | `saf_pathway` | `unit` should describe the energy price basis |
+| `secondary_energy_price` | Price of the secondary energy carrier used by a technology. | `price` | `country`, `secondary_energy_carrier` | `saf_pathway` | `unit` should describe the energy price basis |
 
-### Demand and revenue
+### Cargo demand and revenue
 
 | variable_name | Definition | Recommended variable_group | Required scope columns | Optional scope columns | Other required columns |
 | --- | --- | --- | --- | --- | --- |
-| `economy_occupancy` | Economy-class occupancy share used in revenue and effective load factor calculations. | `demand` | `operator_name` | none | `unit` should be `share` |
-| `business_occupancy` | Business-class occupancy share used in revenue and effective load factor calculations. | `demand` | `operator_name` | none | `unit` should be `share` |
-| `first_occupancy` | First-class occupancy share used in revenue and effective load factor calculations. | `demand` | `operator_name` | none | `unit` should be `share` |
-| `economy_income` | Economy passenger income or yield input used in annual revenue. | `demand` | `operator_name` | none | `unit` should describe the income basis |
-| `business_income` | Business passenger income or yield input used in annual revenue. | `demand` | `operator_name` | none | `unit` should describe the income basis |
-| `first_income` | First-class passenger income or yield input used in annual revenue. | `demand` | `operator_name` | none | `unit` should describe the income basis |
-| `freight_rate` | Belly cargo revenue rate used in annual revenue. | `demand` | `operator_name` | none | `unit` should describe the freight-rate basis |
+| `load_factor` | Cargo load factor used in freight tonne-km capacity and annual revenue calculations. | `operations` | `operator_name` | none | `unit` should be `share` |
+| `freight_rate` | Cargo revenue rate used in annual revenue calculations. | `operations` | `operator_name` | none | `unit` should describe the freight-rate basis, such as `eur_per_tonne_km` |
 
 ### Technology cost and availability
 
@@ -148,7 +146,7 @@ These are required by the current aviation-passenger case validation.
 | variable_name | Definition | Recommended variable_group | Required scope columns | Optional scope columns | Other required columns |
 | --- | --- | --- | --- | --- | --- |
 | `secondary_energy_cap_active` | Flag controlling whether a technology can use its configured secondary energy stream. | `branch` | `country`, `segment`, `technology_name`, `secondary_energy_carrier` | `saf_pathway` | `unit` should indicate a flag |
-| `drop_in_mandate_active` | Flag controlling whether drop-in mandate logic is active for that technology/pathway scope. | `branch` | `country`, `segment`, `technology_name`, `secondary_energy_carrier` | `saf_pathway` | `unit` should indicate a flag |
+| `drop_in_mandate_active` | Flag controlling whether drop-in mandate logic is active for that technology or pathway scope. | `branch` | `country`, `segment`, `technology_name`, `secondary_energy_carrier` | `saf_pathway` | `unit` should indicate a flag |
 | `maximum_secondary_energy_share` | Maximum usable secondary-energy share for a technology in that scope. | `branch` | `country`, `segment`, `technology_name`, `secondary_energy_carrier` | `saf_pathway` | `unit` should be `share` |
 
 ## Practical Guidance
@@ -161,18 +159,16 @@ These are required by the current aviation-passenger case validation.
 - For fuel-specific rows, use `primary_energy_carrier` or
   `secondary_energy_carrier` as appropriate.
 - For SAF rows, also fill `saf_pathway` when pathway-specific behavior matters.
+- Use `freight_tonne_km_demand` as the yearly cargo growth driver instead of any
+  percentage-based market-growth variable.
 
-## Current Baseline Case
+## Current Baseline Cargo Case
 
-The baseline aviation-passenger case in
-`data/baseline-transition/aviation_scenario.csv` currently includes examples
-for all of the variable families above, including:
+The baseline aviation-cargo case in
+`data/baseline-cargo-transition/aviation_scenario.csv` includes examples
+for the cargo variable families above, including:
 
-- demand allocation through `passenger_km_demand` and `operator_market_share`
-- optional growth overrides through `planned_delivery_count`
+- demand allocation through `freight_tonne_km_demand` and `operator_market_share`
+- yearly cargo assumptions through `load_factor` and `freight_rate`
+- optional planned deliveries through `planned_delivery_count`
 - policy, price, availability, and branch controls for technology adoption
-
-Removed from the active baseline case:
-
-- `market_growth`
-  The current aviation-passenger model no longer uses it for fleet expansion.

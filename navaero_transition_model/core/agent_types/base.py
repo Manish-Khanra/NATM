@@ -9,6 +9,7 @@ from navaero_transition_model.core.environment import CountryEnvironmentSignal
 
 class BaseOperatorAgent(mesa.Agent):
     sector_name = "transport"
+    application_name = ""
 
     def __init__(
         self,
@@ -53,6 +54,7 @@ class BaseOperatorAgent(mesa.Agent):
             "operator_name": self.operator_name,
             "operator_country": self.operator_country,
             "sector_name": self.sector_name,
+            "application_name": self.application_name,
             "year": self.current_year,
             "conventional_assets": self.conventional_assets,
             "alternative_assets": self.alternative_assets,

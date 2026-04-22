@@ -8,15 +8,15 @@ import pandas as pd
 from navaero_transition_model.core.agent_types.base import BaseOperatorAgent
 from navaero_transition_model.core.case_inputs import ScenarioTable, TechnologyCatalog
 from navaero_transition_model.core.decision_logic import (
-    build_aviation_passenger_decision_logic,
+    build_aviation_cargo_decision_logic,
     clamp,
 )
 from navaero_transition_model.core.fleet_management import Fleet
 
 
-class AviationPassengerAirlineAgent(BaseOperatorAgent):
+class AviationCargoAirlineAgent(BaseOperatorAgent):
     sector_name = "aviation"
-    application_name = "passenger"
+    application_name = "cargo"
 
     def __init__(
         self,
@@ -58,9 +58,9 @@ class AviationPassengerAirlineAgent(BaseOperatorAgent):
         self.investment_logic_name = self._fleet_text_value(
             fleet_frame,
             "investment_logic",
-            default="legacy_weighted_utility",
+            default="legacy_weighted_utility_cargo",
         )
-        self.decision_logic = build_aviation_passenger_decision_logic(self.investment_logic_name)
+        self.decision_logic = build_aviation_cargo_decision_logic(self.investment_logic_name)
         self.remaining_ets_allowance = 0.0
         self.technology_investment_cost: dict[tuple[int, str], float] = {}
         self.fleet = Fleet(
@@ -140,44 +140,19 @@ class AviationPassengerAirlineAgent(BaseOperatorAgent):
             excluded_indices=excluded_indices,
         )
 
-    def effective_load_factor(
+    def effective_cargo_load_factor(
         self,
-        technology_row: pd.Series,
         year: int,
     ) -> float:
-        economy_occupancy = self.scenario_value(
-            "economy_occupancy",
+        load_factor = self.scenario_value(
+            "load_factor",
             year,
             operator_name=self.operator_name,
             default=0.0,
         )
-        business_occupancy = self.scenario_value(
-            "business_occupancy",
-            year,
-            operator_name=self.operator_name,
-            default=0.0,
-        )
-        first_occupancy = self.scenario_value(
-            "first_occupancy",
-            year,
-            operator_name=self.operator_name,
-            default=0.0,
-        )
+        return clamp(float(load_factor or 0.0))
 
-        total_seats = max(
-            float(technology_row["economy_seats"])
-            + float(technology_row["business_seats"])
-            + float(technology_row["first_class_seats"]),
-            1.0,
-        )
-        occupied_seats = (
-            float(technology_row["economy_seats"]) * float(economy_occupancy)
-            + float(technology_row["business_seats"]) * float(business_occupancy)
-            + float(technology_row["first_class_seats"]) * float(first_occupancy)
-        )
-        return clamp(occupied_seats / total_seats)
-
-    def aircraft_passenger_km_capacity(
+    def aircraft_freight_tonne_km_capacity(
         self,
         aircraft: pd.Series,
         technology_row: pd.Series,
@@ -187,17 +162,14 @@ class AviationPassengerAirlineAgent(BaseOperatorAgent):
         if active_status == "parked":
             return 0.0
 
-        total_seats = (
-            float(technology_row["economy_seats"])
-            + float(technology_row["business_seats"])
-            + float(technology_row["first_class_seats"])
-        )
+        payload_capacity_kg = float(technology_row.get("payload_capacity_kg", 0.0) or 0.0)
         trip_length = float(technology_row["trip_length_km"])
         trip_days = float(technology_row["trip_days_per_year"])
-        load_factor = self.effective_load_factor(technology_row, year)
-        return total_seats * trip_length * trip_days * load_factor
+        load_factor = self.effective_cargo_load_factor(year)
+        payload_capacity_tonnes = payload_capacity_kg / 1000.0
+        return payload_capacity_tonnes * trip_length * trip_days * load_factor
 
-    def segment_passenger_km_capacity(self, segment: str, year: int) -> float:
+    def segment_freight_tonne_km_capacity(self, segment: str, year: int) -> float:
         segment_rows = self.fleet.frame.loc[self.fleet.frame["segment"] == segment]
         total_capacity = 0.0
         for _, aircraft in segment_rows.iterrows():
@@ -205,16 +177,16 @@ class AviationPassengerAirlineAgent(BaseOperatorAgent):
                 technology_name=str(aircraft["current_technology"]),
                 segment=str(aircraft["segment"]),
             )
-            total_capacity += self.aircraft_passenger_km_capacity(
+            total_capacity += self.aircraft_freight_tonne_km_capacity(
                 aircraft,
                 technology_row,
                 year,
             )
         return total_capacity
 
-    def allocated_passenger_km(self, segment: str, year: int) -> float:
-        passenger_km_demand = self.scenario_value(
-            "passenger_km_demand",
+    def allocated_freight_tonne_km(self, segment: str, year: int) -> float:
+        freight_tonne_km_demand = self.scenario_value(
+            "freight_tonne_km_demand",
             year,
             country=self.operator_country,
             segment=segment,
@@ -228,7 +200,7 @@ class AviationPassengerAirlineAgent(BaseOperatorAgent):
             segment=segment,
             default=0.0,
         )
-        return float(passenger_km_demand) * float(operator_market_share)
+        return float(freight_tonne_km_demand) * float(operator_market_share)
 
     def planned_delivery_rows(self, segment: str, year: int) -> pd.DataFrame:
         return self.scenario_table.matching_rows(

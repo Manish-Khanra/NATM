@@ -74,15 +74,39 @@ class SQLiteSimulationStore:
         metadata.to_sql("runs", connection, if_exists="append", index=False)
 
     def _write_input_tables(self, connection: sqlite3.Connection, run_id: str, model) -> None:
-        case_inputs = getattr(model, "aviation_passenger_inputs", None)
-        if case_inputs is None:
-            return
+        input_tables: dict[str, pd.DataFrame] = {}
 
-        input_tables = {
-            "input_aviation_fleet": case_inputs.fleet,
-            "input_aviation_technology_catalog": case_inputs.technology_catalog.to_frame(),
-            "input_aviation_scenario": case_inputs.scenario_wide,
-        }
+        passenger_inputs = getattr(model, "aviation_passenger_inputs", None)
+        if passenger_inputs is not None:
+            input_tables.update(
+                {
+                    "input_aviation_fleet": passenger_inputs.fleet,
+                    "input_aviation_passenger_fleet": passenger_inputs.fleet,
+                    "input_aviation_technology_catalog": (
+                        passenger_inputs.technology_catalog.to_frame()
+                    ),
+                    "input_aviation_passenger_technology_catalog": (
+                        passenger_inputs.technology_catalog.to_frame()
+                    ),
+                    "input_aviation_scenario": passenger_inputs.scenario_wide,
+                    "input_aviation_passenger_scenario": passenger_inputs.scenario_wide,
+                },
+            )
+
+        cargo_inputs = getattr(model, "aviation_cargo_inputs", None)
+        if cargo_inputs is not None:
+            input_tables.update(
+                {
+                    "input_aviation_cargo_fleet": cargo_inputs.fleet,
+                    "input_aviation_cargo_technology_catalog": (
+                        cargo_inputs.technology_catalog.to_frame()
+                    ),
+                    "input_aviation_cargo_scenario": cargo_inputs.scenario_wide,
+                },
+            )
+
+        if not input_tables:
+            return
         for table_name, dataframe in input_tables.items():
             frame = dataframe.copy()
             frame.insert(0, "run_id", run_id)

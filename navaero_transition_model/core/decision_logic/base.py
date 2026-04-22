@@ -6,6 +6,9 @@ from typing import TYPE_CHECKING, Any, Protocol
 import pandas as pd
 
 if TYPE_CHECKING:
+    from navaero_transition_model.core.agent_types.aviation_cargo_airline import (
+        AviationCargoAirlineAgent,
+    )
     from navaero_transition_model.core.agent_types.aviation_passenger_airline import (
         AviationPassengerAirlineAgent,
     )
@@ -56,6 +59,21 @@ class AviationPassengerDecisionLogic(Protocol):
     def annual_operation_metrics(
         self,
         agent: AviationPassengerAirlineAgent,
+        aircraft: pd.Series,
+        technology_row: pd.Series,
+        year: int,
+        free_ets_balance: float | None = None,
+    ) -> OperationMetrics: ...
+
+
+class AviationCargoDecisionLogic(Protocol):
+    name: str
+
+    def step(self, agent: AviationCargoAirlineAgent, year: int) -> None: ...
+
+    def annual_operation_metrics(
+        self,
+        agent: AviationCargoAirlineAgent,
         aircraft: pd.Series,
         technology_row: pd.Series,
         year: int,
