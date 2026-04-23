@@ -47,6 +47,17 @@ TECHNOLOGY_OPTIONAL_COLUMNS = (
     "carbondioxide_factor",
     "sulphur_factor",
     "minimum_port_class",
+    "passenger_economy_class",
+    "passenger_premium_class",
+    "passenger_overnight_cabin",
+    "passenger_business_class",
+    "passenger_family_cabin",
+    "cruise_interior_cabin",
+    "cruise_oceanview_cabin",
+    "cruise_balcony_cabin",
+    "cruise_suite",
+    "cruise_family_cabin",
+    "cruise_single_cabin",
 )
 
 

@@ -1,0 +1,82 @@
+variable_group,variable_name,country,operator_name,segment,technology_name,primary_energy_carrier,secondary_energy_carrier,saf_pathway,unit,2025,2026,2027,2028,2029,2030,2031,2032,2033,2034,2035
+price,primary_energy_price,Germany,,,,marine_diesel,,,eur_per_kwh,0.061,0.063,0.065,0.067,0.069,0.071,0.073,0.075,0.077,0.079,0.081
+price,primary_energy_price,France,,,,marine_diesel,,,eur_per_kwh,0.062,0.064,0.066,0.068,0.070,0.072,0.074,0.076,0.078,0.080,0.082
+price,primary_energy_price,Germany,,,,hydrogen,,,eur_per_kwh,0.138,0.134,0.130,0.126,0.122,0.118,0.114,0.110,0.106,0.102,0.098
+price,primary_energy_price,France,,,,hydrogen,,,eur_per_kwh,0.140,0.136,0.132,0.128,0.124,0.120,0.116,0.112,0.108,0.104,0.100
+price,secondary_energy_price,Germany,,,,,biofuel,hvo,eur_per_kwh,0.094,0.093,0.092,0.091,0.090,0.089,0.088,0.087,0.086,0.085,0.084
+price,secondary_energy_price,France,,,,,biofuel,hvo,eur_per_kwh,0.095,0.094,0.093,0.092,0.091,0.090,0.089,0.088,0.087,0.086,0.085
+price,tertiary_energy_price,Germany,,,,,biofuel,hvo,eur_per_kwh,0.094,0.093,0.092,0.091,0.090,0.089,0.088,0.087,0.086,0.085,0.084
+price,tertiary_energy_price,France,,,,,biofuel,hvo,eur_per_kwh,0.095,0.094,0.093,0.092,0.091,0.090,0.089,0.088,0.087,0.086,0.085
+policy,carbon_tax,,,,,,,,eur_per_tco2,32,38,46,56,68,82,96,112,126,142,158
+policy,clean_fuel_subsidy,,,,,,,,share,0.05,0.06,0.07,0.08,0.09,0.10,0.11,0.12,0.13,0.14,0.15
+policy,biofuel_mandate,,,,,,biofuel,hvo,share,0.03,0.04,0.05,0.06,0.08,0.10,0.12,0.14,0.16,0.18,0.20
+policy,ets_allocation_factor,,DFDS,,,,,,share,0.90,0.88,0.86,0.84,0.82,0.79,0.76,0.73,0.70,0.66,0.62
+policy,ets_allocation_factor,,Brittany Ferries,,,,,,share,0.90,0.88,0.86,0.84,0.82,0.79,0.76,0.73,0.70,0.66,0.62
+policy,reported_emission,,DFDS,,,,,,share,0.70,0.70,0.70,0.70,0.70,0.70,0.70,0.70,0.70,0.70,0.70
+policy,reported_emission,,Brittany Ferries,,,,,,share,0.71,0.71,0.71,0.71,0.71,0.71,0.71,0.71,0.71,0.71,0.71
+availability,technology_availability,,,regional,biofuel_regional_passenger,,,,flag,1,1,1,1,1,1,1,1,1,1,1
+availability,technology_availability,,,overnight,biofuel_overnight_passenger,,,,flag,1,1,1,1,1,1,1,1,1,1,1
+availability,technology_availability,,,regional,hydrogen_regional_passenger,,,,flag,0,0,0,0,1,1,1,1,1,1,1
+availability,technology_availability,,,overnight,hydrogen_overnight_passenger,,,,flag,0,0,0,0,0,0,1,1,1,1,1
+availability,infrastructure_availability,Germany,,regional,hydrogen_regional_passenger,,,,flag,0,0,0,0,1,1,1,1,1,1,1
+availability,infrastructure_availability,France,,regional,hydrogen_regional_passenger,,,,flag,0,0,0,0,1,1,1,1,1,1,1
+availability,infrastructure_availability,Germany,,overnight,hydrogen_overnight_passenger,,,,flag,0,0,0,0,0,0,1,1,1,1,1
+availability,infrastructure_availability,France,,overnight,hydrogen_overnight_passenger,,,,flag,0,0,0,0,0,0,1,1,1,1,1
+availability,biofuel_availability,Germany,,regional,biofuel_regional_passenger,,biofuel,hvo,flag,1,1,1,1,1,1,1,1,1,1,1
+availability,biofuel_availability,France,,regional,biofuel_regional_passenger,,biofuel,hvo,flag,1,1,1,1,1,1,1,1,1,1,1
+availability,biofuel_availability,Germany,,overnight,biofuel_overnight_passenger,,biofuel,hvo,flag,1,1,1,1,1,1,1,1,1,1,1
+availability,biofuel_availability,France,,overnight,biofuel_overnight_passenger,,biofuel,hvo,flag,1,1,1,1,1,1,1,1,1,1,1
+demand,passenger_km_demand,Germany,,regional,,,,,pkm_per_year,480000000,488000000,496000000,504000000,512000000,520000000,528000000,536000000,544000000,552000000,560000000
+demand,passenger_km_demand,Germany,,overnight,,,,,pkm_per_year,860000000,874000000,888000000,902000000,916000000,930000000,944000000,958000000,972000000,986000000,1000000000
+demand,passenger_km_demand,France,,regional,,,,,pkm_per_year,450000000,457000000,464000000,471000000,478000000,485000000,492000000,499000000,506000000,513000000,520000000
+demand,passenger_km_demand,France,,overnight,,,,,pkm_per_year,820000000,833000000,846000000,859000000,872000000,885000000,898000000,911000000,924000000,937000000,950000000
+market,operator_market_share,Germany,DFDS,regional,,,,,share,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0
+market,operator_market_share,Germany,DFDS,overnight,,,,,share,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0
+market,operator_market_share,France,Brittany Ferries,regional,,,,,share,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0
+market,operator_market_share,France,Brittany Ferries,overnight,,,,,share,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0
+operations,passenger_economy_class_occupancy,,DFDS,regional,,,,,share,0.72,0.72,0.73,0.73,0.74,0.74,0.75,0.75,0.76,0.76,0.77
+operations,passenger_premium_class_occupancy,,DFDS,regional,,,,,share,0.64,0.64,0.65,0.65,0.66,0.66,0.67,0.67,0.68,0.68,0.69
+operations,passenger_overnight_cabin_occupancy,,DFDS,regional,,,,,share,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00
+operations,passenger_business_class_occupancy,,DFDS,regional,,,,,share,0.58,0.58,0.59,0.59,0.60,0.60,0.61,0.61,0.62,0.62,0.63
+operations,passenger_family_cabin_occupancy,,DFDS,regional,,,,,share,0.60,0.60,0.61,0.61,0.62,0.62,0.63,0.63,0.64,0.64,0.65
+operations,passenger_economy_class_occupancy,,DFDS,overnight,,,,,share,0.70,0.70,0.71,0.71,0.72,0.72,0.73,0.73,0.74,0.74,0.75
+operations,passenger_premium_class_occupancy,,DFDS,overnight,,,,,share,0.63,0.63,0.64,0.64,0.65,0.65,0.66,0.66,0.67,0.67,0.68
+operations,passenger_overnight_cabin_occupancy,,DFDS,overnight,,,,,share,0.69,0.69,0.70,0.70,0.71,0.71,0.72,0.72,0.73,0.73,0.74
+operations,passenger_business_class_occupancy,,DFDS,overnight,,,,,share,0.59,0.59,0.60,0.60,0.61,0.61,0.62,0.62,0.63,0.63,0.64
+operations,passenger_family_cabin_occupancy,,DFDS,overnight,,,,,share,0.61,0.61,0.62,0.62,0.63,0.63,0.64,0.64,0.65,0.65,0.66
+operations,passenger_economy_class_occupancy,,Brittany Ferries,regional,,,,,share,0.71,0.71,0.72,0.72,0.73,0.73,0.74,0.74,0.75,0.75,0.76
+operations,passenger_premium_class_occupancy,,Brittany Ferries,regional,,,,,share,0.63,0.63,0.64,0.64,0.65,0.65,0.66,0.66,0.67,0.67,0.68
+operations,passenger_overnight_cabin_occupancy,,Brittany Ferries,regional,,,,,share,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00
+operations,passenger_business_class_occupancy,,Brittany Ferries,regional,,,,,share,0.57,0.57,0.58,0.58,0.59,0.59,0.60,0.60,0.61,0.61,0.62
+operations,passenger_family_cabin_occupancy,,Brittany Ferries,regional,,,,,share,0.59,0.59,0.60,0.60,0.61,0.61,0.62,0.62,0.63,0.63,0.64
+operations,passenger_economy_class_occupancy,,Brittany Ferries,overnight,,,,,share,0.69,0.69,0.70,0.70,0.71,0.71,0.72,0.72,0.73,0.73,0.74
+operations,passenger_premium_class_occupancy,,Brittany Ferries,overnight,,,,,share,0.62,0.62,0.63,0.63,0.64,0.64,0.65,0.65,0.66,0.66,0.67
+operations,passenger_overnight_cabin_occupancy,,Brittany Ferries,overnight,,,,,share,0.68,0.68,0.69,0.69,0.70,0.70,0.71,0.71,0.72,0.72,0.73
+operations,passenger_business_class_occupancy,,Brittany Ferries,overnight,,,,,share,0.58,0.58,0.59,0.59,0.60,0.60,0.61,0.61,0.62,0.62,0.63
+operations,passenger_family_cabin_occupancy,,Brittany Ferries,overnight,,,,,share,0.60,0.60,0.61,0.61,0.62,0.62,0.63,0.63,0.64,0.64,0.65
+revenue,passenger_economy_class_ticket_rate,,DFDS,regional,,,,,eur_per_passenger_km,0.050,0.051,0.052,0.053,0.054,0.055,0.056,0.057,0.058,0.059,0.060
+revenue,passenger_premium_class_ticket_rate,,DFDS,regional,,,,,eur_per_passenger_km,0.072,0.073,0.074,0.075,0.076,0.077,0.078,0.079,0.080,0.081,0.082
+revenue,passenger_overnight_cabin_ticket_rate,,DFDS,regional,,,,,eur_per_passenger_km,0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000
+revenue,passenger_business_class_ticket_rate,,DFDS,regional,,,,,eur_per_passenger_km,0.090,0.091,0.092,0.093,0.094,0.095,0.096,0.097,0.098,0.099,0.100
+revenue,passenger_family_cabin_ticket_rate,,DFDS,regional,,,,,eur_per_passenger_km,0.066,0.067,0.068,0.069,0.070,0.071,0.072,0.073,0.074,0.075,0.076
+revenue,passenger_economy_class_ticket_rate,,DFDS,overnight,,,,,eur_per_passenger_km,0.056,0.057,0.058,0.059,0.060,0.061,0.062,0.063,0.064,0.065,0.066
+revenue,passenger_premium_class_ticket_rate,,DFDS,overnight,,,,,eur_per_passenger_km,0.080,0.081,0.082,0.083,0.084,0.085,0.086,0.087,0.088,0.089,0.090
+revenue,passenger_overnight_cabin_ticket_rate,,DFDS,overnight,,,,,eur_per_passenger_km,0.110,0.111,0.112,0.113,0.114,0.115,0.116,0.117,0.118,0.119,0.120
+revenue,passenger_business_class_ticket_rate,,DFDS,overnight,,,,,eur_per_passenger_km,0.102,0.103,0.104,0.105,0.106,0.107,0.108,0.109,0.110,0.111,0.112
+revenue,passenger_family_cabin_ticket_rate,,DFDS,overnight,,,,,eur_per_passenger_km,0.088,0.089,0.090,0.091,0.092,0.093,0.094,0.095,0.096,0.097,0.098
+revenue,passenger_economy_class_ticket_rate,,Brittany Ferries,regional,,,,,eur_per_passenger_km,0.049,0.050,0.051,0.052,0.053,0.054,0.055,0.056,0.057,0.058,0.059
+revenue,passenger_premium_class_ticket_rate,,Brittany Ferries,regional,,,,,eur_per_passenger_km,0.071,0.072,0.073,0.074,0.075,0.076,0.077,0.078,0.079,0.080,0.081
+revenue,passenger_overnight_cabin_ticket_rate,,Brittany Ferries,regional,,,,,eur_per_passenger_km,0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000
+revenue,passenger_business_class_ticket_rate,,Brittany Ferries,regional,,,,,eur_per_passenger_km,0.088,0.089,0.090,0.091,0.092,0.093,0.094,0.095,0.096,0.097,0.098
+revenue,passenger_family_cabin_ticket_rate,,Brittany Ferries,regional,,,,,eur_per_passenger_km,0.064,0.065,0.066,0.067,0.068,0.069,0.070,0.071,0.072,0.073,0.074
+revenue,passenger_economy_class_ticket_rate,,Brittany Ferries,overnight,,,,,eur_per_passenger_km,0.055,0.056,0.057,0.058,0.059,0.060,0.061,0.062,0.063,0.064,0.065
+revenue,passenger_premium_class_ticket_rate,,Brittany Ferries,overnight,,,,,eur_per_passenger_km,0.078,0.079,0.080,0.081,0.082,0.083,0.084,0.085,0.086,0.087,0.088
+revenue,passenger_overnight_cabin_ticket_rate,,Brittany Ferries,overnight,,,,,eur_per_passenger_km,0.108,0.109,0.110,0.111,0.112,0.113,0.114,0.115,0.116,0.117,0.118
+revenue,passenger_business_class_ticket_rate,,Brittany Ferries,overnight,,,,,eur_per_passenger_km,0.100,0.101,0.102,0.103,0.104,0.105,0.106,0.107,0.108,0.109,0.110
+revenue,passenger_family_cabin_ticket_rate,,Brittany Ferries,overnight,,,,,eur_per_passenger_km,0.086,0.087,0.088,0.089,0.090,0.091,0.092,0.093,0.094,0.095,0.096
+revenue,onboard_spending,,DFDS,regional,,,,,eur_per_passenger_km,0.008,0.008,0.008,0.009,0.009,0.009,0.010,0.010,0.010,0.011,0.011
+revenue,onboard_spending,,DFDS,overnight,,,,,eur_per_passenger_km,0.010,0.010,0.010,0.011,0.011,0.011,0.012,0.012,0.012,0.013,0.013
+revenue,onboard_spending,,Brittany Ferries,regional,,,,,eur_per_passenger_km,0.008,0.008,0.008,0.009,0.009,0.009,0.010,0.010,0.010,0.011,0.011
+revenue,onboard_spending,,Brittany Ferries,overnight,,,,,eur_per_passenger_km,0.010,0.010,0.010,0.011,0.011,0.011,0.012,0.012,0.012,0.013,0.013
+delivery,planned_delivery_count,Germany,DFDS,overnight,biofuel_overnight_passenger,,,,count,0,0,1,0,0,0,0,0,0,0,0
+delivery,planned_delivery_count,France,Brittany Ferries,regional,biofuel_regional_passenger,,,,count,0,1,0,0,0,0,0,0,0,0,0

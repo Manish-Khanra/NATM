@@ -34,6 +34,10 @@ AVAILABLE_EXAMPLES = {
         "case": "baseline-maritime-cargo-transition",
         "description": "Baseline maritime-cargo Mesa case.",
     },
+    "small_with_maritime_passenger": {
+        "case": "baseline-maritime-passenger-transition",
+        "description": "Baseline maritime-passenger Mesa case.",
+    },
 }
 
 
@@ -184,6 +188,7 @@ if __name__ == "__main__":
     - small_with_aviation_passenger: baseline aviation-passenger Mesa case
     - small_with_aviation_cargo: baseline aviation-cargo Mesa case
     - small_with_maritime_cargo: baseline maritime-cargo Mesa case
+    - small_with_maritime_passenger: baseline maritime-passenger Mesa case
 
     The easiest way to use this script in VS Code is to edit the small
     configuration block below and then press Run on run.py.

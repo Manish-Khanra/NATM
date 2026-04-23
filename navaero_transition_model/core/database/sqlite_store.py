@@ -117,6 +117,18 @@ class SQLiteSimulationStore:
                 },
             )
 
+        maritime_passenger_inputs = getattr(model, "maritime_passenger_inputs", None)
+        if maritime_passenger_inputs is not None:
+            input_tables.update(
+                {
+                    "input_maritime_passenger_fleet": maritime_passenger_inputs.fleet,
+                    "input_maritime_passenger_technology_catalog": (
+                        maritime_passenger_inputs.technology_catalog.to_frame()
+                    ),
+                    "input_maritime_passenger_scenario": maritime_passenger_inputs.scenario_wide,
+                },
+            )
+
         if not input_tables:
             return
         for table_name, dataframe in input_tables.items():

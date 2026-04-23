@@ -21,8 +21,9 @@ In practical terms, NATM is intended to help explore questions such as:
 - how emissions and investment costs evolve during the transition
 
 The current repository includes working aviation-passenger, aviation-cargo,
-and maritime-cargo test cases, while the architecture is designed to extend
-further into additional maritime applications as the model grows.
+maritime-cargo, and maritime-passenger test cases, while the architecture is
+designed to extend further into additional transport applications as the model
+grows.
 
 ## Installation
 
@@ -137,6 +138,7 @@ Named example presets currently included in [run.py](C:/Manish_REPO/NATM/run.py:
 - `small_with_aviation_passenger`
 - `small_with_aviation_cargo`
 - `small_with_maritime_cargo`
+- `small_with_maritime_passenger`
 
 ## Project Layout
 
@@ -155,6 +157,7 @@ Named example presets currently included in [run.py](C:/Manish_REPO/NATM/run.py:
 - `docs/architecture.md`: detailed system architecture and runtime flow
 - `docs/aviation-passenger-reference.md`: passenger-specific reference for `aviation_scenario.csv`
 - `docs/aviation-cargo-scenario-reference.md`: cargo-specific reference for `aviation_scenario.csv` in cargo aviation cases
+- `docs/maritime-passenger-reference.md`: passenger-specific reference for `maritime_scenario.csv`
 - `docs/maritime-cargo-render-gap-map.md`: old-vs-new maritime cargo fidelity checklist
 - `docs/aviation-passenger-mesa-port.md`: port plan from the old Melodie aviation-passenger model
 - `docs/aviation-passenger-render-gap-map.md`: strict old-vs-new aviation-passenger fidelity checklist
@@ -180,6 +183,13 @@ The `baseline-maritime-cargo-transition` case uses maritime-sector CSV filenames
 - `maritime_technology_catalog.csv`
 - `maritime_scenario.csv`
 
+The `baseline-maritime-passenger-transition` case uses the same maritime CSV
+filenames:
+
+- `maritime_fleet_stock.csv`
+- `maritime_technology_catalog.csv`
+- `maritime_scenario.csv`
+
 The fleet stock input can also carry an `investment_logic` column so each
 airline agent can select its decision method by name. The current built-in
 logic is `legacy_weighted_utility`.
@@ -189,6 +199,9 @@ For the passenger scenario CSV contract, see
 
 For a cargo-only view of the same contract, see
 `docs/aviation-cargo-scenario-reference.md`.
+
+For the maritime-passenger scenario CSV contract, see
+`docs/maritime-passenger-reference.md`.
 
 For the system-level architecture, see `docs/architecture.md`.
 
@@ -206,7 +219,7 @@ For the system-level architecture, see `docs/architecture.md`.
 - Agent inheritance structure with reusable parent classes for future agent types
 - Object-oriented case data, technology catalog, scenario table, fleet, and output exporters
 - A shared environment layer with country states and route/corridor effects
-- Detailed aviation passenger, aviation cargo, and maritime cargo outputs for stock, technology diffusion, energy/emissions, and investment activity
+- Detailed aviation passenger, aviation cargo, maritime cargo, and maritime passenger outputs for stock, technology diffusion, energy/emissions, and investment activity
 
 ## Near-Term Next Steps
 

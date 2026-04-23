@@ -1,0 +1,3 @@
+origin_country,destination_country,sector_name,connectivity,clean_fuel_corridor
+Germany,France,maritime,0.84,0.36
+France,Germany,maritime,0.84,0.36

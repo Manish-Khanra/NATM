@@ -4,9 +4,9 @@ This document describes the current software architecture of NATM as it exists
 in the repository today.
 
 The current implementation is a Mesa-based transport model with working
-aviation-passenger, aviation-cargo, and maritime-cargo applications, and a
-general structure that can be extended to additional sectors and applications
-later.
+aviation-passenger, aviation-cargo, maritime-cargo, and maritime-passenger
+applications, and a general structure that can be extended to additional
+sectors and applications later.
 
 ## 1. Architecture Overview
 
@@ -23,9 +23,9 @@ In the current codebase, the active end-to-end path is:
 
 `run.py` or `python -m navaero_transition_model`  
 -> `NATMScenario`  
--> `AviationPassengerCaseData`, `AviationCargoCaseData`, or `MaritimeCargoCaseData`  
+-> case input bundle (`AviationPassengerCaseData`, `AviationCargoCaseData`, `MaritimeCargoCaseData`, or `MaritimePassengerCaseData`)  
 -> `NATMModel`  
--> `AviationPassengerAirlineAgent`, `AviationCargoAirlineAgent`, or `MaritimeCargoShiplineAgent`  
+-> application agent (`AviationPassengerAirlineAgent`, `AviationCargoAirlineAgent`, `MaritimeCargoShiplineAgent`, or `MaritimePassengerShiplineAgent`)  
 -> decision logic + fleet updates  
 -> `DataCollector` + detailed exporters + optional SQLite
 
@@ -124,6 +124,7 @@ planning implementation requires:
 - `passenger_km_demand` for aviation passenger
 - `freight_tonne_km_demand` for aviation cargo
 - `freight_tonne_km_demand` for maritime cargo
+- `passenger_km_demand` for maritime passenger
 - `operator_market_share`
 
 for all required year/scope combinations.
@@ -135,7 +136,7 @@ for all required year/scope combinations.
 1. stores the scenario
 2. creates the shared environment
 3. loads aviation-passenger case data if the case enables aviation/passenger
-4. loads aviation-cargo or maritime-cargo case data if those applications are enabled
+4. loads any enabled application case data
 5. creates one application-specific operator agent per `(operator_name, operator_country)`
 6. builds a `mesa.DataCollector`
 7. records the initial model snapshot and detailed fleet snapshot
@@ -184,6 +185,7 @@ The current agent hierarchy is:
 - `AviationPassengerAirlineAgent`
 - `AviationCargoAirlineAgent`
 - `MaritimeCargoShiplineAgent`
+- `MaritimePassengerShiplineAgent`
 
 Important detail:
 
@@ -206,14 +208,15 @@ operator because they own:
 - airline-specific economic/environmental preferences
 
 This is what makes NATM both Mesa-native and still domain-specific enough for
-aviation passenger and cargo decisions.
+aviation and maritime fleet-transition decisions.
 
 ## 5. Input Layer
 
 ### 5.1 `AviationPassengerCaseData`
 
-`AviationPassengerCaseData`, `AviationCargoCaseData`, and
-`MaritimeCargoCaseData` are the current application input bundles.
+`AviationPassengerCaseData`, `AviationCargoCaseData`,
+`MaritimeCargoCaseData`, and `MaritimePassengerCaseData` are the current
+application input bundles.
 
 Responsibilities:
 

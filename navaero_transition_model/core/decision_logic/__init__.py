@@ -3,6 +3,7 @@ from navaero_transition_model.core.decision_logic.base import (
     AviationPassengerDecisionLogic,
     CandidateEvaluation,
     MaritimeCargoDecisionLogic,
+    MaritimePassengerDecisionLogic,
     OperationMetrics,
     clamp,
     clean_scope_value,
@@ -15,6 +16,10 @@ from navaero_transition_model.core.decision_logic.legacy_weighted_utility_cargo 
 )
 from navaero_transition_model.core.decision_logic.legacy_weighted_utility_maritime_cargo import (
     LegacyWeightedUtilityMaritimeCargoLogic,
+)
+
+from .legacy_weighted_utility_maritime_passenger import (
+    LegacyWeightedUtilityMaritimePassengerLogic,
 )
 
 
@@ -65,18 +70,39 @@ def build_maritime_cargo_decision_logic(
         ) from exc
 
 
+def build_maritime_passenger_decision_logic(
+    logic_name: str,
+) -> MaritimePassengerDecisionLogic:
+    available_logics = {
+        LegacyWeightedUtilityMaritimePassengerLogic.name: (
+            LegacyWeightedUtilityMaritimePassengerLogic
+        ),
+    }
+    try:
+        return available_logics[logic_name]()
+    except KeyError as exc:
+        supported = ", ".join(sorted(available_logics))
+        raise ValueError(
+            "Unsupported maritime passenger investment_logic "
+            f"'{logic_name}'. Supported values: {supported}",
+        ) from exc
+
+
 __all__ = [
     "AviationCargoDecisionLogic",
     "AviationPassengerDecisionLogic",
     "CandidateEvaluation",
     "LegacyWeightedUtilityMaritimeCargoLogic",
+    "LegacyWeightedUtilityMaritimePassengerLogic",
     "LegacyWeightedUtilityCargoLogic",
     "LegacyWeightedUtilityLogic",
     "MaritimeCargoDecisionLogic",
+    "MaritimePassengerDecisionLogic",
     "OperationMetrics",
     "build_aviation_cargo_decision_logic",
     "build_aviation_passenger_decision_logic",
     "build_maritime_cargo_decision_logic",
+    "build_maritime_passenger_decision_logic",
     "clamp",
     "clean_scope_value",
 ]

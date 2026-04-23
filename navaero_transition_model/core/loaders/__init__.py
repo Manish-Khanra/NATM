@@ -22,6 +22,14 @@ from navaero_transition_model.core.loaders.maritime_cargo import (
     load_maritime_cargo_scenario,
     load_maritime_cargo_technology_catalog,
 )
+from navaero_transition_model.core.loaders.maritime_passenger import (
+    MaritimePassengerCaseLoader,
+    MaritimePassengerInputs,
+    load_maritime_passenger_case,
+    load_maritime_passenger_fleet_stock,
+    load_maritime_passenger_scenario,
+    load_maritime_passenger_technology_catalog,
+)
 
 __all__ = [
     "AviationCargoCaseLoader",
@@ -30,6 +38,8 @@ __all__ = [
     "AviationPassengerInputs",
     "MaritimeCargoCaseLoader",
     "MaritimeCargoInputs",
+    "MaritimePassengerCaseLoader",
+    "MaritimePassengerInputs",
     "load_aviation_cargo_case",
     "load_aviation_cargo_fleet_stock",
     "load_aviation_cargo_scenario",
@@ -42,4 +52,8 @@ __all__ = [
     "load_maritime_cargo_fleet_stock",
     "load_maritime_cargo_scenario",
     "load_maritime_cargo_technology_catalog",
+    "load_maritime_passenger_case",
+    "load_maritime_passenger_fleet_stock",
+    "load_maritime_passenger_scenario",
+    "load_maritime_passenger_technology_catalog",
 ]

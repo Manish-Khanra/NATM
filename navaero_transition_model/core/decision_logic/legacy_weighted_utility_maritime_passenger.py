@@ -6,28 +6,36 @@ import pandas as pd
 
 from navaero_transition_model.core.decision_logic.base import (
     CandidateEvaluation,
-    MaritimeCargoDecisionLogic,
+    MaritimePassengerDecisionLogic,
     OperationMetrics,
     clamp,
     clean_scope_value,
 )
 
 if TYPE_CHECKING:
-    from navaero_transition_model.core.agent_types.maritime_cargo_shipline import (
-        MaritimeCargoShiplineAgent,
+    from navaero_transition_model.core.agent_types.maritime_passenger_shipline import (
+        MaritimePassengerShiplineAgent,
     )
 
 
-class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
-    name = "legacy_weighted_utility_maritime_cargo"
+class LegacyWeightedUtilityMaritimePassengerLogic(MaritimePassengerDecisionLogic):
+    name = "legacy_weighted_utility_maritime_passenger"
 
-    def step(self, agent: MaritimeCargoShiplineAgent, year: int) -> None:
+    cabin_names = (
+        "passenger_economy_class",
+        "passenger_premium_class",
+        "passenger_overnight_cabin",
+        "passenger_business_class",
+        "passenger_family_cabin",
+    )
+
+    def step(self, agent: MaritimePassengerShiplineAgent, year: int) -> None:
         replacement_rows = self.replacement_row_indices(agent, year)
         agent.update_existing_fleet(year, excluded_indices=set(replacement_rows))
         self._replace_due_vessels(agent, year, replacement_rows=replacement_rows)
         self._add_growth_vessels(agent, year)
 
-    def current_carbon_price(self, agent: MaritimeCargoShiplineAgent, year: int) -> float:
+    def current_carbon_price(self, agent: MaritimePassengerShiplineAgent, year: int) -> float:
         scenario_price = agent.scenario_value("carbon_tax", year)
         if scenario_price is None:
             scenario_price = agent.scenario_value("carbon_price", year)
@@ -37,7 +45,7 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
 
     def current_biofuel_mandate(
         self,
-        agent: MaritimeCargoShiplineAgent,
+        agent: MaritimePassengerShiplineAgent,
         technology_row: pd.Series,
         year: int,
     ) -> float:
@@ -63,7 +71,7 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
 
     def current_reported_emission_share(
         self,
-        agent: MaritimeCargoShiplineAgent,
+        agent: MaritimePassengerShiplineAgent,
         technology_row: pd.Series,
         year: int,
     ) -> float:
@@ -80,12 +88,12 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
             scenario_value = technology_row.get("reported_emission_factor", 1.0)
         return max(float(scenario_value or 0.0), 0.0)
 
-    def current_clean_fuel_subsidy(self, agent: MaritimeCargoShiplineAgent) -> float:
+    def current_clean_fuel_subsidy(self, agent: MaritimePassengerShiplineAgent) -> float:
         return float(agent.model.current_policy_signal.maritime.clean_fuel_subsidy)
 
     def effective_secondary_share(
         self,
-        agent: MaritimeCargoShiplineAgent,
+        agent: MaritimePassengerShiplineAgent,
         technology_row: pd.Series,
         year: int,
     ) -> float:
@@ -105,19 +113,18 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
         )
         if scenario_cap is not None:
             max_share = clamp(float(scenario_cap))
-        elif (
-            legacy_cap := agent.scenario_value(
-                "maximum_secondary_energy",
-                year,
-                country=agent.operator_country,
-                segment=segment,
-                technology_name=technology_name,
-                secondary_energy_carrier=secondary_carrier,
-                saf_pathway=saf_pathway,
-                default=None,
-            )
-        ) is not None:
+        elif (legacy_cap := agent.scenario_value(
+            "maximum_secondary_energy",
+            year,
+            country=agent.operator_country,
+            segment=segment,
+            technology_name=technology_name,
+            secondary_energy_carrier=secondary_carrier,
+            saf_pathway=saf_pathway,
+            default=None,
+        )) is not None:
             max_share = clamp(float(legacy_cap))
+
         cap_active = agent.scenario_value(
             "secondary_energy_cap_active",
             year,
@@ -170,7 +177,7 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
 
     def annual_operation_metrics(
         self,
-        agent: MaritimeCargoShiplineAgent,
+        agent: MaritimePassengerShiplineAgent,
         vessel: pd.Series,
         technology_row: pd.Series,
         year: int,
@@ -212,6 +219,7 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
         carbon_price = self.current_carbon_price(agent, year)
         clean_fuel_subsidy = self.current_clean_fuel_subsidy(agent)
         is_alternative = not agent.technology_catalog.is_conventional_row(technology_row)
+
         if int(technology_row["drop_in_fuel"]) == 1 and tertiary_price is not None:
             secondary_price = tertiary_price
         if is_alternative and secondary_energy_quantity > 0.0:
@@ -219,18 +227,13 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
         elif is_alternative:
             primary_price = float(primary_price) * (1.0 - clean_fuel_subsidy)
 
-        carbondioxide_factor = float(technology_row.get("carbondioxide_factor", 0.0) or 0.0)
-        if carbondioxide_factor > 0.0:
-            total_emission = carbondioxide_factor * total_energy
-        else:
-            primary_emission = primary_energy_quantity * float(
-                technology_row["primary_energy_emission_factor"],
-            )
-            secondary_emission = secondary_energy_quantity * float(
-                technology_row["secondary_energy_emission_factor"],
-            )
-            total_emission = primary_emission + secondary_emission
-
+        primary_emission = primary_energy_quantity * float(
+            technology_row["primary_energy_emission_factor"],
+        )
+        secondary_emission = secondary_energy_quantity * float(
+            technology_row["secondary_energy_emission_factor"],
+        )
+        total_emission = primary_emission + secondary_emission
         reported_emission = total_emission * self.current_reported_emission_share(
             agent,
             technology_row,
@@ -245,9 +248,10 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
         chargeable_emission = max(reported_emission - covered_emission, 0.0)
         remaining_ets_allowance = max(remaining_ets_allowance - reported_emission, 0.0)
 
-        energy_cost = primary_energy_quantity * float(
-            primary_price
-        ) + secondary_energy_quantity * float(secondary_price)
+        energy_cost = (
+            primary_energy_quantity * float(primary_price)
+            + secondary_energy_quantity * float(secondary_price)
+        )
         emission_cost = chargeable_emission * carbon_price
         return OperationMetrics(
             total_cost=energy_cost + emission_cost,
@@ -258,7 +262,7 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
             remaining_ets_allowance=remaining_ets_allowance,
         )
 
-    def yearly_ets_allowance(self, agent: MaritimeCargoShiplineAgent, year: int) -> float:
+    def yearly_ets_allowance(self, agent: MaritimePassengerShiplineAgent, year: int) -> float:
         allocation_factor = agent.scenario_value(
             "ets_allocation_factor",
             year,
@@ -269,36 +273,50 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
 
     def annual_revenue(
         self,
-        agent: MaritimeCargoShiplineAgent,
+        agent: MaritimePassengerShiplineAgent,
         technology_row: pd.Series,
         year: int,
     ) -> float:
-        trip_length = float(technology_row["trip_length_km"])
-        trip_days = float(technology_row["trip_days_per_year"])
-        load_factor = agent.scenario_value(
-            "load_factor",
+        segment = clean_scope_value(technology_row["segment"])
+        annual_distance = float(technology_row["trip_length_km"]) * float(
+            technology_row["trip_days_per_year"],
+        )
+        capacity_by_cabin = agent.passenger_capacity_by_cabin(technology_row)
+        ticket_revenue = 0.0
+        total_occupied_passengers = 0.0
+
+        for cabin_name in self.cabin_names:
+            capacity = capacity_by_cabin.get(cabin_name, 0.0)
+            if capacity <= 0.0:
+                continue
+            occupancy = agent.cabin_occupancy(cabin_name, year, segment)
+            ticket_rate = agent.cabin_ticket_rate(cabin_name, year, segment)
+            occupied_passengers = capacity * occupancy
+            total_occupied_passengers += occupied_passengers
+            ticket_revenue += occupied_passengers * annual_distance * ticket_rate
+
+        onboard_spending = agent.scenario_value(
+            "onboard_spending",
             year,
             operator_name=agent.operator_name,
-            default=0.0,
+            segment=segment,
+            default=None,
         )
-        freight_rate = agent.scenario_value(
-            "freight_rate",
-            year,
-            operator_name=agent.operator_name,
-            default=0.0,
+        if onboard_spending is None:
+            onboard_spending = agent.scenario_value(
+                "onboard_spending",
+                year,
+                operator_name=agent.operator_name,
+                default=0.0,
+            )
+        onboard_revenue = total_occupied_passengers * annual_distance * float(
+            onboard_spending or 0.0,
         )
-        cargo_capacity_tonnes = agent.cargo_capacity_tonnes(technology_row)
-        return (
-            cargo_capacity_tonnes
-            * float(load_factor or 0.0)
-            * trip_length
-            * trip_days
-            * float(freight_rate or 0.0)
-        )
+        return ticket_revenue + onboard_revenue
 
     def calc_payback_year(
         self,
-        agent: MaritimeCargoShiplineAgent,
+        agent: MaritimePassengerShiplineAgent,
         vessel: pd.Series,
         technology_row: pd.Series,
         year: int,
@@ -320,6 +338,9 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
         total_costs: list[float] = []
         revenues: list[float] = []
         first_year_metrics: OperationMetrics | None = None
+        uses_drop_in_branch = int(technology_row["drop_in_fuel"]) == 1 and float(
+            technology_row["maximum_secondary_energy_share"],
+        ) > 0.0
         for offset in range(life_time):
             future_year = min(year + offset, agent.model.scenario.end_year)
             operation_metrics = self.annual_operation_metrics(
@@ -333,29 +354,40 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
                 first_year_metrics = operation_metrics
             revenue = self.annual_revenue(agent, technology_row, future_year)
             maintenance_cost = revenue * float(technology_row["maintenance_cost_share"])
-            crew_cost = revenue * 0.18
-            port_fees = revenue * 0.08
-            cargo_handling = revenue * 0.06
+            crew_cost = revenue * 0.24
+            port_fees = revenue * 0.10
+            passenger_service_cost = 0.0 if uses_drop_in_branch else revenue * 0.10
             total_costs.append(
                 operation_metrics.total_cost
                 + maintenance_cost
                 + crew_cost
                 + port_fees
-                + cargo_handling
+                + passenger_service_cost
                 + depreciation_cost,
             )
             revenues.append(revenue)
 
         npv = -vessel_price
-        payback_year = life_time
+        payback_year = life_time - 1
+        max_npv = float("-inf")
+        max_npv_year = life_time - 1
         for offset, (revenue, cost) in enumerate(zip(revenues, total_costs, strict=False), start=1):
             npv += (revenue - cost) / ((1.0 + interest_rate) ** offset)
+            if npv > max_npv:
+                max_npv = npv
+                max_npv_year = offset - 1
             if npv > 0:
                 payback_year = offset - 1
                 break
+        else:
+            payback_year = max_npv_year
         npv += salvage_value / ((1.0 + interest_rate) ** life_time)
 
-        economic_utility = clamp(((life_time + 1) - payback_year) / max(life_time, 1), 0.0, 1.0)
+        economic_utility = clamp(
+            ((life_time + 1) - payback_year) / max((life_time + 1) - 1, 1),
+            0.0,
+            1.0,
+        )
         environmental_utility = self.environmental_utility(technology_row)
         technology_name = str(technology_row["technology_name"])
         if first_year_metrics is None:
@@ -399,109 +431,94 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
             effective_alternative_cost=mean_operation_cost,
         )
 
-    def partial_environmental_utility(self, value: float, thresholds: tuple[float, ...]) -> float:
+    def environmental_utility(self, technology_row: pd.Series) -> float:
+        hydrocarbon = self._partial_utility_hydrocarbon(
+            float(technology_row["hydrocarbon_factor"]),
+        )
+        carbon_monoxide = self._partial_utility_carbon_monoxide(
+            float(technology_row["carbon_monoxide_factor"]),
+        )
+        nitrogen_oxide = self._partial_utility_nitrogen_oxide(
+            float(technology_row["nitrogen_oxide_factor"]),
+        )
+        smoke_number = self._partial_utility_smoke_number(
+            float(technology_row["smoke_number_factor"]),
+        )
+        co2_primary = self._partial_utility_co2_primary(
+            float(technology_row["primary_energy_emission_factor"]),
+        )
+        co2_secondary = self._partial_utility_co2_secondary(
+            float(technology_row["secondary_energy_emission_factor"]),
+        )
+        return (
+            0.2 * hydrocarbon
+            + 0.2 * carbon_monoxide
+            + 0.2 * nitrogen_oxide
+            + 0.2 * smoke_number
+            + 0.1 * (co2_primary + co2_secondary)
+        )
+
+    def _partial_utility_hydrocarbon(self, value: float) -> float:
         if value <= 0.0:
             return 1.0
-        if value <= thresholds[0]:
+        if value <= 148.0:
             return 0.9
-        if value <= thresholds[1]:
+        if value <= 296.0:
             return 0.6
-        if value <= thresholds[2]:
+        if value <= 444.0:
             return 0.4
-        if value <= thresholds[3]:
+        if value <= 592.0:
             return 0.2
         return 0.0
 
-    def environmental_utility(self, technology_row: pd.Series) -> float:
-        sox = self._partial_utility_sox(
-            float(technology_row.get("sulphur_factor", 0.0) or 0.0),
-        )
-        co2 = self._partial_utility_co2(
-            float(technology_row.get("carbondioxide_factor", 0.0) or 0.0),
-        )
-        nox = self._partial_utility_nox(float(technology_row["nitrogen_oxide_factor"]))
-        smoke = self._partial_utility_smoke(float(technology_row["smoke_number_factor"]))
-        return 0.30 * sox + 0.30 * co2 + 0.20 * nox + 0.20 * smoke
-
-    def _partial_utility_sox(self, value: float) -> float:
-        thresholds = (
-            0.000878,
-            0.00215,
-            0.009563,
-            0.01911,
-            0.0200565,
-            0.0238625,
-            0.02865,
-            0.04773,
-        )
-        scores = (0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2)
+    def _partial_utility_carbon_monoxide(self, value: float) -> float:
         if value <= 0.0:
             return 1.0
-        for threshold, score in zip(thresholds, scores, strict=True):
-            if value <= threshold:
-                return score
-        return 0.1
+        if value <= 131.8:
+            return 0.9
+        if value <= 263.6:
+            return 0.6
+        if value <= 395.4:
+            return 0.4
+        if value <= 527.2:
+            return 0.2
+        return 0.0
 
-    def _partial_utility_co2(self, value: float) -> float:
-        thresholds = (
-            0.000135625,
-            0.003612,
-            0.0078484,
-            0.01014839,
-            0.018501,
-            0.019621,
-            0.026899792,
-        )
-        scores = (0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3)
+    def _partial_utility_nitrogen_oxide(self, value: float) -> float:
         if value <= 0.0:
             return 1.0
-        for threshold, score in zip(thresholds, scores, strict=True):
-            if value <= threshold:
-                return score
-        return 0.2
+        if value <= 16.78:
+            return 0.9
+        if value <= 33.56:
+            return 0.6
+        if value <= 50.34:
+            return 0.4
+        if value <= 67.12:
+            return 0.2
+        return 0.0
 
-    def _partial_utility_nox(self, value: float) -> float:
-        thresholds = (
-            0.0020308,
-            0.010154,
-            0.0386275,
-            0.048391,
-            0.05077,
-            0.0549,
-            0.06386,
-            0.06834,
-            0.0773,
-        )
-        scores = (0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1)
+    def _partial_utility_smoke_number(self, value: float) -> float:
         if value <= 0.0:
             return 1.0
-        for threshold, score in zip(thresholds, scores, strict=True):
-            if value <= threshold:
-                return score
-        return 0.05
+        if value <= 15.6:
+            return 0.9
+        if value <= 31.2:
+            return 0.6
+        if value <= 46.8:
+            return 0.4
+        if value <= 62.4:
+            return 0.2
+        return 0.0
 
-    def _partial_utility_smoke(self, value: float) -> float:
-        thresholds = (
-            0.000022,
-            0.00036,
-            0.0009,
-            0.00294,
-            0.0030829,
-            0.0043288,
-            0.00436,
-            0.0072,
-        )
-        scores = (0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2)
-        if value <= 0.0:
-            return 1.0
-        for threshold, score in zip(thresholds, scores, strict=True):
-            if value <= threshold:
-                return score
-        return 0.1
+    def _partial_utility_co2_primary(self, value: float) -> float:
+        return 1.0 if value <= 0.0 else 0.0
+
+    def _partial_utility_co2_secondary(self, value: float) -> float:
+        return 1.0 if value <= 0.0 else 0.0
 
     def is_candidate_available(
         self,
-        agent: MaritimeCargoShiplineAgent,
+        agent: MaritimePassengerShiplineAgent,
         technology_row: pd.Series,
         year: int,
     ) -> bool:
@@ -544,7 +561,7 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
 
     def select_technology_for_vessel(
         self,
-        agent: MaritimeCargoShiplineAgent,
+        agent: MaritimePassengerShiplineAgent,
         vessel: pd.Series,
         year: int,
         initial_ets_balance: float | None = None,
@@ -579,7 +596,11 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
         evaluations.sort(key=lambda item: item[1].total_utility, reverse=True)
         return evaluations[0]
 
-    def replacement_row_indices(self, agent: MaritimeCargoShiplineAgent, year: int) -> list[int]:
+    def replacement_row_indices(
+        self,
+        agent: MaritimePassengerShiplineAgent,
+        year: int,
+    ) -> list[int]:
         clean_fuel_subsidy = self.current_clean_fuel_subsidy(agent)
         acceleration_window = int(
             (agent.model.current_policy_signal.maritime.adoption_mandate + clean_fuel_subsidy) * 5,
@@ -591,7 +612,7 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
 
     def replace_due_vessels(
         self,
-        agent: MaritimeCargoShiplineAgent,
+        agent: MaritimePassengerShiplineAgent,
         year: int,
         *,
         replacement_rows: list[int] | None = None,
@@ -611,19 +632,19 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
             )
             agent.apply_technology_to_vessel(row_index, technology_row, evaluation, year)
 
-    def add_growth_vessels(self, agent: MaritimeCargoShiplineAgent, year: int) -> None:
+    def add_growth_vessels(self, agent: MaritimePassengerShiplineAgent, year: int) -> None:
         next_vessel_id = agent.fleet.next_aircraft_id()
         for segment in sorted(agent.fleet.frame["segment"].dropna().unique()):
             template = agent.segment_template(str(segment))
             if template is None:
                 continue
 
-            residual_tonne_km_gap = max(
-                agent.allocated_freight_tonne_km(str(segment), year)
-                - agent.segment_freight_tonne_km_capacity(str(segment), year),
+            residual_passenger_km_gap = max(
+                agent.allocated_passenger_km(str(segment), year)
+                - agent.segment_passenger_km_capacity(str(segment), year),
                 0.0,
             )
-            if residual_tonne_km_gap <= 0.0:
+            if residual_passenger_km_gap <= 0.0:
                 continue
 
             planned_rows = agent.planned_delivery_rows(str(segment), year)
@@ -665,25 +686,31 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
                         evaluation,
                         year,
                     )
-                    added_capacity = agent.vessel_freight_tonne_km_capacity(
+                    added_capacity = agent.vessel_passenger_km_capacity(
                         agent.fleet.frame.loc[new_row_index],
                         technology_row,
                         year,
                     )
-                    residual_tonne_km_gap = max(residual_tonne_km_gap - added_capacity, 0.0)
+                    residual_passenger_km_gap = max(
+                        residual_passenger_km_gap - added_capacity,
+                        0.0,
+                    )
                     next_vessel_id += 1
-                    if residual_tonne_km_gap <= 0.0:
+                    if residual_passenger_km_gap <= 0.0:
                         break
-                if residual_tonne_km_gap <= 0.0:
+                if residual_passenger_km_gap <= 0.0:
                     break
 
-            if residual_tonne_km_gap <= 0.0:
+            if residual_passenger_km_gap <= 0.0:
                 continue
 
             segment_rows = agent.fleet.frame.loc[agent.fleet.frame["segment"] == segment]
             max_endogenous_additions = max(len(segment_rows) * 4, 10)
             additions_made = 0
-            while residual_tonne_km_gap > 0.0 and additions_made < max_endogenous_additions:
+            while (
+                residual_passenger_km_gap > 0.0
+                and additions_made < max_endogenous_additions
+            ):
                 technology_row, evaluation = self._growth_addition_choice(
                     agent,
                     template,
@@ -699,20 +726,23 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
                     evaluation,
                     year,
                 )
-                added_capacity = agent.vessel_freight_tonne_km_capacity(
+                added_capacity = agent.vessel_passenger_km_capacity(
                     agent.fleet.frame.loc[new_row_index],
                     technology_row,
                     year,
                 )
                 if added_capacity <= 0.0:
                     break
-                residual_tonne_km_gap = max(residual_tonne_km_gap - added_capacity, 0.0)
+                residual_passenger_km_gap = max(
+                    residual_passenger_km_gap - added_capacity,
+                    0.0,
+                )
                 next_vessel_id += 1
                 additions_made += 1
 
     def _growth_addition_choice(
         self,
-        agent: MaritimeCargoShiplineAgent,
+        agent: MaritimePassengerShiplineAgent,
         template: pd.Series,
         year: int,
         *,
@@ -741,12 +771,16 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
 
     def _replace_due_vessels(
         self,
-        agent: MaritimeCargoShiplineAgent,
+        agent: MaritimePassengerShiplineAgent,
         year: int,
         *,
         replacement_rows: list[int] | None = None,
     ) -> None:
         self.replace_due_vessels(agent, year, replacement_rows=replacement_rows)
 
-    def _add_growth_vessels(self, agent: MaritimeCargoShiplineAgent, year: int) -> None:
+    def _add_growth_vessels(
+        self,
+        agent: MaritimePassengerShiplineAgent,
+        year: int,
+    ) -> None:
         self.add_growth_vessels(agent, year)

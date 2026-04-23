@@ -12,14 +12,19 @@ from navaero_transition_model.core.agent_types import (
     AviationPassengerAirlineAgent,
     BaseOperatorAgent,
     MaritimeCargoShiplineAgent,
+    MaritimePassengerShiplineAgent,
 )
 from navaero_transition_model.core.case_inputs import (
     AviationPassengerCaseData,
+    MaritimePassengerCaseData,
     ScenarioTable,
     TechnologyCatalog,
 )
 from navaero_transition_model.core.database import SQLiteSimulationStore
-from navaero_transition_model.core.loaders import load_aviation_passenger_case
+from navaero_transition_model.core.loaders import (
+    load_aviation_passenger_case,
+    load_maritime_passenger_case,
+)
 from navaero_transition_model.core.model import NATMModel
 from navaero_transition_model.core.scenario import NATMScenario
 
@@ -39,6 +44,13 @@ def load_cargo_scenario() -> NATMScenario:
 def load_maritime_cargo_scenario() -> NATMScenario:
     scenario_path = Path(__file__).resolve().parents[1] / resolve_case_config(
         "baseline-maritime-cargo-transition",
+    )
+    return NATMScenario.from_yaml(scenario_path)
+
+
+def load_maritime_passenger_scenario() -> NATMScenario:
+    scenario_path = Path(__file__).resolve().parents[1] / resolve_case_config(
+        "baseline-maritime-passenger-transition",
     )
     return NATMScenario.from_yaml(scenario_path)
 
@@ -284,6 +296,59 @@ def test_aviation_passenger_case_loader_reads_three_file_structure() -> None:
     assert "maximum_secondary_energy_share" in set(case_inputs.scenario_long["variable_name"])
     assert "passenger_km_demand" in set(case_inputs.scenario_long["variable_name"])
     assert "operator_market_share" in set(case_inputs.scenario_long["variable_name"])
+
+
+def test_maritime_passenger_scenario_runs_end_to_end() -> None:
+    scenario = load_maritime_passenger_scenario()
+    model = NATMModel(scenario, seed=42)
+
+    history = model.run()
+    agent_summary = model.to_agent_frame()
+    aircraft_summary = model.to_aircraft_frame()
+    technology_summary = model.to_maritime_technology_frame()
+    energy_emissions_summary = model.to_maritime_energy_emissions_frame()
+    investment_summary = model.to_maritime_investment_frame()
+
+    assert scenario.enabled_sectors == ("maritime",)
+    assert scenario.applications_for_sector("maritime") == ("passenger",)
+    assert len(history) == scenario.steps
+    assert len(model.agents) == 2
+    assert all(isinstance(agent, BaseOperatorAgent) for agent in model.agents)
+    assert all(isinstance(agent, MaritimePassengerShiplineAgent) for agent in model.agents)
+    assert len(model.agents_by_type[MaritimePassengerShiplineAgent]) == 2
+    assert len(model.get_sector_agents("aviation")) == 0
+    assert {"maritime"} == set(agent_summary["sector_name"].unique())
+    assert {"passenger"} == set(agent_summary["application_name"].unique())
+    assert {"legacy_weighted_utility_maritime_passenger"} == set(
+        agent_summary["investment_logic"].unique(),
+    )
+    assert not aircraft_summary.empty
+    assert not technology_summary.empty
+    assert not energy_emissions_summary.empty
+    assert not investment_summary.empty
+    assert {"passenger"} == set(technology_summary["application_name"].unique())
+    assert "chargeable_emission" in energy_emissions_summary.columns
+    assert energy_emissions_summary["primary_energy_consumption"].sum() > 0.0
+    assert energy_emissions_summary["total_emission"].sum() > 0.0
+    assert history[0].maritime_alternative_share <= history[-1].maritime_alternative_share
+
+
+def test_maritime_passenger_case_loader_reads_three_file_structure() -> None:
+    case_dir = (
+        Path(__file__).resolve().parents[1] / "data" / "baseline-maritime-passenger-transition"
+    )
+    case_inputs = load_maritime_passenger_case(case_dir)
+
+    assert isinstance(case_inputs, MaritimePassengerCaseData)
+    assert not case_inputs.fleet.empty
+    assert isinstance(case_inputs.technology_catalog, TechnologyCatalog)
+    assert isinstance(case_inputs.scenario_table, ScenarioTable)
+    assert "main_hub" in case_inputs.fleet.columns
+    assert {"regional", "overnight"} <= set(case_inputs.fleet["segment"].unique())
+    assert "passenger_km_demand" in set(case_inputs.scenario_long["variable_name"])
+    assert "operator_market_share" in set(case_inputs.scenario_long["variable_name"])
+    assert "passenger_economy_class_occupancy" in set(case_inputs.scenario_long["variable_name"])
+    assert "passenger_economy_class" in case_inputs.technology_catalog.to_frame().columns
 
 
 @pytest.mark.parametrize(
