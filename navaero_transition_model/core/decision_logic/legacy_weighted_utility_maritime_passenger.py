@@ -113,16 +113,18 @@ class LegacyWeightedUtilityMaritimePassengerLogic(MaritimePassengerDecisionLogic
         )
         if scenario_cap is not None:
             max_share = clamp(float(scenario_cap))
-        elif (legacy_cap := agent.scenario_value(
-            "maximum_secondary_energy",
-            year,
-            country=agent.operator_country,
-            segment=segment,
-            technology_name=technology_name,
-            secondary_energy_carrier=secondary_carrier,
-            saf_pathway=saf_pathway,
-            default=None,
-        )) is not None:
+        elif (
+            legacy_cap := agent.scenario_value(
+                "maximum_secondary_energy",
+                year,
+                country=agent.operator_country,
+                segment=segment,
+                technology_name=technology_name,
+                secondary_energy_carrier=secondary_carrier,
+                saf_pathway=saf_pathway,
+                default=None,
+            )
+        ) is not None:
             max_share = clamp(float(legacy_cap))
 
         cap_active = agent.scenario_value(
@@ -248,10 +250,9 @@ class LegacyWeightedUtilityMaritimePassengerLogic(MaritimePassengerDecisionLogic
         chargeable_emission = max(reported_emission - covered_emission, 0.0)
         remaining_ets_allowance = max(remaining_ets_allowance - reported_emission, 0.0)
 
-        energy_cost = (
-            primary_energy_quantity * float(primary_price)
-            + secondary_energy_quantity * float(secondary_price)
-        )
+        energy_cost = primary_energy_quantity * float(
+            primary_price
+        ) + secondary_energy_quantity * float(secondary_price)
         emission_cost = chargeable_emission * carbon_price
         return OperationMetrics(
             total_cost=energy_cost + emission_cost,
@@ -309,8 +310,12 @@ class LegacyWeightedUtilityMaritimePassengerLogic(MaritimePassengerDecisionLogic
                 operator_name=agent.operator_name,
                 default=0.0,
             )
-        onboard_revenue = total_occupied_passengers * annual_distance * float(
-            onboard_spending or 0.0,
+        onboard_revenue = (
+            total_occupied_passengers
+            * annual_distance
+            * float(
+                onboard_spending or 0.0,
+            )
         )
         return ticket_revenue + onboard_revenue
 
@@ -338,9 +343,13 @@ class LegacyWeightedUtilityMaritimePassengerLogic(MaritimePassengerDecisionLogic
         total_costs: list[float] = []
         revenues: list[float] = []
         first_year_metrics: OperationMetrics | None = None
-        uses_drop_in_branch = int(technology_row["drop_in_fuel"]) == 1 and float(
-            technology_row["maximum_secondary_energy_share"],
-        ) > 0.0
+        uses_drop_in_branch = (
+            int(technology_row["drop_in_fuel"]) == 1
+            and float(
+                technology_row["maximum_secondary_energy_share"],
+            )
+            > 0.0
+        )
         for offset in range(life_time):
             future_year = min(year + offset, agent.model.scenario.end_year)
             operation_metrics = self.annual_operation_metrics(
@@ -707,10 +716,7 @@ class LegacyWeightedUtilityMaritimePassengerLogic(MaritimePassengerDecisionLogic
             segment_rows = agent.fleet.frame.loc[agent.fleet.frame["segment"] == segment]
             max_endogenous_additions = max(len(segment_rows) * 4, 10)
             additions_made = 0
-            while (
-                residual_passenger_km_gap > 0.0
-                and additions_made < max_endogenous_additions
-            ):
+            while residual_passenger_km_gap > 0.0 and additions_made < max_endogenous_additions:
                 technology_row, evaluation = self._growth_addition_choice(
                     agent,
                     template,

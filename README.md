@@ -97,6 +97,58 @@ Run them manually across the whole repository:
 pre-commit run --all-files
 ```
 
+### Dashboard Setup And Use
+
+If you want to use the NATM Solara/Mesa dashboards, install the optional
+dashboard dependencies:
+
+```powershell
+.venv\Scripts\Activate.ps1
+python -m pip install -e .[dashboard]
+```
+
+Then you can launch any of the four dashboards:
+
+```powershell
+solara run dashboard_examples/aviation_passenger_baseline_dashboard.py
+solara run dashboard_examples/aviation_cargo_baseline_dashboard.py
+solara run dashboard_examples/maritime_cargo_baseline_dashboard.py
+solara run dashboard_examples/maritime_passenger_baseline_dashboard.py
+```
+
+Each dashboard supports two modes inside the browser:
+
+- `Live case`
+- `Saved results`
+
+`Live case` reruns the configured case directly from `data/<case-name>/`.
+
+`Saved results` reads an already generated folder under:
+
+```text
+simulation_results/<your-run-name>/
+```
+
+In the dashboard UI:
+
+1. open the `Dashboard Source` card
+2. choose `Saved results`
+3. select the results folder from the dropdown
+
+The saved-results dropdown only shows folders that contain the expected CSV
+outputs for that application.
+
+If you already installed the dashboard stack and see a `Starlette.__init__()`
+error mentioning `on_startup`, repair the environment with:
+
+```powershell
+python -m pip install "starlette<1" "solara-server[starlette]>=1.40"
+```
+
+For the full dashboard workflow, see:
+
+- `docs/dashboard-guide.md`
+
 ### Run Tests
 
 ```powershell
@@ -154,13 +206,13 @@ Named example presets currently included in [run.py](C:/Manish_REPO/NATM/run.py:
 - `navaero_transition_model/core/database/`: optional SQLite-backed database writing for case inputs and run outputs
 - `navaero_transition_model/core/result_exports/`: exporter classes for detailed simulation result tables
 - `navaero_transition_model/cli.py`: command-line entry point
+- `dashboard_examples/`: small Solara/Mesa dashboard examples
+- `docs/dashboard-guide.md`: how to launch dashboards and switch between live and saved-results mode
 - `docs/architecture.md`: detailed system architecture and runtime flow
 - `docs/aviation-passenger-reference.md`: passenger-specific reference for `aviation_scenario.csv`
 - `docs/aviation-cargo-scenario-reference.md`: cargo-specific reference for `aviation_scenario.csv` in cargo aviation cases
+- `docs/maritime-cargo-reference.md`: cargo-specific reference for `maritime_scenario.csv`
 - `docs/maritime-passenger-reference.md`: passenger-specific reference for `maritime_scenario.csv`
-- `docs/maritime-cargo-render-gap-map.md`: old-vs-new maritime cargo fidelity checklist
-- `docs/aviation-passenger-mesa-port.md`: port plan from the old Melodie aviation-passenger model
-- `docs/aviation-passenger-render-gap-map.md`: strict old-vs-new aviation-passenger fidelity checklist
 - `data/<case-name>/scenario.yaml`: case configuration
 - `data/<case-name>/*.csv`: input data for that case
 
@@ -203,7 +255,12 @@ For a cargo-only view of the same contract, see
 For the maritime-passenger scenario CSV contract, see
 `docs/maritime-passenger-reference.md`.
 
+For the maritime-cargo scenario CSV contract, see
+`docs/maritime-cargo-reference.md`.
+
 For the system-level architecture, see `docs/architecture.md`.
+
+For the dashboard workflow, see `docs/dashboard-guide.md`.
 
 ## What The Model Now Captures
 

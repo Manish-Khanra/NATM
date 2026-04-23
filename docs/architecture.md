@@ -66,6 +66,8 @@ In the current codebase, the active end-to-end path is:
   Detailed output exporters.
 - [sqlite_store.py](C:/Manish_REPO/NATM/navaero_transition_model/core/database/sqlite_store.py:1)
   SQLite persistence for inputs and outputs.
+- [dashboard_examples](C:/Manish_REPO/NATM/dashboard_examples)
+  Solara/Mesa dashboards for live cases and saved results.
 
 ## 3. Runtime Flow
 
@@ -417,7 +419,60 @@ tables such as:
 This split keeps `DataCollector` focused on summary reporting while allowing
 rich domain-specific output tables for analysis.
 
-## 10. SQLite Persistence
+## 10. Dashboard Layer
+
+NATM also includes a Solara/Mesa dashboard layer under
+`dashboard_examples/`.
+
+The dashboards support two modes:
+
+1. `Live case`
+2. `Saved results`
+
+### 10.1 Live case mode
+
+In live mode, the dashboard:
+
+- resolves a case from `data/<case-name>/`
+- instantiates `NATMModel`
+- runs the simulation in the dashboard session
+- visualizes live model and exporter outputs
+
+### 10.2 Saved results mode
+
+In saved-results mode, the dashboard:
+
+- reads previously generated CSV outputs from `simulation_results/<run-name>/`
+- does not rerun the model
+- visualizes the stored outputs directly
+
+This makes the dashboard useful both for:
+
+- quick live experimentation
+- exploring archived runs
+
+### 10.3 Shared dashboard architecture
+
+The dashboard entrypoints for the four current applications are thin wrappers:
+
+- `aviation_passenger_baseline_dashboard.py`
+- `aviation_cargo_baseline_dashboard.py`
+- `maritime_cargo_baseline_dashboard.py`
+- `maritime_passenger_baseline_dashboard.py`
+
+They all use:
+
+- `dashboard_examples/common_case_dashboard.py`
+
+That shared helper provides:
+
+- common live/saved-results switching
+- shared chart layout
+- results-folder loading
+- shared energy conversion for display in `TWh`
+- application-specific chart binding through frame-getter functions
+
+## 11. SQLite Persistence
 
 `SQLiteSimulationStore` writes both inputs and outputs of a run into a SQLite
 database.
@@ -441,7 +496,7 @@ It stores:
 The implementation also includes a Windows/workspace-friendly fallback strategy
 for SQLite journaling issues.
 
-## 11. Case and Configuration Model
+## 12. Case and Configuration Model
 
 The current case structure is:
 
@@ -467,7 +522,7 @@ The YAML is intentionally small and only declares:
 
 Detailed behavior belongs in the CSV inputs, not in the YAML.
 
-## 12. Active vs Future Architecture
+## 13. Active vs Future Architecture
 
 ### Active today
 
@@ -489,7 +544,7 @@ Detailed behavior belongs in the CSV inputs, not in the YAML.
 - richer hub-level or airport-level infrastructure constraints
 - additional agent types such as airports, fuel suppliers, OEMs, or policy agents
 
-## 13. Design Principles
+## 14. Design Principles
 
 The current architecture follows these principles:
 
@@ -500,7 +555,7 @@ The current architecture follows these principles:
 - flat CSV outputs plus optional SQLite for analysis and persistence
 - minimal YAML, richer CSVs
 
-## 14. Current Limitations
+## 15. Current Limitations
 
 The architecture is clean enough for growth, but some boundaries are still
 deliberately simple:
@@ -511,8 +566,9 @@ deliberately simple:
 - market-share allocation is currently fixed-share rather than competitive
 - `run.py` and `cli.py` overlap slightly because one is optimized for daily use
   and the other for command-line control
+- saved-results dashboards currently expect the standard NATM CSV output filenames
 
-## 15. Recommended Reading Order
+## 16. Recommended Reading Order
 
 For someone new to the codebase, this is the best order:
 
@@ -526,12 +582,14 @@ For someone new to the codebase, this is the best order:
 8. [aviation_passenger_airline.py](C:/Manish_REPO/NATM/navaero_transition_model/core/agent_types/aviation_passenger_airline.py:1)
 9. [aviation_cargo_airline.py](C:/Manish_REPO/NATM/navaero_transition_model/core/agent_types/aviation_cargo_airline.py:1)
 10. [maritime_cargo_shipline.py](C:/Manish_REPO/NATM/navaero_transition_model/core/agent_types/maritime_cargo_shipline.py:1)
-11. [legacy_weighted_utility.py](C:/Manish_REPO/NATM/navaero_transition_model/core/decision_logic/legacy_weighted_utility.py:1)
-12. [legacy_weighted_utility_cargo.py](C:/Manish_REPO/NATM/navaero_transition_model/core/decision_logic/legacy_weighted_utility_cargo.py:1)
-13. [legacy_weighted_utility_maritime_cargo.py](C:/Manish_REPO/NATM/navaero_transition_model/core/decision_logic/legacy_weighted_utility_maritime_cargo.py:1)
-14. [fleet.py](C:/Manish_REPO/NATM/navaero_transition_model/core/fleet_management/fleet.py:1)
-15. [aviation_exports.py](C:/Manish_REPO/NATM/navaero_transition_model/core/result_exports/aviation_exports.py:1)
-16. [sqlite_store.py](C:/Manish_REPO/NATM/navaero_transition_model/core/database/sqlite_store.py:1)
+11. [maritime_passenger_shipline.py](C:/Manish_REPO/NATM/navaero_transition_model/core/agent_types/maritime_passenger_shipline.py:1)
+12. [legacy_weighted_utility.py](C:/Manish_REPO/NATM/navaero_transition_model/core/decision_logic/legacy_weighted_utility.py:1)
+13. [legacy_weighted_utility_cargo.py](C:/Manish_REPO/NATM/navaero_transition_model/core/decision_logic/legacy_weighted_utility_cargo.py:1)
+14. [legacy_weighted_utility_maritime_cargo.py](C:/Manish_REPO/NATM/navaero_transition_model/core/decision_logic/legacy_weighted_utility_maritime_cargo.py:1)
+15. [legacy_weighted_utility_maritime_passenger.py](C:/Manish_REPO/NATM/navaero_transition_model/core/decision_logic/legacy_weighted_utility_maritime_passenger.py:1)
+16. [fleet.py](C:/Manish_REPO/NATM/navaero_transition_model/core/fleet_management/fleet.py:1)
+17. [aviation_exports.py](C:/Manish_REPO/NATM/navaero_transition_model/core/result_exports/aviation_exports.py:1)
+18. [sqlite_store.py](C:/Manish_REPO/NATM/navaero_transition_model/core/database/sqlite_store.py:1)
 
 That path follows the same order the system itself uses during a run.
 

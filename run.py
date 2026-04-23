@@ -197,7 +197,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
     # Select the named example to run from AVAILABLE_EXAMPLES above.
-    selected_example = "small_with_maritime_cargo"
+    selected_example = "small_with_aviation_cargo"
 
     # Optional direct case override. Keep as None to use the case from the example.
     selected_case = None

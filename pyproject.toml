@@ -21,6 +21,14 @@ dev = [
     "pytest>=8.0",
     "ruff>=0.6",
 ]
+dashboard = [
+    "altair>=5.0",
+    "matplotlib>=3.8",
+    "networkx>=3.0",
+    "solara>=1.40",
+    "solara-server[starlette]>=1.40",
+    "starlette<1",
+]
 
 [project.scripts]
 natm = "navaero_transition_model.cli:main"
