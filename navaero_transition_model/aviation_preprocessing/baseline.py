@@ -170,7 +170,9 @@ class AviationBaselineBuilder:
                     str(
                         stock_row.get(
                             "current_technology",
-                            technology_catalog.default_for_segment(str(stock_row["segment"])),
+                            technology_catalog.default_for_operation(
+                                segment=str(stock_row["segment"]),
+                            ),
                         )
                     ),
                 )

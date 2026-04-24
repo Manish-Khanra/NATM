@@ -317,7 +317,8 @@ can be a specific aircraft model such as `A320neo`, `A321XLR`, or `B787-9`.
 `segment` remains useful for demand, market-share, planned-delivery, activity,
 and reporting scopes, but it is no longer part of the technology lookup key.
 In the technology catalog, `segment` is optional context or a legacy fallback,
-not part of the unique identifier.
+not part of the unique identifier. The example catalogs still keep it as
+operating-context metadata so defaults and compatibility filters stay readable.
 
 Observed stock, activity, and calibration data are intentionally **not** moved
 into the technology catalog.

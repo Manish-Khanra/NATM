@@ -297,7 +297,9 @@ In technology catalogs, `technology_name` is the unique lookup key. For real
 aviation datasets this can be a specific aircraft model such as `A320neo`,
 `A321XLR`, or `B787-9`. `segment` is still used for demand, market-share,
 planned-delivery, activity, and reporting scopes, but it is not part of the
-technology identity.
+technology identity. The example technology catalogs still include a `segment`
+column as optional operating-context metadata, but the model no longer relies
+on `technology_name + segment` as a composite key.
 
 The `baseline-maritime-cargo-transition` case uses maritime-sector CSV filenames:
 

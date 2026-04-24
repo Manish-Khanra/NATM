@@ -36,8 +36,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help=(
-            "Optional airport metadata CSV for route distances, allocation, "
-            "and country filtering."
+            "Optional airport metadata CSV for route distances, allocation, and country filtering."
         ),
     )
     parser.add_argument(

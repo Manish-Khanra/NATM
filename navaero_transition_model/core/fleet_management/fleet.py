@@ -28,11 +28,15 @@ class Fleet:
     def _prepare(self, start_year: int) -> None:
         if "current_technology" not in self._frame.columns:
             self._frame["current_technology"] = self._frame["segment"].map(
-                self.technology_catalog.default_for_segment,
+                lambda segment: self.technology_catalog.default_for_operation(segment=str(segment)),
             )
         else:
             self._frame["current_technology"] = self._frame["current_technology"].fillna(
-                self._frame["segment"].map(self.technology_catalog.default_for_segment),
+                self._frame["segment"].map(
+                    lambda segment: self.technology_catalog.default_for_operation(
+                        segment=str(segment),
+                    ),
+                ),
             )
 
         self._frame["aircraft_id"] = self._frame["aircraft_id"].astype(int)
@@ -136,7 +140,6 @@ class Fleet:
         for row_index, aircraft in self._frame.iterrows():
             technology_row = self.technology_row(
                 technology_name=str(aircraft["current_technology"]),
-                segment=str(aircraft["segment"]),
             )
             segment = str(aircraft.get("segment", "")).strip().lower()
             if pd.isna(self._frame.loc[row_index, "mean_stage_length_km_base"]):
@@ -187,7 +190,6 @@ class Fleet:
                 continue
             technology_row = self.technology_row(
                 technology_name=str(aircraft["current_technology"]),
-                segment=str(aircraft["segment"]),
             )
             annual_distance = pd.to_numeric(
                 pd.Series([self._frame.loc[row_index, "annual_distance_km_base"]]),
@@ -273,7 +275,6 @@ class Fleet:
                 continue
             technology_row = self.technology_row(
                 technology_name=str(aircraft["current_technology"]),
-                segment=str(aircraft["segment"]),
             )
             operation_metrics = operation_metrics_fn(
                 aircraft,
@@ -377,7 +378,6 @@ class Fleet:
             current_rows.append(
                 self.technology_row(
                     technology_name=str(aircraft["current_technology"]),
-                    segment=str(aircraft["segment"]),
                 ),
             )
         return current_rows

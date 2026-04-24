@@ -475,7 +475,7 @@ class LegacyWeightedUtilityLogic(AviationPassengerDecisionLogic):
         year: int,
         initial_ets_balance: float | None = None,
     ) -> tuple[pd.Series, CandidateEvaluation]:
-        candidates = agent.technology_catalog.candidates()
+        candidates = agent.candidate_technology_rows(aircraft)
         evaluations: list[tuple[pd.Series, CandidateEvaluation]] = []
         for _, technology_row in candidates.iterrows():
             if not self.is_candidate_available(
@@ -497,7 +497,6 @@ class LegacyWeightedUtilityLogic(AviationPassengerDecisionLogic):
         if not evaluations:
             current_row = agent.technology_row(
                 technology_name=str(aircraft["current_technology"]),
-                segment=str(aircraft["segment"]),
             )
             return current_row, self.calc_payback_year(
                 agent,
@@ -652,7 +651,6 @@ class LegacyWeightedUtilityLogic(AviationPassengerDecisionLogic):
         if forced_technology_name:
             technology_row = agent.technology_row(
                 technology_name=forced_technology_name,
-                segment=str(template["segment"]),
             )
             evaluation = self.calc_payback_year(
                 agent,

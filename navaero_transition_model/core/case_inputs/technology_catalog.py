@@ -115,8 +115,32 @@ class TechnologyCatalog:
     def candidates(self) -> pd.DataFrame:
         return self._frame.copy()
 
+    def candidates_for_operation(
+        self,
+        *,
+        segment: str | None = None,
+        minimum_trip_length_km: float | None = None,
+    ) -> pd.DataFrame:
+        candidates = self._frame
+        if minimum_trip_length_km is not None:
+            trip_length = pd.to_numeric(candidates["trip_length_km"], errors="coerce")
+            distance_filtered = candidates.loc[trip_length >= float(minimum_trip_length_km)]
+            if not distance_filtered.empty:
+                candidates = distance_filtered
+
+        normalized_segment = (segment or "").strip().lower()
+        if normalized_segment and "segment" in candidates.columns:
+            segment_series = candidates["segment"].fillna("").astype(str).str.strip().str.lower()
+            segment_filtered = candidates.loc[
+                segment_series.eq("") | segment_series.eq(normalized_segment)
+            ]
+            if not segment_filtered.empty:
+                candidates = segment_filtered
+
+        return candidates.copy()
+
     def candidates_for_segment(self, segment: str) -> pd.DataFrame:
-        return self._frame.loc[self._frame["segment"] == segment].copy()
+        return self.candidates_for_operation(segment=segment)
 
     def row_for(self, technology_name: str, segment: str | None = None) -> pd.Series:
         del segment
@@ -135,10 +159,27 @@ class TechnologyCatalog:
         return self.is_conventional_row(self.row_for(technology_name, segment))
 
     def default_for_segment(self, segment: str) -> str:
-        segment_catalog = self.candidates_for_segment(segment)
+        segment_catalog = self.candidates_for_operation(segment=segment)
         if segment_catalog.empty:
             segment_catalog = self._frame
         conventional = segment_catalog.loc[segment_catalog.apply(self.is_conventional_row, axis=1),]
         if not conventional.empty:
             return str(conventional.iloc[0]["technology_name"])
         return str(segment_catalog.iloc[0]["technology_name"])
+
+    def default_for_operation(
+        self,
+        *,
+        segment: str | None = None,
+        minimum_trip_length_km: float | None = None,
+    ) -> str:
+        candidates = self.candidates_for_operation(
+            segment=segment,
+            minimum_trip_length_km=minimum_trip_length_km,
+        )
+        if candidates.empty:
+            candidates = self._frame
+        conventional = candidates.loc[candidates.apply(self.is_conventional_row, axis=1)]
+        if not conventional.empty:
+            return str(conventional.iloc[0]["technology_name"])
+        return str(candidates.iloc[0]["technology_name"])

@@ -559,7 +559,7 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
         year: int,
         initial_ets_balance: float | None = None,
     ) -> tuple[pd.Series, CandidateEvaluation]:
-        candidates = agent.technology_catalog.candidates()
+        candidates = agent.candidate_technology_rows(vessel)
         evaluations: list[tuple[pd.Series, CandidateEvaluation]] = []
         for _, technology_row in candidates.iterrows():
             if not self.is_candidate_available(agent, technology_row, year, str(vessel["segment"])):
@@ -576,7 +576,6 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
         if not evaluations:
             current_row = agent.technology_row(
                 technology_name=str(vessel["current_technology"]),
-                segment=str(vessel["segment"]),
             )
             return current_row, self.calc_payback_year(
                 agent,
@@ -731,7 +730,6 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
         if forced_technology_name:
             technology_row = agent.technology_row(
                 technology_name=forced_technology_name,
-                segment=str(template["segment"]),
             )
             evaluation = self.calc_payback_year(
                 agent,

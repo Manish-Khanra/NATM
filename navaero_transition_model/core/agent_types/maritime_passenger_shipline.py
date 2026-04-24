@@ -109,6 +109,14 @@ class MaritimePassengerShiplineAgent(BaseOperatorAgent):
         del segment
         return self.technology_catalog.row_for(technology_name)
 
+    def candidate_technology_rows(self, vessel: pd.Series) -> pd.DataFrame:
+        current_row = self.technology_row(str(vessel["current_technology"]))
+        required_stage_length = self.fleet.mean_stage_length_km_for(vessel, current_row)
+        return self.technology_catalog.candidates_for_operation(
+            segment=str(vessel.get("segment", "")),
+            minimum_trip_length_km=required_stage_length,
+        )
+
     def scenario_value(
         self,
         variable_name: str,
@@ -200,8 +208,9 @@ class MaritimePassengerShiplineAgent(BaseOperatorAgent):
         self,
         technology_row: pd.Series,
         year: int,
+        operation_segment: str,
     ) -> float:
-        segment = str(technology_row["segment"])
+        segment = str(operation_segment).strip().lower()
         cabin_capacity = self.passenger_capacity_by_cabin(technology_row)
         total_capacity = max(sum(cabin_capacity.values()), 1.0)
         occupied_capacity = 0.0
@@ -222,7 +231,11 @@ class MaritimePassengerShiplineAgent(BaseOperatorAgent):
         total_capacity = sum(self.passenger_capacity_by_cabin(technology_row).values())
         trip_length = float(technology_row["trip_length_km"])
         trip_days = float(technology_row["trip_days_per_year"])
-        load_factor = self.effective_load_factor(technology_row, year)
+        load_factor = self.effective_load_factor(
+            technology_row,
+            year,
+            str(vessel.get("segment", "")),
+        )
         return total_capacity * trip_length * trip_days * load_factor
 
     def segment_passenger_km_capacity(self, segment: str, year: int) -> float:
@@ -231,7 +244,6 @@ class MaritimePassengerShiplineAgent(BaseOperatorAgent):
         for _, vessel in segment_rows.iterrows():
             technology_row = self.technology_row(
                 technology_name=str(vessel["current_technology"]),
-                segment=str(vessel["segment"]),
             )
             total_capacity += self.vessel_passenger_km_capacity(
                 vessel,

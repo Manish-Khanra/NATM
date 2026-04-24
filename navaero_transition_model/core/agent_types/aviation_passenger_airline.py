@@ -109,6 +109,14 @@ class AviationPassengerAirlineAgent(BaseOperatorAgent):
         del segment
         return self.technology_catalog.row_for(technology_name)
 
+    def candidate_technology_rows(self, aircraft: pd.Series) -> pd.DataFrame:
+        current_row = self.technology_row(str(aircraft["current_technology"]))
+        required_stage_length = self.fleet.mean_stage_length_km_for(aircraft, current_row)
+        return self.technology_catalog.candidates_for_operation(
+            segment=str(aircraft.get("segment", "")),
+            minimum_trip_length_km=required_stage_length,
+        )
+
     def scenario_value(
         self,
         variable_name: str,
@@ -203,7 +211,6 @@ class AviationPassengerAirlineAgent(BaseOperatorAgent):
         for _, aircraft in segment_rows.iterrows():
             technology_row = self.technology_row(
                 technology_name=str(aircraft["current_technology"]),
-                segment=str(aircraft["segment"]),
             )
             total_capacity += self.aircraft_passenger_km_capacity(
                 aircraft,

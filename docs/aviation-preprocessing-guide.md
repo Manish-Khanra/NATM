@@ -445,7 +445,9 @@ For real aviation data this can be a specific model such as `A320neo`,
 `A321XLR`, or `B787-9`, each with its own `kilometer_per_kwh`.
 
 `segment` is still used for demand, market-share, activity fallback, planned
-deliveries, and reporting. It is not part of the technology identity.
+deliveries, and reporting. It is not part of the technology identity. The
+example technology catalogs may still carry a `segment` column as optional
+operating-context metadata, but lookup is name-based.
 
 ## 11. Recommended Workflow
 

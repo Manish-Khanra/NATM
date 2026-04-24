@@ -298,6 +298,24 @@ def test_aviation_passenger_case_loader_reads_three_file_structure() -> None:
     assert "operator_market_share" in set(case_inputs.scenario_long["variable_name"])
 
 
+def test_technology_catalog_lookup_is_name_based_with_optional_segment_metadata() -> None:
+    case_dir = Path(__file__).resolve().parents[1] / "data" / "baseline-transition"
+    catalog = TechnologyCatalog.from_csv(case_dir / "aviation_technology_catalog.csv")
+
+    row = catalog.row_for("kerosene_medium", segment="short")
+    assert row["technology_name"] == "kerosene_medium"
+
+    candidates = catalog.candidates_for_operation(
+        segment="long",
+        minimum_trip_length_km=9000.0,
+    )
+    assert not candidates.empty
+    assert (pd.to_numeric(candidates["trip_length_km"], errors="coerce") >= 9000.0).all()
+    assert (
+        candidates["segment"].fillna("").astype(str).str.strip().str.lower().isin(["", "long"])
+    ).all()
+
+
 def test_maritime_passenger_scenario_runs_end_to_end() -> None:
     scenario = load_maritime_passenger_scenario()
     model = NATMModel(scenario, seed=42)

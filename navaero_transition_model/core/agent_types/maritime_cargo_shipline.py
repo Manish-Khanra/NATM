@@ -109,6 +109,14 @@ class MaritimeCargoShiplineAgent(BaseOperatorAgent):
         del segment
         return self.technology_catalog.row_for(technology_name)
 
+    def candidate_technology_rows(self, vessel: pd.Series) -> pd.DataFrame:
+        current_row = self.technology_row(str(vessel["current_technology"]))
+        required_stage_length = self.fleet.mean_stage_length_km_for(vessel, current_row)
+        return self.technology_catalog.candidates_for_operation(
+            segment=str(vessel.get("segment", "")),
+            minimum_trip_length_km=required_stage_length,
+        )
+
     def scenario_value(
         self,
         variable_name: str,
@@ -184,7 +192,6 @@ class MaritimeCargoShiplineAgent(BaseOperatorAgent):
         for _, vessel in segment_rows.iterrows():
             technology_row = self.technology_row(
                 technology_name=str(vessel["current_technology"]),
-                segment=str(vessel["segment"]),
             )
             total_capacity += self.vessel_freight_tonne_km_capacity(
                 vessel,
