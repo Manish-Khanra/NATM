@@ -12,6 +12,7 @@ dependencies = [
     "mesa>=3.1",
     "numpy>=1.26",
     "pandas>=2.0",
+    "pyarrow>=15.0",
     "PyYAML>=6.0",
 ]
 
@@ -33,6 +34,7 @@ dashboard = [
 [project.scripts]
 natm = "navaero_transition_model.cli:main"
 navaero-transition-model = "navaero_transition_model.cli:main"
+natm-aviation-preprocess = "navaero_transition_model.aviation_preprocessing.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "."}

@@ -106,7 +106,8 @@ class AviationCargoAirlineAgent(BaseOperatorAgent):
         return value or default
 
     def technology_row(self, technology_name: str, segment: str | None = None) -> pd.Series:
-        return self.technology_catalog.row_for(technology_name, segment)
+        del segment
+        return self.technology_catalog.row_for(technology_name)
 
     def scenario_value(
         self,
@@ -163,11 +164,10 @@ class AviationCargoAirlineAgent(BaseOperatorAgent):
             return 0.0
 
         payload_capacity_kg = float(technology_row.get("payload_capacity_kg", 0.0) or 0.0)
-        trip_length = float(technology_row["trip_length_km"])
-        trip_days = float(technology_row["trip_days_per_year"])
+        annual_distance = self.fleet.annual_distance_km_for(aircraft, technology_row)
         load_factor = self.effective_cargo_load_factor(year)
         payload_capacity_tonnes = payload_capacity_kg / 1000.0
-        return payload_capacity_tonnes * trip_length * trip_days * load_factor
+        return payload_capacity_tonnes * annual_distance * load_factor
 
     def segment_freight_tonne_km_capacity(self, segment: str, year: int) -> float:
         segment_rows = self.fleet.frame.loc[self.fleet.frame["segment"] == segment]

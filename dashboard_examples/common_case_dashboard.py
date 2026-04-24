@@ -69,8 +69,7 @@ def _show_figure(fig: Figure) -> None:
     solara.HTML(
         tag="div",
         unsafe_innerHTML=(
-            f'<img src="data:image/png;base64,{data}"'
-            ' style="width:100%;height:auto;display:block">'
+            f'<img src="data:image/png;base64,{data}" style="width:100%;height:auto;display:block">'
         ),
     )
 
@@ -377,10 +376,12 @@ def build_case_dashboard(
             carrier_frame = (
                 primary.groupby("carrier", as_index=False)["energy"].sum()
                 if secondary.empty
-                else pd.concat([primary, secondary], ignore_index=True).groupby(
+                else pd.concat([primary, secondary], ignore_index=True)
+                .groupby(
                     "carrier",
                     as_index=False,
-                )["energy"].sum()
+                )["energy"]
+                .sum()
             )
             carrier_frame["energy_twh"] = carrier_frame["energy"].astype(float) / KWH_PER_TWH
             carrier_frame = carrier_frame.sort_values("energy", ascending=False)
@@ -677,10 +678,12 @@ def build_case_dashboard(
             carrier_frame = (
                 primary.groupby("carrier", as_index=False)["energy"].sum()
                 if secondary.empty
-                else pd.concat([primary, secondary], ignore_index=True).groupby(
+                else pd.concat([primary, secondary], ignore_index=True)
+                .groupby(
                     "carrier",
                     as_index=False,
-                )["energy"].sum()
+                )["energy"]
+                .sum()
             )
             carrier_frame["energy_twh"] = carrier_frame["energy"].astype(float) / KWH_PER_TWH
             carrier_frame = carrier_frame.sort_values("energy", ascending=False)

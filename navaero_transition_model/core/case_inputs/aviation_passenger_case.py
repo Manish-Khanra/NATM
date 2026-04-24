@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from navaero_transition_model.aviation_preprocessing.common import snake_case_columns
+from navaero_transition_model.aviation_preprocessing.stock_cleaner import AviationStockCleaner
 from navaero_transition_model.core.case_inputs.scenario_table import ScenarioTable
 from navaero_transition_model.core.case_inputs.technology_catalog import TechnologyCatalog
 
@@ -43,6 +45,25 @@ FLEET_REQUIRED_COLUMNS = (
     "main_hub",
 )
 
+EMPIRICAL_ACTIVITY_COLUMNS = (
+    "registration",
+    "icao24",
+    "serial_number",
+    "is_german_flag",
+    "annual_flights_base",
+    "annual_distance_km_base",
+    "domestic_activity_share_base",
+    "international_activity_share_base",
+    "mean_stage_length_km_base",
+    "fuel_burn_per_year_base",
+    "baseline_energy_demand",
+    "airport_allocation_group",
+    "main_hub_base",
+    "match_confidence",
+    "match_method",
+    "activity_assignment_method",
+)
+
 
 def _read_csv(path: str | Path) -> pd.DataFrame:
     csv_path = Path(path)
@@ -66,15 +87,15 @@ def _ensure_columns(
 
 
 def normalize_aviation_fleet_stock(path: str | Path) -> pd.DataFrame:
-    dataframe = _read_csv(path).rename(columns=FLEET_COLUMN_ALIASES)
-    _ensure_columns(dataframe, FLEET_REQUIRED_COLUMNS, "aviation fleet stock")
-
-    normalized = dataframe.copy()
-    for column in normalized.select_dtypes(include=["object", "string"]).columns:
-        normalized[column] = normalized[column].fillna("").astype(str).str.strip()
-    normalized["segment"] = normalized["haul"].str.lower().str.replace("-haul", "", regex=False)
+    normalized = AviationStockCleaner().clean(path)
+    _ensure_columns(normalized, FLEET_REQUIRED_COLUMNS, "aviation fleet stock")
     normalized["is_passenger"] = (
-        normalized.get("config_type", "Pax").astype(str).str.lower().eq("pax")
+        normalized.get("config_type", "Pax")
+        .astype(str)
+        .str.lower()
+        .eq(
+            "pax",
+        )
     )
     if "investment_logic" not in normalized.columns:
         normalized["investment_logic"] = "legacy_weighted_utility"
@@ -90,6 +111,110 @@ def normalize_aviation_fleet_stock(path: str | Path) -> pd.DataFrame:
     return normalized.reset_index(drop=True)
 
 
+def _load_optional_activity_profiles(path: str | Path) -> pd.DataFrame:
+    activity_path = Path(path)
+    if not activity_path.exists():
+        return pd.DataFrame()
+    dataframe = pd.read_csv(activity_path)
+    if dataframe.empty:
+        return pd.DataFrame()
+    normalized = snake_case_columns(dataframe)
+    for column in normalized.select_dtypes(include=["object", "string"]).columns:
+        normalized[column] = normalized[column].fillna("").astype(str).str.strip()
+    return normalized.reset_index(drop=True)
+
+
+def _merge_optional_activity_profiles(
+    fleet_frame: pd.DataFrame,
+    activity_profiles: pd.DataFrame,
+) -> pd.DataFrame:
+    if activity_profiles.empty:
+        return fleet_frame
+
+    merged = fleet_frame.copy()
+    available_activity_columns = [
+        column for column in EMPIRICAL_ACTIVITY_COLUMNS if column in activity_profiles.columns
+    ]
+    if not available_activity_columns:
+        return merged
+
+    if "aircraft_id" in activity_profiles.columns:
+        profile_by_id = activity_profiles[
+            ["aircraft_id"] + available_activity_columns
+        ].drop_duplicates(
+            subset=["aircraft_id"],
+            keep="first",
+        )
+        merged = merged.merge(
+            profile_by_id, on="aircraft_id", how="left", suffixes=("", "_profile")
+        )
+        for column in available_activity_columns:
+            profile_column = f"{column}_profile"
+            if profile_column in merged.columns:
+                merged[column] = merged[column].combine_first(merged[profile_column])
+                merged = merged.drop(columns=profile_column)
+
+    def _fill_from_key(key_column: str) -> None:
+        if key_column not in merged.columns or key_column not in activity_profiles.columns:
+            return
+        profile_lookup = (
+            activity_profiles.loc[
+                activity_profiles[key_column].astype(str).str.strip() != "",
+                [key_column] + available_activity_columns,
+            ]
+            .drop_duplicates(subset=[key_column], keep="first")
+            .set_index(key_column)
+        )
+        for column in available_activity_columns:
+            missing_mask = merged[column].isna()
+            if not missing_mask.any():
+                continue
+            merged.loc[missing_mask, column] = merged.loc[missing_mask, key_column].map(
+                profile_lookup[column],
+            )
+
+    _fill_from_key("registration")
+    _fill_from_key("icao24")
+
+    if "aircraft_type" in activity_profiles.columns:
+        for column in available_activity_columns:
+            missing_mask = merged[column].isna()
+            if not missing_mask.any():
+                continue
+            type_defaults = (
+                activity_profiles.loc[
+                    activity_profiles["aircraft_type"].astype(str).str.strip() != "",
+                    ["aircraft_type", column],
+                ]
+                .dropna(subset=[column])
+                .groupby("aircraft_type", dropna=False)[column]
+                .first()
+            )
+            merged.loc[missing_mask, column] = merged.loc[missing_mask, "aircraft_type"].map(
+                type_defaults,
+            )
+
+    if "segment" in activity_profiles.columns:
+        for column in available_activity_columns:
+            missing_mask = merged[column].isna()
+            if not missing_mask.any():
+                continue
+            segment_defaults = (
+                activity_profiles.loc[
+                    activity_profiles["segment"].astype(str).str.strip() != "",
+                    ["segment", column],
+                ]
+                .dropna(subset=[column])
+                .groupby("segment", dropna=False)[column]
+                .first()
+            )
+            merged.loc[missing_mask, column] = merged.loc[missing_mask, "segment"].map(
+                segment_defaults,
+            )
+
+    return merged.reset_index(drop=True)
+
+
 class AviationPassengerCaseData:
     def __init__(
         self,
@@ -97,17 +222,25 @@ class AviationPassengerCaseData:
         fleet_frame: pd.DataFrame,
         technology_catalog: TechnologyCatalog,
         scenario_table: ScenarioTable,
+        activity_profiles_frame: pd.DataFrame | None = None,
         case_dir: Path | None = None,
     ) -> None:
         self.case_dir = case_dir
         self.fleet_frame = fleet_frame.reset_index(drop=True).copy()
         self.technology_catalog = technology_catalog
         self.scenario_table = scenario_table
+        self.activity_profiles_frame = (
+            pd.DataFrame() if activity_profiles_frame is None else activity_profiles_frame.copy()
+        )
 
     @classmethod
     def from_directory(cls, case_path: str | Path) -> AviationPassengerCaseData:
         case_dir = Path(case_path)
         fleet_frame = normalize_aviation_fleet_stock(case_dir / "aviation_fleet_stock.csv")
+        activity_profiles_frame = _load_optional_activity_profiles(
+            case_dir / "aviation_activity_profiles.csv",
+        )
+        fleet_frame = _merge_optional_activity_profiles(fleet_frame, activity_profiles_frame)
         technology_catalog = TechnologyCatalog.from_csv(
             case_dir / "aviation_technology_catalog.csv",
         )
@@ -116,6 +249,7 @@ class AviationPassengerCaseData:
             fleet_frame=fleet_frame,
             technology_catalog=technology_catalog,
             scenario_table=scenario_table,
+            activity_profiles_frame=activity_profiles_frame,
             case_dir=case_dir,
         )
 
@@ -130,6 +264,10 @@ class AviationPassengerCaseData:
     @property
     def scenario_long(self) -> pd.DataFrame:
         return self.scenario_table.to_long_frame()
+
+    @property
+    def activity_profiles(self) -> pd.DataFrame:
+        return self.activity_profiles_frame.copy()
 
     def grouped_operator_fleet(self):
         return self.fleet_frame.groupby(["operator_name", "operator_country"], sort=True)

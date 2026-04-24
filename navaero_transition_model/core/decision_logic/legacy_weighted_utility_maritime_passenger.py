@@ -74,13 +74,14 @@ class LegacyWeightedUtilityMaritimePassengerLogic(MaritimePassengerDecisionLogic
         agent: MaritimePassengerShiplineAgent,
         technology_row: pd.Series,
         year: int,
+        operation_segment: str,
     ) -> float:
         scenario_value = agent.scenario_value(
             "reported_emission",
             year,
             country=agent.operator_country,
             operator_name=agent.operator_name,
-            segment=clean_scope_value(technology_row["segment"]),
+            segment=clean_scope_value(operation_segment),
             technology_name=clean_scope_value(technology_row["technology_name"]),
             default=None,
         )
@@ -96,8 +97,9 @@ class LegacyWeightedUtilityMaritimePassengerLogic(MaritimePassengerDecisionLogic
         agent: MaritimePassengerShiplineAgent,
         technology_row: pd.Series,
         year: int,
+        operation_segment: str,
     ) -> float:
-        segment = clean_scope_value(technology_row["segment"])
+        segment = clean_scope_value(operation_segment)
         technology_name = clean_scope_value(technology_row["technology_name"])
         secondary_carrier = clean_scope_value(technology_row.get("secondary_energy_carrier", ""))
         saf_pathway = clean_scope_value(technology_row.get("saf_pathway", ""))
@@ -191,7 +193,13 @@ class LegacyWeightedUtilityMaritimePassengerLogic(MaritimePassengerDecisionLogic
         total_distance = trip_length * trip_days
         total_energy = total_distance / kilometer_per_kwh
 
-        secondary_share = self.effective_secondary_share(agent, technology_row, year)
+        operation_segment = clean_scope_value(vessel["segment"])
+        secondary_share = self.effective_secondary_share(
+            agent,
+            technology_row,
+            year,
+            operation_segment,
+        )
         primary_energy_quantity = total_energy * (1.0 - secondary_share)
         secondary_energy_quantity = total_energy * secondary_share
 
@@ -240,6 +248,7 @@ class LegacyWeightedUtilityMaritimePassengerLogic(MaritimePassengerDecisionLogic
             agent,
             technology_row,
             year,
+            operation_segment,
         )
 
         if free_ets_balance is None:
@@ -277,8 +286,9 @@ class LegacyWeightedUtilityMaritimePassengerLogic(MaritimePassengerDecisionLogic
         agent: MaritimePassengerShiplineAgent,
         technology_row: pd.Series,
         year: int,
+        operation_segment: str,
     ) -> float:
-        segment = clean_scope_value(technology_row["segment"])
+        segment = clean_scope_value(operation_segment)
         annual_distance = float(technology_row["trip_length_km"]) * float(
             technology_row["trip_days_per_year"],
         )
@@ -331,7 +341,7 @@ class LegacyWeightedUtilityMaritimePassengerLogic(MaritimePassengerDecisionLogic
         dynamic_price_index = agent.scenario_value(
             "technology_dynamic_price_index",
             year,
-            segment=clean_scope_value(technology_row["segment"]),
+            segment=clean_scope_value(vessel["segment"]),
             technology_name=clean_scope_value(technology_row["technology_name"]),
             default=0.0,
         )
@@ -361,7 +371,12 @@ class LegacyWeightedUtilityMaritimePassengerLogic(MaritimePassengerDecisionLogic
             )
             if offset == 0:
                 first_year_metrics = operation_metrics
-            revenue = self.annual_revenue(agent, technology_row, future_year)
+            revenue = self.annual_revenue(
+                agent,
+                technology_row,
+                future_year,
+                clean_scope_value(vessel["segment"]),
+            )
             maintenance_cost = revenue * float(technology_row["maintenance_cost_share"])
             crew_cost = revenue * 0.24
             port_fees = revenue * 0.10
@@ -530,9 +545,10 @@ class LegacyWeightedUtilityMaritimePassengerLogic(MaritimePassengerDecisionLogic
         agent: MaritimePassengerShiplineAgent,
         technology_row: pd.Series,
         year: int,
+        operation_segment: str,
     ) -> bool:
         technology_name = clean_scope_value(technology_row["technology_name"])
-        segment = clean_scope_value(technology_row["segment"])
+        segment = clean_scope_value(operation_segment)
         service_entry_year = technology_row.get("service_entry_year")
         if pd.notna(service_entry_year) and str(service_entry_year).strip() != "":
             if year < int(float(service_entry_year)):
@@ -575,10 +591,10 @@ class LegacyWeightedUtilityMaritimePassengerLogic(MaritimePassengerDecisionLogic
         year: int,
         initial_ets_balance: float | None = None,
     ) -> tuple[pd.Series, CandidateEvaluation]:
-        candidates = agent.technology_catalog.candidates_for_segment(str(vessel["segment"]))
+        candidates = agent.technology_catalog.candidates()
         evaluations: list[tuple[pd.Series, CandidateEvaluation]] = []
         for _, technology_row in candidates.iterrows():
-            if not self.is_candidate_available(agent, technology_row, year):
+            if not self.is_candidate_available(agent, technology_row, year, str(vessel["segment"])):
                 continue
             evaluation = self.calc_payback_year(
                 agent,

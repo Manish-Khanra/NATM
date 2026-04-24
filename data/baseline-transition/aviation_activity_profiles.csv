@@ -1,0 +1,14 @@
+aircraft_id,registration,icao24,operator_name,aircraft_type,segment,annual_flights_base,annual_distance_km_base,domestic_activity_share_base,international_activity_share_base,mean_stage_length_km_base,airport_allocation_group,main_hub_base,activity_assignment_method,baseline_energy_demand,fuel_burn_per_year_base
+321,D-AIAB,3c6444,Lufthansa,Airbus A319-100,medium,2.0,599.7226882973653,,,,medium,Frankfurt,registration,2068.009269990915,2068.009269990915
+3242,D-AIAB,3c6444,Lufthansa,Airbus A319-100,medium,2.0,599.7226882973653,,,,medium,Frankfurt,registration,2068.009269990915,2068.009269990915
+353,D-AIAB,3c6444,Lufthansa,Airbus A319-100,medium,2.0,599.7226882973653,,,,medium,Frankfurt,registration,2068.009269990915,2068.009269990915
+1241,D-AIAB,3c6444,Lufthansa,Airbus A319-100,medium,2.0,599.7226882973653,,,,medium,Frankfurt,registration,2068.009269990915,2068.009269990915
+7101,D-AIXA,3c6701,Eurowings,Airbus A320-200,short,2.0,2172.264431042415,,,,short,Dusseldorf,registration,6389.01303247769,6389.01303247769
+7102,D-AIXA,3c6701,Eurowings,Airbus A320-200,short,2.0,2172.264431042415,,,,short,Dusseldorf,registration,6389.01303247769,6389.01303247769
+7103,,,Eurowings,Airbus A321-200,medium,0.0,0.0,,,,medium,Dusseldorf,segment,,
+8801,,,Air France,Boeing 777-300ER,long,0.0,0.0,,,,long,Paris CDG,segment,,
+8802,F-HRZA,39bd24,Air France,Airbus A350-900,long,1.0,448.7765919787179,,,,long,Paris CDG,registration,2137.031390374847,2137.031390374847
+8803,,,Air France,Airbus A320-200,short,0.0,0.0,,,,short,Paris CDG,segment,,
+9901,,,Ryanair,Boeing 737-800,short,0.0,0.0,,,,short,Dublin,segment,,
+9902,,,Ryanair,Boeing 737-8200,short,0.0,0.0,,,,short,Dublin,segment,,
+9903,,,Ryanair,Boeing 737-800,short,0.0,0.0,,,,short,Dublin,segment,,

@@ -97,6 +97,68 @@ Run them manually across the whole repository:
 pre-commit run --all-files
 ```
 
+### Aviation Preprocessing Workflow
+
+NATM now also includes a dedicated aviation data-ingestion and preprocessing
+layer for building data-grounded baseline aviation inputs from:
+
+- fleet stock tables
+- OpenSky aircraft metadata
+- OpenSky / Zenodo monthly flight lists
+- airport metadata
+- Germany calibration targets
+
+The preprocessing code is separate from the simulation core and lives in:
+
+```text
+navaero_transition_model/aviation_preprocessing/
+```
+
+Typical processed outputs are written to:
+
+```text
+data/processed/aviation/
+```
+
+You can run the preprocessing CLI with a synthetic example like this:
+
+```powershell
+.venv\Scripts\Activate.ps1
+natm-aviation-preprocess `
+  --stock-input data\baseline-transition\aviation_fleet_stock.csv `
+  --opensky-raw data\examples\aviation_preprocessing\opensky_aircraft_db_sample.csv `
+  --flightlist-folder data\examples\aviation_preprocessing\opensky_flightlists `
+  --airport-metadata data\examples\aviation_preprocessing\airports_sample.csv `
+  --technology-catalog data\baseline-transition\aviation_technology_catalog.csv `
+  --calibration-input data\examples\aviation_preprocessing\germany_calibration_input.csv
+```
+
+You can also run the same synthetic preprocessing flow from `run.py`:
+
+```powershell
+python run.py --mode aviation_preprocessing --preprocess-example synthetic_aviation_preprocessing
+```
+
+Or in VS Code by editing the small config block in [run.py](C:/Manish_REPO/NATM/run.py:1):
+
+```python
+selected_mode = "aviation_preprocessing"
+selected_preprocessing_example = "synthetic_aviation_preprocessing"
+```
+
+The bridge file into the existing aviation model is:
+
+```text
+data/<case-name>/aviation_activity_profiles.csv
+```
+
+If present in a case folder, NATM merges it onto the aviation fleet stock
+baseline during case loading.
+
+For the full preprocessing workflow, outputs, and architecture notes, see:
+
+- `docs/aviation-preprocessing-guide.md`
+
 ### Dashboard Setup And Use
 
 If you want to use the NATM Solara/Mesa dashboards, install the optional
@@ -195,6 +257,7 @@ Named example presets currently included in [run.py](C:/Manish_REPO/NATM/run.py:
 ## Project Layout
 
 - `navaero_transition_model/core/scenario.py`: scenario schema and YAML loader
+- `navaero_transition_model/aviation_preprocessing/`: aviation ingestion, enrichment, activity profiling, allocation, calibration, and baseline-building workflow
 - `navaero_transition_model/core/policy.py`: plain Python policy/config objects and yearly policy signals
 - `navaero_transition_model/core/loaders/`: loader classes and convenience functions for case ingestion
 - `navaero_transition_model/core/agent_types/`: parent and specialized Mesa agent classes
@@ -208,6 +271,7 @@ Named example presets currently included in [run.py](C:/Manish_REPO/NATM/run.py:
 - `navaero_transition_model/cli.py`: command-line entry point
 - `dashboard_examples/`: small Solara/Mesa dashboard examples
 - `docs/dashboard-guide.md`: how to launch dashboards and switch between live and saved-results mode
+- `docs/aviation-preprocessing-guide.md`: aviation preprocessing architecture, outputs, and CLI usage
 - `docs/architecture.md`: detailed system architecture and runtime flow
 - `docs/aviation-passenger-reference.md`: passenger-specific reference for `aviation_scenario.csv`
 - `docs/aviation-cargo-scenario-reference.md`: cargo-specific reference for `aviation_scenario.csv` in cargo aviation cases
@@ -228,6 +292,12 @@ The `baseline-cargo-transition` case uses the same aviation CSV filenames:
 - `aviation_fleet_stock.csv`
 - `aviation_technology_catalog.csv`
 - `aviation_scenario.csv`
+
+In technology catalogs, `technology_name` is the unique lookup key. For real
+aviation datasets this can be a specific aircraft model such as `A320neo`,
+`A321XLR`, or `B787-9`. `segment` is still used for demand, market-share,
+planned-delivery, activity, and reporting scopes, but it is not part of the
+technology identity.
 
 The `baseline-maritime-cargo-transition` case uses maritime-sector CSV filenames:
 

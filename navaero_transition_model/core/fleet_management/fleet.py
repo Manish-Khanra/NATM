@@ -56,29 +56,194 @@ class Fleet:
         self._frame["primary_energy_carrier"] = self._frame.apply(
             lambda aircraft: self.technology_catalog.row_for(
                 technology_name=str(aircraft["current_technology"]),
-                segment=str(aircraft["segment"]),
             )["primary_energy_carrier"],
             axis=1,
         )
         self._frame["secondary_energy_carrier"] = self._frame.apply(
             lambda aircraft: self.technology_catalog.row_for(
                 technology_name=str(aircraft["current_technology"]),
-                segment=str(aircraft["segment"]),
             )["secondary_energy_carrier"],
             axis=1,
         )
         self._frame["saf_pathway"] = self._frame.apply(
             lambda aircraft: self.technology_catalog.row_for(
                 technology_name=str(aircraft["current_technology"]),
-                segment=str(aircraft["segment"]),
             )["saf_pathway"],
             axis=1,
         )
+        self.assign_baseline_activity_profiles()
+        self.apply_activity_fallbacks()
+        self.estimate_baseline_energy_demand()
+
+    def assign_baseline_activity_profiles(self) -> None:
+        default_columns = {
+            "registration": pd.NA,
+            "icao24": pd.NA,
+            "is_german_flag": pd.NA,
+            "annual_flights_base": pd.NA,
+            "annual_distance_km_base": pd.NA,
+            "domestic_activity_share_base": pd.NA,
+            "international_activity_share_base": pd.NA,
+            "mean_stage_length_km_base": pd.NA,
+            "fuel_burn_per_year_base": pd.NA,
+            "baseline_energy_demand": pd.NA,
+            "airport_allocation_group": pd.NA,
+            "main_hub_base": pd.NA,
+            "match_confidence": pd.NA,
+            "match_method": pd.NA,
+            "activity_assignment_method": pd.NA,
+        }
+        for column, default in default_columns.items():
+            if column not in self._frame.columns:
+                self._frame[column] = default
+        self._frame["annual_flights_base"] = pd.to_numeric(
+            self._frame["annual_flights_base"],
+            errors="coerce",
+        )
+        self._frame["annual_distance_km_base"] = pd.to_numeric(
+            self._frame["annual_distance_km_base"],
+            errors="coerce",
+        )
+        self._frame["domestic_activity_share_base"] = pd.to_numeric(
+            self._frame["domestic_activity_share_base"],
+            errors="coerce",
+        )
+        self._frame["international_activity_share_base"] = pd.to_numeric(
+            self._frame["international_activity_share_base"],
+            errors="coerce",
+        )
+        self._frame["mean_stage_length_km_base"] = pd.to_numeric(
+            self._frame["mean_stage_length_km_base"],
+            errors="coerce",
+        )
+        self._frame["fuel_burn_per_year_base"] = pd.to_numeric(
+            self._frame["fuel_burn_per_year_base"],
+            errors="coerce",
+        )
+        self._frame["baseline_energy_demand"] = pd.to_numeric(
+            self._frame["baseline_energy_demand"],
+            errors="coerce",
+        )
+        self._frame["match_confidence"] = pd.to_numeric(
+            self._frame["match_confidence"],
+            errors="coerce",
+        )
+        self._frame["main_hub_base"] = self._frame["main_hub_base"].combine_first(
+            self._frame.get("main_hub", pd.Series(index=self._frame.index, dtype=object)),
+        )
+
+    def apply_activity_fallbacks(self) -> None:
+        for row_index, aircraft in self._frame.iterrows():
+            technology_row = self.technology_row(
+                technology_name=str(aircraft["current_technology"]),
+                segment=str(aircraft["segment"]),
+            )
+            segment = str(aircraft.get("segment", "")).strip().lower()
+            if pd.isna(self._frame.loc[row_index, "mean_stage_length_km_base"]):
+                self._frame.loc[row_index, "mean_stage_length_km_base"] = float(
+                    technology_row["trip_length_km"],
+                )
+            if pd.isna(self._frame.loc[row_index, "annual_flights_base"]):
+                self._frame.loc[row_index, "annual_flights_base"] = float(
+                    technology_row["trip_days_per_year"],
+                )
+            if pd.isna(self._frame.loc[row_index, "annual_distance_km_base"]):
+                self._frame.loc[row_index, "annual_distance_km_base"] = float(
+                    self._frame.loc[row_index, "annual_flights_base"]
+                ) * float(self._frame.loc[row_index, "mean_stage_length_km_base"])
+            if pd.isna(self._frame.loc[row_index, "domestic_activity_share_base"]):
+                if segment == "short":
+                    domestic_share = 0.65
+                elif segment == "medium":
+                    domestic_share = 0.25
+                else:
+                    domestic_share = 0.0
+                self._frame.loc[row_index, "domestic_activity_share_base"] = domestic_share
+            if pd.isna(self._frame.loc[row_index, "international_activity_share_base"]):
+                domestic_share = float(
+                    self._frame.loc[row_index, "domestic_activity_share_base"] or 0.0,
+                )
+                self._frame.loc[row_index, "international_activity_share_base"] = max(
+                    1.0 - domestic_share,
+                    0.0,
+                )
+            if pd.isna(self._frame.loc[row_index, "airport_allocation_group"]):
+                self._frame.loc[row_index, "airport_allocation_group"] = (
+                    self._frame.loc[row_index, "main_hub_base"]
+                    if pd.notna(self._frame.loc[row_index, "main_hub_base"])
+                    else segment
+                )
+            if pd.isna(self._frame.loc[row_index, "activity_assignment_method"]):
+                self._frame.loc[row_index, "activity_assignment_method"] = "fallback_default"
+
+    def estimate_baseline_energy_demand(self) -> None:
+        for row_index, aircraft in self._frame.iterrows():
+            if pd.notna(self._frame.loc[row_index, "baseline_energy_demand"]):
+                if pd.isna(self._frame.loc[row_index, "fuel_burn_per_year_base"]):
+                    self._frame.loc[row_index, "fuel_burn_per_year_base"] = self._frame.loc[
+                        row_index,
+                        "baseline_energy_demand",
+                    ]
+                continue
+            technology_row = self.technology_row(
+                technology_name=str(aircraft["current_technology"]),
+                segment=str(aircraft["segment"]),
+            )
+            annual_distance = pd.to_numeric(
+                pd.Series([self._frame.loc[row_index, "annual_distance_km_base"]]),
+                errors="coerce",
+            ).iloc[0]
+            if pd.isna(annual_distance):
+                continue
+            kilometer_per_kwh = max(float(technology_row["kilometer_per_kwh"]), 1e-6)
+            baseline_energy = float(annual_distance) / kilometer_per_kwh
+            self._frame.loc[row_index, "baseline_energy_demand"] = baseline_energy
+            if pd.isna(self._frame.loc[row_index, "fuel_burn_per_year_base"]):
+                self._frame.loc[row_index, "fuel_burn_per_year_base"] = baseline_energy
+
+    def annual_flights_for(self, aircraft: pd.Series, technology_row: pd.Series) -> float:
+        annual_flights = pd.to_numeric(
+            pd.Series([aircraft.get("annual_flights_base", pd.NA)]),
+            errors="coerce",
+        ).iloc[0]
+        if pd.notna(annual_flights):
+            return float(annual_flights)
+        return float(technology_row["trip_days_per_year"])
+
+    def mean_stage_length_km_for(self, aircraft: pd.Series, technology_row: pd.Series) -> float:
+        stage_length = pd.to_numeric(
+            pd.Series([aircraft.get("mean_stage_length_km_base", pd.NA)]),
+            errors="coerce",
+        ).iloc[0]
+        if pd.notna(stage_length):
+            return float(stage_length)
+        return float(technology_row["trip_length_km"])
+
+    def annual_distance_km_for(self, aircraft: pd.Series, technology_row: pd.Series) -> float:
+        annual_distance = pd.to_numeric(
+            pd.Series([aircraft.get("annual_distance_km_base", pd.NA)]),
+            errors="coerce",
+        ).iloc[0]
+        if pd.notna(annual_distance):
+            return float(annual_distance)
+        return self.annual_flights_for(aircraft, technology_row) * self.mean_stage_length_km_for(
+            aircraft,
+            technology_row,
+        )
+
+    def baseline_energy_demand_for(self, aircraft: pd.Series, technology_row: pd.Series) -> float:
+        baseline_energy = pd.to_numeric(
+            pd.Series([aircraft.get("baseline_energy_demand", pd.NA)]),
+            errors="coerce",
+        ).iloc[0]
+        if pd.notna(baseline_energy):
+            return float(baseline_energy)
+        kilometer_per_kwh = max(float(technology_row["kilometer_per_kwh"]), 1e-6)
+        return self.annual_distance_km_for(aircraft, technology_row) / kilometer_per_kwh
 
     def _initial_replacement_year(self, aircraft: pd.Series, start_year: int) -> int:
         technology = self.technology_catalog.row_for(
             technology_name=str(aircraft["current_technology"]),
-            segment=str(aircraft["segment"]),
         )
         age = float(
             aircraft.get(
@@ -90,7 +255,8 @@ class Fleet:
         return start_year + remaining_lifetime
 
     def technology_row(self, technology_name: str, segment: str | None = None) -> pd.Series:
-        return self.technology_catalog.row_for(technology_name, segment)
+        del segment
+        return self.technology_catalog.row_for(technology_name)
 
     def update_operation_metrics(
         self,
@@ -142,7 +308,6 @@ class Fleet:
         for row_index, aircraft in self._frame.iterrows():
             is_conventional = self.technology_catalog.is_conventional(
                 str(aircraft["current_technology"]),
-                str(aircraft["segment"]),
             )
             due_now = int(aircraft["replacement_year"]) <= year
             early_replacement = (

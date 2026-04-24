@@ -1,0 +1,4 @@
+typecode,annual_departures,average_route_distance_km,median_route_distance_km,domestic_share,international_share,short_haul_share,medium_haul_share,long_haul_share,annual_distance_km
+A319,2.0,299.86134414868263,299.86134414868263,1.0,0.0,1.0,0.0,0.0,599.7226882973653
+A320,2.0,1086.1322155212074,1086.1322155212074,0.0,1.0,1.0,0.0,0.0,2172.264431042415
+A359,1.0,448.7765919787179,448.7765919787179,0.0,1.0,1.0,0.0,0.0,448.7765919787179

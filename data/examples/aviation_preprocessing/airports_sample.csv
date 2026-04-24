@@ -1,0 +1,5 @@
+iata,icao,name,city,country,region,bundesland,nuts3,latitude,longitude
+FRA,EDDF,Frankfurt Airport,Frankfurt,Germany,Hessen,Hessen,DE712,50.0379,8.5622
+MUC,EDDM,Munich Airport,Munich,Germany,Bayern,Bayern,DE212,48.3538,11.7861
+CDG,LFPG,Paris Charles de Gaulle,Paris,France,Ile-de-France,,FR106,49.0097,2.5479
+DUB,EIDW,Dublin Airport,Dublin,Ireland,Dublin,,IE061,53.4213,-6.2701

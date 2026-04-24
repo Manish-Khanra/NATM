@@ -10,14 +10,15 @@ sectors and applications later.
 
 ## 1. Architecture Overview
 
-NATM is organized around six layers:
+NATM is organized around seven layers:
 
 1. Run and CLI layer
-2. Case configuration and input-data layer
-3. Mesa model and agent layer
-4. Domain and decision-logic layer
-5. Environment layer
-6. Output and persistence layer
+2. Aviation preprocessing layer
+3. Case configuration and input-data layer
+4. Mesa model and agent layer
+5. Domain and decision-logic layer
+6. Environment layer
+7. Output and persistence layer
 
 In the current codebase, the active end-to-end path is:
 
@@ -60,6 +61,12 @@ In the current codebase, the active end-to-end path is:
 - [loaders](C:/Manish_REPO/NATM/navaero_transition_model/core/loaders)
   Thin compatibility wrapper around the case-data layer.
 
+### Aviation preprocessing
+
+- [aviation_preprocessing](C:/Manish_REPO/NATM/navaero_transition_model/aviation_preprocessing)
+  Aviation ingestion, enrichment, activity profiling, allocation, calibration,
+  and baseline-building workflow.
+
 ### Reporting and database writing
 
 - [result_exports/aviation_exports.py](C:/Manish_REPO/NATM/navaero_transition_model/core/result_exports/aviation_exports.py:1)
@@ -98,6 +105,37 @@ which is loaded by `NATMScenario`.
 The YAML is intentionally minimal. Case-specific behavior is not encoded in the
 YAML itself; it is primarily driven by the CSV inputs in the case folder.
 
+### 3.2a Aviation preprocessing path
+
+The aviation preprocessing layer is designed to build empirical baseline inputs
+without polluting:
+
+- `aviation_technology_catalog.csv`
+- `aviation_scenario.csv`
+
+Instead it keeps observed and derived aviation baseline data in separate files,
+primarily under:
+
+- `data/processed/aviation/`
+
+The main preprocessing stages are:
+
+1. stock cleaning
+2. OpenSky aircraft metadata ingestion
+3. stock-to-OpenSky matching
+4. OpenSky / Zenodo flightlist ingestion
+5. empirical activity-profile construction
+6. German airport / regional allocation
+7. Germany calibration-target construction
+8. enriched aviation baseline assembly
+
+The final bridge file into the aviation case architecture is:
+
+- `aviation_activity_profiles.csv`
+
+If that file exists in a case directory, the aviation case-data layer loads and
+merges it onto the baseline fleet stock.
+
 ### 3.3 Input-data assembly
 
 For the aviation-passenger path, `NATMModel` loads:
@@ -105,6 +143,7 @@ For the aviation-passenger path, `NATMModel` loads:
 - `aviation_fleet_stock.csv`
 - `aviation_technology_catalog.csv`
 - `aviation_scenario.csv`
+- `aviation_activity_profiles.csv` if present
 
 These are wrapped by `AviationPassengerCaseData`, which bundles:
 
@@ -117,6 +156,7 @@ For the aviation-cargo path, `NATMModel` loads:
 - `aviation_fleet_stock.csv`
 - `aviation_technology_catalog.csv`
 - `aviation_scenario.csv`
+- `aviation_activity_profiles.csv` if present
 
 These are wrapped by `AviationCargoCaseData`.
 
@@ -225,6 +265,7 @@ Responsibilities:
 - read and normalize fleet stock
 - load technology catalog
 - load scenario table
+- optionally load and merge aviation activity profiles
 - expose grouped operator fleets
 - validate required capacity-planning inputs
 
@@ -239,8 +280,18 @@ Normalization includes:
 - passenger-flag derivation
 - `investment_logic` defaulting
 - operator-key construction
+- preservation of empirical baseline fields such as `registration`, `icao24`,
+  `annual_distance_km_base`, and `baseline_energy_demand`
 
 Each row represents one aircraft in the starting fleet.
+
+If `aviation_activity_profiles.csv` exists in the case folder, the aviation
+case-input layer also merges:
+
+- registration-level profiles where possible
+- `icao24`-level profiles where possible
+- type-level defaults
+- segment-level fallbacks
 
 ### 5.3 Technology catalog
 
@@ -249,15 +300,27 @@ The technology catalog is loaded into `TechnologyCatalog`.
 Responsibilities:
 
 - validate required technology columns
-- provide all candidate technologies for a segment
-- return a specific technology row by name
-- provide the default technology for a segment
+- provide candidate technology rows for investment logic
+- return a specific technology row by unique `technology_name`
+- provide a fallback default technology for a segment when stock data does not
+  name one explicitly
 
 This is the canonical source for:
 
 - technology cost/performance assumptions
 - fuel carriers
 - emissions factors
+- model-specific efficiency assumptions such as `kilometer_per_kwh`
+
+`technology_name` is the technology identity. For empirical aviation cases this
+can be a specific aircraft model such as `A320neo`, `A321XLR`, or `B787-9`.
+`segment` remains useful for demand, market-share, planned-delivery, activity,
+and reporting scopes, but it is no longer part of the technology lookup key.
+In the technology catalog, `segment` is optional context or a legacy fallback,
+not part of the unique identifier.
+
+Observed stock, activity, and calibration data are intentionally **not** moved
+into the technology catalog.
 - service-entry restrictions
 - seat layout and trip assumptions
 

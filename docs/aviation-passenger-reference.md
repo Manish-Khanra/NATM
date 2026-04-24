@@ -152,26 +152,26 @@ These are required by the current aviation-cargo case validation.
 
 | variable_name | Definition | Recommended variable_group | Required scope columns | Optional scope columns | Other required columns |
 | --- | --- | --- | --- | --- | --- |
-| `technology_dynamic_price_index` | Dynamic multiplier added to the base technology capex for a given year. | `cost_index` | `segment`, `technology_name` | none | `unit` should be `share` |
-| `technology_availability` | Commercial availability flag for a technology in that year. | `availability` | `segment`, `technology_name` | none | `unit` should indicate a flag |
-| `infrastructure_availability` | Availability flag for the required airport, fuel, or infrastructure setup. | `availability` | `country`, `segment`, `technology_name` | none | `unit` should indicate a flag |
-| `saf_availability` | Availability flag for a specific SAF-enabled technology or pathway. | `availability` | `country`, `segment`, `technology_name`, `secondary_energy_carrier` | `saf_pathway` | `unit` should indicate a flag |
+| `technology_dynamic_price_index` | Dynamic multiplier added to the base technology capex for a given year. | `cost_index` | `technology_name` | `segment` | `unit` should be `share` |
+| `technology_availability` | Commercial availability flag for a technology in that year. | `availability` | `technology_name` | `segment` | `unit` should indicate a flag |
+| `infrastructure_availability` | Availability flag for the required airport, fuel, or infrastructure setup. | `availability` | `country`, `technology_name` | `segment` | `unit` should indicate a flag |
+| `saf_availability` | Availability flag for a specific SAF-enabled technology or pathway. | `availability` | `country`, `technology_name`, `secondary_energy_carrier` | `segment`, `saf_pathway` | `unit` should indicate a flag |
 
 ### Branch and blend logic
 
 | variable_name | Definition | Recommended variable_group | Required scope columns | Optional scope columns | Other required columns |
 | --- | --- | --- | --- | --- | --- |
-| `secondary_energy_cap_active` | Flag controlling whether a technology can use its configured secondary energy stream. | `branch` | `country`, `segment`, `technology_name`, `secondary_energy_carrier` | `saf_pathway` | `unit` should indicate a flag |
-| `drop_in_mandate_active` | Flag controlling whether drop-in mandate logic is active for that technology/pathway scope. | `branch` | `country`, `segment`, `technology_name`, `secondary_energy_carrier` | `saf_pathway` | `unit` should indicate a flag |
-| `maximum_secondary_energy_share` | Maximum usable secondary-energy share for a technology in that scope. | `branch` | `country`, `segment`, `technology_name`, `secondary_energy_carrier` | `saf_pathway` | `unit` should be `share` |
+| `secondary_energy_cap_active` | Flag controlling whether a technology can use its configured secondary energy stream. | `branch` | `country`, `technology_name`, `secondary_energy_carrier` | `segment`, `saf_pathway` | `unit` should indicate a flag |
+| `drop_in_mandate_active` | Flag controlling whether drop-in mandate logic is active for that technology/pathway scope. | `branch` | `country`, `technology_name`, `secondary_energy_carrier` | `segment`, `saf_pathway` | `unit` should indicate a flag |
+| `maximum_secondary_energy_share` | Maximum usable secondary-energy share for a technology in that scope. | `branch` | `country`, `technology_name`, `secondary_energy_carrier` | `segment`, `saf_pathway` | `unit` should be `share` |
 
 ## Practical Guidance
 
 - For variables that should apply everywhere, leave scope columns blank.
 - For operator-specific commercial inputs, fill `operator_name` and leave other
   unrelated scope columns blank.
-- For technology gates, always scope at least by `segment` and
-  `technology_name`.
+- `technology_name` is the technology identity. Use `segment` only when the
+  scenario value differs by operating segment.
 - For fuel-specific rows, use `primary_energy_carrier` or
   `secondary_energy_carrier` as appropriate.
 - For SAF rows, also fill `saf_pathway` when pathway-specific behavior matters.

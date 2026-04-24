@@ -1,0 +1,4 @@
+origin,typecode,annual_departures,average_route_distance_km,domestic_share,international_share,share_airport_within_type,operator_name,share_airport_within_operator_type
+FRA,A319,1.0,299.86134414868263,1.0,0.0,0.5,Lufthansa,0.5
+FRA,A320,1.0,1086.1322155212074,0.0,1.0,1.0,Eurowings,1.0
+MUC,A319,1.0,299.86134414868263,1.0,0.0,0.5,Lufthansa,0.5

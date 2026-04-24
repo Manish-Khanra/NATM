@@ -6,7 +6,6 @@ import pandas as pd
 
 TECHNOLOGY_REQUIRED_COLUMNS = (
     "technology_name",
-    "segment",
     "primary_energy_carrier",
     "secondary_energy_carrier",
     "saf_pathway",
@@ -35,6 +34,7 @@ TECHNOLOGY_REQUIRED_COLUMNS = (
 )
 
 TECHNOLOGY_OPTIONAL_COLUMNS = (
+    "segment",
     "payload_capacity_kg",
     "technology_family",
     "service_entry_year",
@@ -91,6 +91,18 @@ class TechnologyCatalog:
                 normalized[column] = pd.NA
         for column in normalized.select_dtypes(include=["object", "string"]).columns:
             normalized[column] = normalized[column].fillna("").astype(str).str.strip()
+        if normalized["technology_name"].eq("").any():
+            raise ValueError("aviation technology catalog contains blank technology_name values")
+        duplicated = normalized.loc[
+            normalized["technology_name"].duplicated(keep=False),
+            "technology_name",
+        ]
+        if not duplicated.empty:
+            duplicate_text = ", ".join(sorted(duplicated.unique()))
+            raise ValueError(
+                "aviation technology catalog requires unique technology_name values; "
+                f"duplicates found: {duplicate_text}"
+            )
         self._frame = normalized.reset_index(drop=True)
 
     @classmethod
@@ -100,15 +112,15 @@ class TechnologyCatalog:
     def to_frame(self) -> pd.DataFrame:
         return self._frame.copy()
 
+    def candidates(self) -> pd.DataFrame:
+        return self._frame.copy()
+
     def candidates_for_segment(self, segment: str) -> pd.DataFrame:
         return self._frame.loc[self._frame["segment"] == segment].copy()
 
     def row_for(self, technology_name: str, segment: str | None = None) -> pd.Series:
+        del segment
         candidates = self._frame.loc[self._frame["technology_name"] == technology_name]
-        if segment is not None:
-            segment_candidates = candidates.loc[candidates["segment"] == segment]
-            if not segment_candidates.empty:
-                candidates = segment_candidates
         if candidates.empty:
             raise ValueError(f"Technology '{technology_name}' not found in aviation catalog")
         return candidates.iloc[0].copy()
@@ -125,8 +137,7 @@ class TechnologyCatalog:
     def default_for_segment(self, segment: str) -> str:
         segment_catalog = self.candidates_for_segment(segment)
         if segment_catalog.empty:
-            raise ValueError(f"No technology options found for segment '{segment}'")
-
+            segment_catalog = self._frame
         conventional = segment_catalog.loc[segment_catalog.apply(self.is_conventional_row, axis=1),]
         if not conventional.empty:
             return str(conventional.iloc[0]["technology_name"])

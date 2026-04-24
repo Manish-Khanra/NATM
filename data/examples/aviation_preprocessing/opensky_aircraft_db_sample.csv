@@ -1,0 +1,4 @@
+icao24,registration,manufacturerName,model,typecode,operator,owner,country,status,built,serialNumber,engine_manufacturer,engine_type,engine_count,seat_total
+3c6444,D-AIAB,Airbus,A319-100,A319,Lufthansa,Lufthansa,Germany,active,1996,1234,CFM International,CFM56-5,2,138
+3c6701,D-AIXA,Airbus,A320-200,A320,Eurowings,Eurowings,Germany,active,2008,5678,CFM International,CFM56-5B,2,180
+39bd24,F-HRZA,Airbus,A350-900,A359,Air France,Air France,France,active,2019,9012,Rolls-Royce,Trent XWB,2,324

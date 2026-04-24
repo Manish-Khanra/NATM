@@ -1,0 +1,4 @@
+bundesland,nuts3,typecode,annual_departures,average_route_distance_km,domestic_share,international_share
+Bayern,DE212,A319,1.0,299.86134414868263,1.0,0.0
+Hessen,DE712,A319,1.0,299.86134414868263,1.0,0.0
+Hessen,DE712,A320,1.0,1086.1322155212074,0.0,1.0

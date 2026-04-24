@@ -124,9 +124,9 @@ Without these, maritime-cargo growth planning cannot allocate demand correctly.
 
 | Variable name | Meaning | Recommended `variable_group` | Required scope columns | Optional scope columns | Required non-scope columns |
 |---|---|---|---|---|---|
-| `technology_availability` | Whether a technology can be selected in a year. | `availability` | `segment`, `technology_name` | `country`, `operator_name` | `unit=flag` |
-| `infrastructure_availability` | Whether the required fueling or bunkering infrastructure is available. | `availability` | `country`, `segment`, `technology_name` | `operator_name` | `unit=flag` |
-| `biofuel_availability` | Whether a biofuel pathway is available for the selected branch. | `availability` | `country`, `segment`, `technology_name`, `secondary_energy_carrier`, `saf_pathway` | `operator_name` | `unit=flag` |
+| `technology_availability` | Whether a technology can be selected in a year. | `availability` | `technology_name` | `country`, `operator_name`, `segment` | `unit=flag` |
+| `infrastructure_availability` | Whether the required fueling or bunkering infrastructure is available. | `availability` | `country`, `technology_name` | `operator_name`, `segment` | `unit=flag` |
+| `biofuel_availability` | Whether a biofuel pathway is available for the selected branch. | `availability` | `country`, `technology_name`, `secondary_energy_carrier`, `saf_pathway` | `operator_name`, `segment` | `unit=flag` |
 
 ## Operational Variables
 

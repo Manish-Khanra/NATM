@@ -60,8 +60,9 @@ class LegacyWeightedUtilityCargoLogic(AviationCargoDecisionLogic):
         agent: AviationCargoAirlineAgent,
         technology_row: pd.Series,
         year: int,
+        operation_segment: str,
     ) -> float:
-        segment = clean_scope_value(technology_row["segment"])
+        segment = clean_scope_value(operation_segment)
         technology_name = clean_scope_value(technology_row["technology_name"])
         secondary_carrier = clean_scope_value(technology_row.get("secondary_energy_carrier", ""))
         saf_pathway = clean_scope_value(technology_row.get("saf_pathway", ""))
@@ -115,13 +116,17 @@ class LegacyWeightedUtilityCargoLogic(AviationCargoDecisionLogic):
         year: int,
         free_ets_balance: float | None = None,
     ) -> OperationMetrics:
-        trip_length = float(technology_row["trip_length_km"])
-        trip_days = float(technology_row["trip_days_per_year"])
         kilometer_per_kwh = max(float(technology_row["kilometer_per_kwh"]), 1e-6)
-        total_distance = trip_length * trip_days
+        total_distance = agent.fleet.annual_distance_km_for(aircraft, technology_row)
         total_energy = total_distance / kilometer_per_kwh
 
-        secondary_share = self.effective_secondary_share(agent, technology_row, year)
+        operation_segment = clean_scope_value(aircraft["segment"])
+        secondary_share = self.effective_secondary_share(
+            agent,
+            technology_row,
+            year,
+            operation_segment,
+        )
         primary_energy_quantity = total_energy * (1.0 - secondary_share)
         secondary_energy_quantity = total_energy * secondary_share
 
@@ -188,11 +193,11 @@ class LegacyWeightedUtilityCargoLogic(AviationCargoDecisionLogic):
     def annual_revenue(
         self,
         agent: AviationCargoAirlineAgent,
+        aircraft: pd.Series,
         technology_row: pd.Series,
         year: int,
     ) -> float:
-        trip_length = float(technology_row["trip_length_km"])
-        trip_days = float(technology_row["trip_days_per_year"])
+        annual_distance = agent.fleet.annual_distance_km_for(aircraft, technology_row)
         load_factor = agent.scenario_value(
             "load_factor",
             year,
@@ -211,8 +216,7 @@ class LegacyWeightedUtilityCargoLogic(AviationCargoDecisionLogic):
         return (
             payload_capacity_tonnes
             * float(load_factor or 0.0)
-            * trip_length
-            * trip_days
+            * annual_distance
             * float(freight_rate or 0.0)
         )
 
@@ -228,7 +232,7 @@ class LegacyWeightedUtilityCargoLogic(AviationCargoDecisionLogic):
         dynamic_price_index = agent.scenario_value(
             "technology_dynamic_price_index",
             year,
-            segment=clean_scope_value(technology_row["segment"]),
+            segment=clean_scope_value(aircraft["segment"]),
             technology_name=clean_scope_value(technology_row["technology_name"]),
             default=0.0,
         )
@@ -254,7 +258,7 @@ class LegacyWeightedUtilityCargoLogic(AviationCargoDecisionLogic):
             )
             if offset == 0:
                 first_year_metrics = operation_metrics
-            revenue = self.annual_revenue(agent, technology_row, future_year)
+            revenue = self.annual_revenue(agent, aircraft, technology_row, future_year)
             maintenance_cost = revenue * float(technology_row["maintenance_cost_share"])
             wages = revenue * 0.24
             landing_fees = revenue * 0.10
@@ -291,10 +295,7 @@ class LegacyWeightedUtilityCargoLogic(AviationCargoDecisionLogic):
                 initial_ets_balance,
             )
         policy_bonus = 0.0
-        if not agent.technology_catalog.is_conventional(
-            technology_name,
-            str(technology_row["segment"]),
-        ):
+        if not agent.technology_catalog.is_conventional(technology_name):
             policy_bonus = (
                 0.08 * self.current_clean_fuel_subsidy(agent)
                 + 0.06 * agent.model.current_policy_signal.aviation.adoption_mandate
@@ -369,9 +370,10 @@ class LegacyWeightedUtilityCargoLogic(AviationCargoDecisionLogic):
         agent: AviationCargoAirlineAgent,
         technology_row: pd.Series,
         year: int,
+        operation_segment: str,
     ) -> bool:
         technology_name = clean_scope_value(technology_row["technology_name"])
-        segment = clean_scope_value(technology_row["segment"])
+        segment = clean_scope_value(operation_segment)
         service_entry_year = technology_row.get("service_entry_year")
         if pd.notna(service_entry_year) and str(service_entry_year).strip() != "":
             if year < int(float(service_entry_year)):
@@ -414,10 +416,15 @@ class LegacyWeightedUtilityCargoLogic(AviationCargoDecisionLogic):
         year: int,
         initial_ets_balance: float | None = None,
     ) -> tuple[pd.Series, CandidateEvaluation]:
-        candidates = agent.technology_catalog.candidates_for_segment(str(aircraft["segment"]))
+        candidates = agent.technology_catalog.candidates()
         evaluations: list[tuple[pd.Series, CandidateEvaluation]] = []
         for _, technology_row in candidates.iterrows():
-            if not self.is_candidate_available(agent, technology_row, year):
+            if not self.is_candidate_available(
+                agent,
+                technology_row,
+                year,
+                str(aircraft["segment"]),
+            ):
                 continue
             evaluation = self.calc_payback_year(
                 agent,

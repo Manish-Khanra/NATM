@@ -106,7 +106,8 @@ class MaritimePassengerShiplineAgent(BaseOperatorAgent):
         return value or default
 
     def technology_row(self, technology_name: str, segment: str | None = None) -> pd.Series:
-        return self.technology_catalog.row_for(technology_name, segment)
+        del segment
+        return self.technology_catalog.row_for(technology_name)
 
     def scenario_value(
         self,
