@@ -96,6 +96,18 @@ class Fleet:
             "match_confidence": pd.NA,
             "match_method": pd.NA,
             "activity_assignment_method": pd.NA,
+            "openap_type": pd.NA,
+            "number_of_trips": pd.NA,
+            "total_distance_km": pd.NA,
+            "total_fuel_kg": pd.NA,
+            "total_energy_mwh": pd.NA,
+            "total_co2_kg": pd.NA,
+            "total_nox_kg": pd.NA,
+            "fuel_kg_per_km": pd.NA,
+            "energy_mwh_per_km": pd.NA,
+            "co2_kg_per_km": pd.NA,
+            "average_flight_distance_km": pd.NA,
+            "average_fuel_kg_per_flight": pd.NA,
         }
         for column, default in default_columns.items():
             if column not in self._frame.columns:
@@ -132,9 +144,30 @@ class Fleet:
             self._frame["match_confidence"],
             errors="coerce",
         )
+        for column in (
+            "number_of_trips",
+            "total_distance_km",
+            "total_fuel_kg",
+            "total_energy_mwh",
+            "total_co2_kg",
+            "total_nox_kg",
+            "fuel_kg_per_km",
+            "energy_mwh_per_km",
+            "co2_kg_per_km",
+            "average_flight_distance_km",
+            "average_fuel_kg_per_flight",
+        ):
+            self._frame[column] = pd.to_numeric(self._frame[column], errors="coerce")
         self._frame["main_hub_base"] = self._frame["main_hub_base"].combine_first(
             self._frame.get("main_hub", pd.Series(index=self._frame.index, dtype=object)),
         )
+
+    def _needs_positive_activity_fallback(self, row_index: int, column: str) -> bool:
+        value = pd.to_numeric(
+            pd.Series([self._frame.loc[row_index, column]]),
+            errors="coerce",
+        ).iloc[0]
+        return pd.isna(value) or float(value) <= 0.0
 
     def apply_activity_fallbacks(self) -> None:
         for row_index, aircraft in self._frame.iterrows():
@@ -142,15 +175,15 @@ class Fleet:
                 technology_name=str(aircraft["current_technology"]),
             )
             segment = str(aircraft.get("segment", "")).strip().lower()
-            if pd.isna(self._frame.loc[row_index, "mean_stage_length_km_base"]):
+            if self._needs_positive_activity_fallback(row_index, "mean_stage_length_km_base"):
                 self._frame.loc[row_index, "mean_stage_length_km_base"] = float(
                     technology_row["trip_length_km"],
                 )
-            if pd.isna(self._frame.loc[row_index, "annual_flights_base"]):
+            if self._needs_positive_activity_fallback(row_index, "annual_flights_base"):
                 self._frame.loc[row_index, "annual_flights_base"] = float(
                     technology_row["trip_days_per_year"],
                 )
-            if pd.isna(self._frame.loc[row_index, "annual_distance_km_base"]):
+            if self._needs_positive_activity_fallback(row_index, "annual_distance_km_base"):
                 self._frame.loc[row_index, "annual_distance_km_base"] = float(
                     self._frame.loc[row_index, "annual_flights_base"]
                 ) * float(self._frame.loc[row_index, "mean_stage_length_km_base"])
@@ -181,8 +214,12 @@ class Fleet:
 
     def estimate_baseline_energy_demand(self) -> None:
         for row_index, aircraft in self._frame.iterrows():
-            if pd.notna(self._frame.loc[row_index, "baseline_energy_demand"]):
-                if pd.isna(self._frame.loc[row_index, "fuel_burn_per_year_base"]):
+            existing_energy = pd.to_numeric(
+                pd.Series([self._frame.loc[row_index, "baseline_energy_demand"]]),
+                errors="coerce",
+            ).iloc[0]
+            if pd.notna(existing_energy) and float(existing_energy) > 0.0:
+                if self._needs_positive_activity_fallback(row_index, "fuel_burn_per_year_base"):
                     self._frame.loc[row_index, "fuel_burn_per_year_base"] = self._frame.loc[
                         row_index,
                         "baseline_energy_demand",
@@ -200,7 +237,7 @@ class Fleet:
             kilometer_per_kwh = max(float(technology_row["kilometer_per_kwh"]), 1e-6)
             baseline_energy = float(annual_distance) / kilometer_per_kwh
             self._frame.loc[row_index, "baseline_energy_demand"] = baseline_energy
-            if pd.isna(self._frame.loc[row_index, "fuel_burn_per_year_base"]):
+            if self._needs_positive_activity_fallback(row_index, "fuel_burn_per_year_base"):
                 self._frame.loc[row_index, "fuel_burn_per_year_base"] = baseline_energy
 
     def annual_flights_for(self, aircraft: pd.Series, technology_row: pd.Series) -> float:

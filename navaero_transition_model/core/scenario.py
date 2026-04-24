@@ -6,12 +6,78 @@ from pathlib import Path
 import yaml
 
 
+@dataclass(frozen=True)
+class OpenAPPreprocessingConfig:
+    estimate_fuel: bool = False
+    mode: str = "synthetic"
+    route_extension_factor: float = 1.05
+    include_non_co2: bool = True
+
+    @classmethod
+    def from_dict(cls, payload: dict | None) -> OpenAPPreprocessingConfig:
+        if payload is None:
+            return cls()
+        if not isinstance(payload, dict):
+            raise ValueError("preprocessing.aviation.openap must be a mapping")
+        return cls(
+            estimate_fuel=bool(payload.get("estimate_fuel", False)),
+            mode=str(payload.get("mode", "synthetic")),
+            route_extension_factor=float(payload.get("route_extension_factor", 1.05)),
+            include_non_co2=bool(payload.get("include_non_co2", True)),
+        )
+
+
+@dataclass(frozen=True)
+class AviationPreprocessingConfig:
+    enabled: bool = False
+    stock_input: str | None = None
+    opensky_raw: str | None = None
+    flightlist_folder: str | None = None
+    airport_metadata: str | None = None
+    technology_catalog: str | None = None
+    calibration_input: str | None = None
+    processed_dir: str | None = None
+    openap: OpenAPPreprocessingConfig = field(default_factory=OpenAPPreprocessingConfig)
+
+    @classmethod
+    def from_dict(cls, payload: dict | None) -> AviationPreprocessingConfig:
+        if payload is None:
+            return cls()
+        if not isinstance(payload, dict):
+            raise ValueError("preprocessing.aviation must be a mapping")
+        return cls(
+            enabled=bool(payload.get("enabled", False)),
+            stock_input=_optional_text(payload.get("stock_input")),
+            opensky_raw=_optional_text(payload.get("opensky_raw")),
+            flightlist_folder=_optional_text(payload.get("flightlist_folder")),
+            airport_metadata=_optional_text(payload.get("airport_metadata")),
+            technology_catalog=_optional_text(payload.get("technology_catalog")),
+            calibration_input=_optional_text(payload.get("calibration_input")),
+            processed_dir=_optional_text(payload.get("processed_dir")),
+            openap=OpenAPPreprocessingConfig.from_dict(payload.get("openap")),
+        )
+
+    def resolve_path(self, base_path: Path, field_name: str) -> Path | None:
+        value = getattr(self, field_name)
+        if value is None:
+            return None
+        return (base_path / value).resolve()
+
+
+def _optional_text(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
 @dataclass
 class NATMScenario:
     name: str
     start_year: int
     end_year: int
     sectors: dict[str, tuple[str, ...]]
+    preprocessing: dict[str, AviationPreprocessingConfig] = field(default_factory=dict)
     base_path: Path = field(default_factory=lambda: Path("."), repr=False)
 
     def __post_init__(self) -> None:
@@ -54,6 +120,9 @@ class NATMScenario:
             return default_path.resolve()
         return None
 
+    def aviation_preprocessing_config(self) -> AviationPreprocessingConfig | None:
+        return self.preprocessing.get("aviation")
+
     @classmethod
     def from_dict(cls, payload: dict) -> NATMScenario:
         raw_sectors = payload.get("sectors")
@@ -69,11 +138,14 @@ class NATMScenario:
                 raise ValueError(f"Sector '{sector_name}' must map to a list of applications")
             normalized_sectors[str(sector_name)] = tuple(str(item).strip() for item in applications)
 
+        preprocessing = _parse_preprocessing(payload.get("preprocessing"))
+
         return cls(
             name=payload["name"],
             start_year=payload["start_year"],
             end_year=payload["end_year"],
             sectors=normalized_sectors,
+            preprocessing=preprocessing,
         )
 
     @classmethod
@@ -83,3 +155,20 @@ class NATMScenario:
         scenario = cls.from_dict(payload)
         scenario.base_path = scenario_path.parent.resolve()
         return scenario
+
+
+def _parse_preprocessing(payload: object) -> dict[str, AviationPreprocessingConfig]:
+    if payload is None:
+        return {}
+    if not isinstance(payload, dict):
+        raise ValueError("preprocessing must be a mapping")
+
+    unsupported = set(payload) - {"aviation"}
+    if unsupported:
+        unsupported_text = ", ".join(sorted(str(item) for item in unsupported))
+        raise ValueError(f"Unsupported preprocessing sections: {unsupported_text}")
+
+    aviation_payload = payload.get("aviation")
+    if aviation_payload is None:
+        return {}
+    return {"aviation": AviationPreprocessingConfig.from_dict(aviation_payload)}

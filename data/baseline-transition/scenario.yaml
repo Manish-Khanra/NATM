@@ -1,7 +1,24 @@
 name: baseline-transition
 start_year: 2025
-end_year: 2035
+end_year: 2030
 
 sectors:
   aviation:
     - passenger
+
+preprocessing:
+  aviation:
+    enabled: true
+    stock_input: aviation_fleet_stock.csv
+    opensky_raw: ../examples/aviation_preprocessing/opensky_aircraft_db_sample.csv
+    flightlist_folder: ../examples/aviation_preprocessing/opensky_flightlists
+    airport_metadata: ../examples/aviation_preprocessing/airports_sample.csv
+    technology_catalog: aviation_technology_catalog.csv
+    calibration_input: ../examples/aviation_preprocessing/germany_calibration_input.csv
+    processed_dir: ../../data/processed/aviation
+
+    openap:
+      estimate_fuel: true
+      mode: synthetic
+      route_extension_factor: 1.05
+      include_non_co2: true

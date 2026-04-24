@@ -71,7 +71,11 @@ from navaero_transition_model.core.result_exports import (
     MaritimeInvestmentExporter,
     MaritimeTechnologyExporter,
 )
-from navaero_transition_model.core.scenario import NATMScenario
+from navaero_transition_model.core.scenario import (
+    AviationPreprocessingConfig,
+    NATMScenario,
+    OpenAPPreprocessingConfig,
+)
 
 __all__ = [
     "AircraftStockExporter",
@@ -88,6 +92,7 @@ __all__ = [
     "AviationPassengerCaseLoader",
     "AviationPassengerDecisionLogic",
     "AviationPassengerInputs",
+    "AviationPreprocessingConfig",
     "AviationTechnologyExporter",
     "BaseOperatorAgent",
     "DetailedOutputWriter",
@@ -112,6 +117,7 @@ __all__ = [
     "MaritimeTechnologyExporter",
     "NATMModel",
     "NATMScenario",
+    "OpenAPPreprocessingConfig",
     "PolicySettings",
     "RampValue",
     "ScenarioTable",

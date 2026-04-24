@@ -252,14 +252,18 @@ Inside `run.py`, preprocessing is triggered by:
 
 ```python
 selected_mode = "aviation_preprocessing"
-selected_preprocessing_example = "synthetic_aviation_preprocessing"
+selected_example = "small_with_aviation_passenger"
 ```
 
-The named preprocessing presets live in:
+The preprocessing recipe lives in the selected case's `scenario.yaml`, under:
 
-- [AVAILABLE_PREPROCESSING_EXAMPLES](C:/Manish_REPO/NATM/run.py:38)
+```yaml
+preprocessing:
+  aviation:
+    enabled: true
+```
 
-The synthetic preset currently points to:
+For the baseline passenger case, this points to:
 
 - `data/baseline-transition/aviation_fleet_stock.csv`
 - `data/examples/aviation_preprocessing/opensky_aircraft_db_sample.csv`
@@ -279,9 +283,9 @@ pipeline and writes outputs into:
 ```text
 run.py
   -> selected_mode = "aviation_preprocessing"
-  -> selected_preprocessing_example = "synthetic_aviation_preprocessing"
+  -> selected_example = "small_with_aviation_passenger"
 
-Preset loads:
+scenario.yaml preprocessing.aviation loads:
   -> aviation_fleet_stock.csv
   -> opensky_aircraft_db_sample.csv
   -> opensky_flightlists/
@@ -428,16 +432,194 @@ natm-aviation-preprocess `
 
 This command can run Phase 1 through Phase 3 of the new preprocessing layer.
 
+To add OpenAP-based baseline fuel and emissions estimation, install the optional
+dependency group and pass `--estimate-openap-fuel`:
+
+```powershell
+python -m pip install -e .[openap]
+
+natm-aviation-preprocess `
+  --stock-input data\baseline-transition\aviation_fleet_stock.csv `
+  --opensky-raw data\examples\aviation_preprocessing\opensky_aircraft_db_sample.csv `
+  --flightlist-folder data\examples\aviation_preprocessing\opensky_flightlists `
+  --airport-metadata data\examples\aviation_preprocessing\airports_sample.csv `
+  --technology-catalog data\baseline-transition\aviation_technology_catalog.csv `
+  --calibration-input data\examples\aviation_preprocessing\germany_calibration_input.csv `
+  --estimate-openap-fuel `
+  --openap-mode synthetic
+```
+
 You can also launch the same synthetic workflow through `run.py`:
 
 ```powershell
-python run.py --mode aviation_preprocessing --preprocess-example synthetic_aviation_preprocessing
+python run.py --mode aviation_preprocessing --example small_with_aviation_passenger
+```
+
+With OpenAP enabled through `run.py`:
+
+```powershell
+python run.py `
+  --mode aviation_preprocessing `
+  --example small_with_aviation_passenger `
+  --estimate-openap-fuel `
+  --openap-mode synthetic
 ```
 
 Or by editing the reference-style config block near the bottom of
 [run.py](C:/Manish_REPO/NATM/run.py:1) and then pressing Run in VS Code.
 
-## 10. Technology Efficiency Semantics
+## 10. OpenAP-Based Fuel Demand And Emissions Estimation
+
+OpenAP is used only in preprocessing. NATM does not call OpenAP inside every
+Mesa agent step. The intended workflow is:
+
+```text
+OpenSky / Zenodo flight data
+  -> aviation preprocessing
+  -> OpenAP flight-level fuel and emissions estimates
+  -> aggregated aviation_activity_profiles.csv
+  -> NATM Mesa diffusion simulation
+```
+
+This keeps flight-performance estimation separate from future technology
+diffusion. OpenAP estimates baseline operational fuel and emissions intensities;
+NATM then evolves technology shares, energy carriers, costs, policies, and
+emissions factors through the simulation years.
+
+### Input Modes
+
+The first robust implementation focuses on trip-level monthly flight lists. A
+row may contain `flight_id` or `callsign`, `icao24`, `registration`, `typecode`
+or `aircraft_type`, `origin`, `destination`, `firstseen`, `lastseen`, `day`, and
+optionally `distance_km`. If `distance_km` is missing, route distance is
+calculated from airport coordinates and then adjusted with the configured route
+extension factor.
+
+Trajectory-level estimation is exposed as a secondary function-level extension.
+It groups points by `flight_id`, sorts by timestamp, estimates time-step fuel
+flow, and integrates fuel and emissions. The current example workflow uses the
+synthetic trip-level mode because Zenodo/OpenSky monthly flight lists are
+normally flight-list data, not full trajectories.
+
+### Initial Mass Estimation
+
+For trip-level OpenAP estimation, NATM now estimates the initial aircraft mass
+from the best available case data:
+
+```text
+initial_mass =
+  operating_empty_weight
+  + passenger_payload
+  + cargo_payload
+  + estimated_block_fuel
+```
+
+The preferred source for `operating_empty_weight`, `mtow`,
+`fuel_capacity_kwh`, cabin seats, and cargo payload capacity is the aviation
+technology catalog joined through `current_technology`. Passenger payload uses
+the scenario occupancy variables (`economy_occupancy`, `business_occupancy`,
+`first_occupancy`) and default passenger-plus-baggage masses. Cargo payload uses
+`payload_capacity_kg * load_factor` for aviation cargo cases. Passenger belly
+cargo is intentionally left at zero until a clear belly-cargo capacity field is
+available.
+
+The estimated block fuel is a first-pass proxy:
+
+```text
+block_fuel_kg =
+  fuel_capacity_kg
+  * min(flown_distance_km / aircraft_range_km, 1)
+  * block_fuel_reserve_factor
+```
+
+The default `block_fuel_reserve_factor` is `1.15`. The resulting mass is clamped
+between the minimum physical mass (`OEW + payload`) and MTOW. If the required
+stock, technology, or scenario fields are missing, preprocessing falls back to
+the older MTOW-fraction estimate and records the method in
+`mass_estimation_method`.
+
+### Aircraft Type Mapping
+
+Aircraft type codes are mapped in
+`navaero_transition_model/aviation_preprocessing/aircraft_type_mapping.py`.
+The mapping result records:
+
+- `raw_type`
+- `openap_type`
+- `mapping_status`: `exact`, `fallback`, `unsupported`, or `missing`
+- `mapping_note`
+
+Important fallbacks are logged rather than hidden. For example, `A20N` first
+tries `A20N`; if unsupported by the installed OpenAP version it falls back to
+`A320`. `B38M` can fall back to `B738`, and `E195` can fall back to `E190`.
+The mapping log is written to:
+
+```text
+data/processed/aviation/openap_aircraft_type_mapping_log.csv
+```
+
+### Outputs
+
+When `--estimate-openap-fuel` is enabled, the preprocessing layer writes:
+
+- `openap_flight_fuel_emissions.csv`
+- `openap_aircraft_type_summary.csv`
+- `openap_route_summary.csv`
+- `openap_aircraft_type_mapping_log.csv`
+- `openap_validation_report.txt`
+
+It also enriches or creates:
+
+```text
+data/processed/aviation/aviation_activity_profiles.csv
+```
+
+The OpenAP profile columns include `openap_type`, `number_of_trips`,
+`total_distance_km`, `total_fuel_kg`, `total_energy_mwh`, `total_co2_kg`,
+`total_nox_kg`, `fuel_kg_per_km`, `energy_mwh_per_km`, `co2_kg_per_km`,
+`average_flight_distance_km`, and `average_fuel_kg_per_flight`. Existing NATM
+activity columns such as `annual_flights_base`, `annual_distance_km_base`,
+`mean_stage_length_km_base`, `baseline_energy_demand`, and
+`fuel_burn_per_year_base` are preserved.
+
+The flight-level file also records mass-estimation diagnostics:
+`oew_kg`, `passenger_payload_kg`, `cargo_payload_kg`,
+`estimated_block_fuel_kg`, and `mass_estimation_method`.
+
+### Technology Catalog Connection
+
+The core model still uses `technology_name` as the unique technology lookup key.
+Technology catalogs may optionally include:
+
+- `openap_type`
+- `reference_fuel_kg_per_km`
+- `reference_energy_mwh_per_km`
+- `reference_co2_kg_per_km`
+- `fuel_estimation_source`
+- `fuel_estimation_mode`
+
+These fields are optional reference metadata. They do not replace the existing
+technology-catalog cost, performance, fuel-carrier, SAF, ETS, and feasibility
+fields.
+
+### Limitations
+
+- OpenAP estimates operational fuel demand, not airline-reported fuel uplift.
+- Trip-level mode approximates climb, cruise, and descent using a synthetic
+  mission profile.
+- If only groundspeed is available in trajectory mode, it can be used as a TAS
+  proxy.
+- Initial aircraft mass uses OEW, passenger/cargo payload, and estimated block
+  fuel when those inputs are available; otherwise it falls back to an MTOW
+  fraction.
+- A320neo/A20N is used directly only if the installed OpenAP version supports it;
+  otherwise fallback mapping is recorded.
+- Non-CO2 emissions depend on OpenAP aircraft and engine support.
+- Taxi/LTO fuel is not included in the first version.
+- OpenAP estimates baseline fuel/emission intensities; future transition effects
+  remain handled by NATM diffusion and technology-catalog logic.
+
+## 11. Technology Efficiency Semantics
 
 The preprocessing layer uses the technology catalog only for performance and
 energy-efficiency assumptions. The lookup is based on unique `technology_name`.
@@ -449,7 +631,7 @@ deliveries, and reporting. It is not part of the technology identity. The
 example technology catalogs may still carry a `segment` column as optional
 operating-context metadata, but lookup is name-based.
 
-## 11. Recommended Workflow
+## 12. Recommended Workflow
 
 1. Clean and enrich the stock with OpenSky aircraft metadata.
 2. Ingest and process the historical flight lists.

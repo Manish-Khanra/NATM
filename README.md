@@ -133,17 +133,55 @@ natm-aviation-preprocess `
   --calibration-input data\examples\aviation_preprocessing\germany_calibration_input.csv
 ```
 
-You can also run the same synthetic preprocessing flow from `run.py`:
+OpenAP fuel and emissions estimation is optional because it adds an extra
+flight-performance dependency. Install it only when you want to turn
+OpenSky/Zenodo flight lists into baseline fuel and emissions intensities:
 
 ```powershell
-python run.py --mode aviation_preprocessing --preprocess-example synthetic_aviation_preprocessing
+python -m pip install -e .[openap]
+```
+
+Then add the OpenAP flag to the preprocessing command:
+
+```powershell
+natm-aviation-preprocess `
+  --stock-input data\baseline-transition\aviation_fleet_stock.csv `
+  --opensky-raw data\examples\aviation_preprocessing\opensky_aircraft_db_sample.csv `
+  --flightlist-folder data\examples\aviation_preprocessing\opensky_flightlists `
+  --airport-metadata data\examples\aviation_preprocessing\airports_sample.csv `
+  --technology-catalog data\baseline-transition\aviation_technology_catalog.csv `
+  --calibration-input data\examples\aviation_preprocessing\germany_calibration_input.csv `
+  --estimate-openap-fuel `
+  --openap-mode synthetic
+```
+
+This writes OpenAP flight, aircraft-type, route, mapping-log, and validation
+outputs into `data/processed/aviation/` and enriches
+`aviation_activity_profiles.csv` for the core Mesa simulation.
+
+You can also run the scenario-defined preprocessing flow from `run.py`. The
+baseline passenger case stores its preprocessing recipe in
+`data/baseline-transition/scenario.yaml`:
+
+```powershell
+python run.py --mode aviation_preprocessing --example small_with_aviation_passenger
+```
+
+The same launcher can override the scenario OpenAP setting if needed:
+
+```powershell
+python run.py `
+  --mode aviation_preprocessing `
+  --example small_with_aviation_passenger `
+  --estimate-openap-fuel `
+  --openap-mode synthetic
 ```
 
 Or in VS Code by editing the small config block in [run.py](C:/Manish_REPO/NATM/run.py:1):
 
 ```python
 selected_mode = "aviation_preprocessing"
-selected_preprocessing_example = "synthetic_aviation_preprocessing"
+selected_example = "small_with_aviation_passenger"
 ```
 
 The bridge file into the existing aviation model is:

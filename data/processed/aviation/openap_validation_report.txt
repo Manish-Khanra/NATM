@@ -1,0 +1,14 @@
+OpenAP aviation fuel/emissions validation report
+flights_processed: 5
+flights_skipped: 0
+exact_aircraft_mappings: 5
+fallback_aircraft_mappings: 0
+unsupported_aircraft_mappings: 0
+total_fuel_kg: 17486.111
+total_energy_mwh: 208.861878
+total_co2_kg: 55256.110
+fuel_kg_per_km_by_aircraft_type:
+  A319/A319: 5.328827 kg/km, 1597.909 kg/flight
+  A320/A320: 4.256316 kg/km, 4622.922 kg/flight
+  A359/A359: 11.240445 kg/km, 5044.448 kg/flight
+sanity_warnings: 0

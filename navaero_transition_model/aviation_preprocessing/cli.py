@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from navaero_transition_model.aviation_preprocessing.openap_backend import OpenAPFuelConfig
 from navaero_transition_model.aviation_preprocessing.pipeline import (
     AviationPreprocessingPaths,
     AviationPreprocessingPipeline,
@@ -46,6 +47,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional aviation technology catalog CSV for baseline energy estimation.",
     )
     parser.add_argument(
+        "--aviation-scenario",
+        type=Path,
+        default=None,
+        help="Optional aviation scenario CSV for load-factor/occupancy mass estimation inputs.",
+    )
+    parser.add_argument(
+        "--application",
+        choices=("passenger", "cargo"),
+        default="passenger",
+        help="Aviation application for payload estimation.",
+    )
+    parser.add_argument(
         "--calibration-input",
         type=Path,
         default=None,
@@ -56,6 +69,37 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("data/processed/aviation"),
         help="Directory where processed aviation outputs will be written.",
+    )
+    parser.add_argument(
+        "--estimate-openap-fuel",
+        action="store_true",
+        help="Estimate flight-level baseline fuel and emissions with the optional OpenAP layer.",
+    )
+    parser.add_argument(
+        "--openap-mode",
+        choices=("synthetic", "trajectory", "auto"),
+        default="synthetic",
+        help="OpenAP estimation mode. Use synthetic/auto for monthly flight lists.",
+    )
+    parser.add_argument(
+        "--route-extension-factor",
+        type=float,
+        default=1.05,
+        help="Route extension factor applied to great-circle trip distances.",
+    )
+    non_co2_group = parser.add_mutually_exclusive_group()
+    non_co2_group.add_argument(
+        "--include-non-co2",
+        dest="include_non_co2",
+        action="store_true",
+        default=True,
+        help="Try to estimate non-CO2 emissions where OpenAP supports them.",
+    )
+    non_co2_group.add_argument(
+        "--no-include-non-co2",
+        dest="include_non_co2",
+        action="store_false",
+        help="Only estimate CO2 from the fuel burn factor.",
     )
     return parser
 
@@ -88,6 +132,26 @@ def main() -> int:
             aircraft_db_processed_path=phase_1_outputs["opensky_aircraft_db_processed"],
         )
 
+    openap_outputs: dict[str, Path] = {}
+    if args.estimate_openap_fuel:
+        if args.flightlist_folder is None or args.airport_metadata is None:
+            raise SystemExit(
+                "--estimate-openap-fuel requires --flightlist-folder and --airport-metadata.",
+            )
+        openap_outputs = pipeline.run_openap_fuel_estimation(
+            airport_metadata_path=args.airport_metadata,
+            aircraft_db_processed_path=phase_1_outputs["opensky_aircraft_db_processed"],
+            fleet_stock_path=phase_1_outputs["enriched_stock"],
+            technology_catalog_path=args.technology_catalog,
+            scenario_table_path=args.aviation_scenario,
+            application_name=args.application,
+            openap_mode=args.openap_mode,
+            config=OpenAPFuelConfig(
+                route_extension_factor=args.route_extension_factor,
+                include_non_co2=args.include_non_co2,
+            ),
+        )
+
     print("Phase 1 outputs:")
     for label, path in phase_1_outputs.items():
         print(f"  {label}: {path}")
@@ -98,6 +162,10 @@ def main() -> int:
     if phase_3_outputs:
         print("Phase 3 outputs:")
         for label, path in phase_3_outputs.items():
+            print(f"  {label}: {path}")
+    if openap_outputs:
+        print("OpenAP fuel/emissions outputs:")
+        for label, path in openap_outputs.items():
             print(f"  {label}: {path}")
     return 0
 

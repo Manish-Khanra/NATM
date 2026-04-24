@@ -9,11 +9,16 @@ from navaero_transition_model.aviation_preprocessing.activity_profiles import (
 from navaero_transition_model.aviation_preprocessing.allocation import AviationAllocationBuilder
 from navaero_transition_model.aviation_preprocessing.baseline import AviationBaselineBuilder
 from navaero_transition_model.aviation_preprocessing.calibration import AviationCalibrationBuilder
+from navaero_transition_model.aviation_preprocessing.flight_activity_fuel import (
+    run_openap_trajectory_estimation,
+    run_openap_trip_estimation,
+)
 from navaero_transition_model.aviation_preprocessing.flightlists import (
     FlightlistIngestionConfig,
     OpenSkyFlightlistIngestor,
 )
 from navaero_transition_model.aviation_preprocessing.matching import AviationStockMatcher
+from navaero_transition_model.aviation_preprocessing.openap_backend import OpenAPFuelConfig
 from navaero_transition_model.aviation_preprocessing.opensky_aircraft_db import (
     OpenSkyAircraftDatabaseConfig,
     OpenSkyAircraftDatabaseProcessor,
@@ -155,5 +160,57 @@ class AviationPreprocessingPipeline:
             "regional_allocation": self.paths.processed_dir / "aviation_regional_allocation.csv",
             "calibration_targets": self.paths.processed_dir / "aviation_calibration_targets.csv",
             "enriched_stock": self.paths.processed_dir / "aviation_fleet_stock_enriched.csv",
+            "activity_profiles": self.paths.processed_dir / "aviation_activity_profiles.csv",
+        }
+
+    def run_openap_fuel_estimation(
+        self,
+        *,
+        airport_metadata_path: str | Path,
+        aircraft_db_processed_path: str | Path | None = None,
+        fleet_stock_path: str | Path | None = None,
+        technology_catalog_path: str | Path | None = None,
+        scenario_table_path: str | Path | None = None,
+        application_name: str = "passenger",
+        openap_mode: str = "synthetic",
+        config: OpenAPFuelConfig | None = None,
+    ) -> dict[str, Path]:
+        if openap_mode not in {"synthetic", "trajectory", "auto"}:
+            raise ValueError(
+                "openap_mode must be one of 'synthetic', 'trajectory', or 'auto'.",
+            )
+        if openap_mode == "trajectory":
+            run_openap_trajectory_estimation(
+                trajectory_input_path=self.paths.processed_dir
+                / "opensky_flightlist_processed.parquet",
+                output_dir=self.paths.processed_dir,
+                config=config,
+                existing_activity_profiles_path=self.paths.processed_dir
+                / "aviation_activity_profiles.csv",
+            )
+        else:
+            run_openap_trip_estimation(
+                processed_flightlist_path=self.paths.processed_dir
+                / "opensky_flightlist_processed.parquet",
+                airport_metadata_path=airport_metadata_path,
+                aircraft_db_processed_path=aircraft_db_processed_path,
+                fleet_stock_path=fleet_stock_path,
+                technology_catalog_path=technology_catalog_path,
+                scenario_table_path=scenario_table_path,
+                application_name=application_name,
+                output_dir=self.paths.processed_dir,
+                config=config,
+                existing_activity_profiles_path=self.paths.processed_dir
+                / "aviation_activity_profiles.csv",
+            )
+        return {
+            "openap_flight_fuel_emissions": self.paths.processed_dir
+            / "openap_flight_fuel_emissions.csv",
+            "openap_aircraft_type_summary": self.paths.processed_dir
+            / "openap_aircraft_type_summary.csv",
+            "openap_route_summary": self.paths.processed_dir / "openap_route_summary.csv",
+            "openap_aircraft_type_mapping_log": self.paths.processed_dir
+            / "openap_aircraft_type_mapping_log.csv",
+            "openap_validation_report": self.paths.processed_dir / "openap_validation_report.txt",
             "activity_profiles": self.paths.processed_dir / "aviation_activity_profiles.csv",
         }

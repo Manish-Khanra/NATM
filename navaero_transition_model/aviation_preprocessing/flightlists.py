@@ -14,11 +14,25 @@ from navaero_transition_model.aviation_preprocessing.common import (
 )
 
 FLIGHTLIST_COLUMN_ALIASES = {
+    "aircraft_id": "aircraft_id",
+    "aircraft_type": "aircraft_type",
+    "callsign": "callsign",
+    "distance": "distance_km",
+    "distance_km": "distance_km",
+    "destination_lat": "destination_latitude_deg",
+    "destination_latitude": "destination_latitude_deg",
+    "destination_lon": "destination_longitude_deg",
+    "destination_longitude": "destination_longitude_deg",
     "icao24": "icao24",
+    "flight_id": "flight_id",
     "registration": "registration",
     "typecode": "typecode",
     "origin": "origin",
     "originairport": "origin",
+    "origin_lat": "origin_latitude_deg",
+    "origin_latitude": "origin_latitude_deg",
+    "origin_lon": "origin_longitude_deg",
+    "origin_longitude": "origin_longitude_deg",
     "destination": "destination",
     "destinationairport": "destination",
     "firstseen": "firstseen",
@@ -27,14 +41,23 @@ FLIGHTLIST_COLUMN_ALIASES = {
 }
 
 FLIGHTLIST_KEEP_COLUMNS = (
+    "flight_id",
+    "callsign",
     "icao24",
+    "aircraft_id",
     "registration",
     "typecode",
+    "aircraft_type",
     "origin",
     "destination",
     "firstseen",
     "lastseen",
     "day",
+    "distance_km",
+    "origin_latitude_deg",
+    "origin_longitude_deg",
+    "destination_latitude_deg",
+    "destination_longitude_deg",
 )
 
 
@@ -71,9 +94,20 @@ class OpenSkyFlightlistIngestor:
             subset["registration"] = subset["registration"].map(normalize_registration)
         if "typecode" in subset.columns:
             subset["typecode"] = subset["typecode"].astype(str).str.upper().str.strip()
+        if "aircraft_type" in subset.columns:
+            subset["aircraft_type"] = subset["aircraft_type"].astype(str).str.upper().str.strip()
         for column in ("origin", "destination"):
             if column in subset.columns:
                 subset[column] = subset[column].astype(str).str.upper().str.strip()
+        for column in (
+            "distance_km",
+            "origin_latitude_deg",
+            "origin_longitude_deg",
+            "destination_latitude_deg",
+            "destination_longitude_deg",
+        ):
+            if column in subset.columns:
+                subset[column] = pd.to_numeric(subset[column], errors="coerce")
         for column in ("firstseen", "lastseen", "day"):
             if column in subset.columns:
                 subset[column] = pd.to_datetime(subset[column], errors="coerce", utc=False)

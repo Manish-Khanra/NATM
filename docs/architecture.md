@@ -100,10 +100,12 @@ which is loaded by `NATMScenario`.
 - `start_year`
 - `end_year`
 - `sectors`
+- optional `preprocessing`
 - `base_path`
 
-The YAML is intentionally minimal. Case-specific behavior is not encoded in the
-YAML itself; it is primarily driven by the CSV inputs in the case folder.
+Simulation behavior is still primarily driven by the CSV inputs in the case
+folder. The optional `preprocessing` block is a launcher recipe for building
+empirical aviation baseline inputs before simulation.
 
 ### 3.2a Aviation preprocessing path
 

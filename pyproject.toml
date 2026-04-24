@@ -30,6 +30,9 @@ dashboard = [
     "solara-server[starlette]>=1.40",
     "starlette<1",
 ]
+openap = [
+    "openap>=2.0",
+]
 
 [project.scripts]
 natm = "navaero_transition_model.cli:main"

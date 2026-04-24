@@ -1,0 +1,4 @@
+raw_aircraft_type,openap_type,mapping_status,mapping_note,count
+A319,A319,exact,A319 is supported by OpenAP.,2
+A320,A320,exact,A320 is supported by OpenAP.,2
+A359,A359,exact,A359 is supported by OpenAP.,1

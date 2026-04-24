@@ -62,6 +62,36 @@ EMPIRICAL_ACTIVITY_COLUMNS = (
     "match_confidence",
     "match_method",
     "activity_assignment_method",
+    "openap_type",
+    "number_of_trips",
+    "total_distance_km",
+    "total_fuel_kg",
+    "total_energy_mwh",
+    "total_co2_kg",
+    "total_nox_kg",
+    "fuel_kg_per_km",
+    "energy_mwh_per_km",
+    "co2_kg_per_km",
+    "average_flight_distance_km",
+    "average_fuel_kg_per_flight",
+)
+
+POSITIVE_ACTIVITY_COLUMNS = (
+    "annual_flights_base",
+    "annual_distance_km_base",
+    "mean_stage_length_km_base",
+    "fuel_burn_per_year_base",
+    "baseline_energy_demand",
+    "number_of_trips",
+    "total_distance_km",
+    "total_fuel_kg",
+    "total_energy_mwh",
+    "total_co2_kg",
+    "fuel_kg_per_km",
+    "energy_mwh_per_km",
+    "co2_kg_per_km",
+    "average_flight_distance_km",
+    "average_fuel_kg_per_flight",
 )
 
 
@@ -132,6 +162,23 @@ def _merge_optional_activity_profiles(
     ]
     if not available_activity_columns:
         return merged
+    for column in available_activity_columns:
+        if column not in merged.columns:
+            merged[column] = pd.NA
+
+    def _missing_activity_mask(column: str) -> pd.Series:
+        missing_mask = merged[column].isna()
+        if column in POSITIVE_ACTIVITY_COLUMNS:
+            numeric = pd.to_numeric(merged[column], errors="coerce")
+            missing_mask = missing_mask | numeric.isna() | numeric.le(0.0)
+        return missing_mask
+
+    def _valid_profile_rows(source: pd.DataFrame, column: str) -> pd.DataFrame:
+        candidates = source.dropna(subset=[column]).copy()
+        if column in POSITIVE_ACTIVITY_COLUMNS:
+            numeric = pd.to_numeric(candidates[column], errors="coerce")
+            candidates = candidates.loc[numeric > 0.0]
+        return candidates
 
     if "aircraft_id" in activity_profiles.columns:
         profile_by_id = activity_profiles[
@@ -146,7 +193,8 @@ def _merge_optional_activity_profiles(
         for column in available_activity_columns:
             profile_column = f"{column}_profile"
             if profile_column in merged.columns:
-                merged[column] = merged[column].combine_first(merged[profile_column])
+                missing_mask = _missing_activity_mask(column)
+                merged.loc[missing_mask, column] = merged.loc[missing_mask, profile_column]
                 merged = merged.drop(columns=profile_column)
 
     def _fill_from_key(key_column: str) -> None:
@@ -161,7 +209,7 @@ def _merge_optional_activity_profiles(
             .set_index(key_column)
         )
         for column in available_activity_columns:
-            missing_mask = merged[column].isna()
+            missing_mask = _missing_activity_mask(column)
             if not missing_mask.any():
                 continue
             merged.loc[missing_mask, column] = merged.loc[missing_mask, key_column].map(
@@ -173,15 +221,15 @@ def _merge_optional_activity_profiles(
 
     if "aircraft_type" in activity_profiles.columns:
         for column in available_activity_columns:
-            missing_mask = merged[column].isna()
+            missing_mask = _missing_activity_mask(column)
             if not missing_mask.any():
                 continue
+            type_source = _valid_profile_rows(activity_profiles, column)
             type_defaults = (
-                activity_profiles.loc[
-                    activity_profiles["aircraft_type"].astype(str).str.strip() != "",
+                type_source.loc[
+                    type_source["aircraft_type"].astype(str).str.strip() != "",
                     ["aircraft_type", column],
                 ]
-                .dropna(subset=[column])
                 .groupby("aircraft_type", dropna=False)[column]
                 .first()
             )
@@ -190,16 +238,31 @@ def _merge_optional_activity_profiles(
             )
 
     if "segment" in activity_profiles.columns:
+        segment_source = activity_profiles.copy()
+        if "activity_assignment_method" in segment_source.columns:
+            segment_methods = {
+                "segment",
+                "segment_default",
+                "segment_fallback",
+                "openap_segment",
+            }
+            segment_source = segment_source.loc[
+                segment_source["activity_assignment_method"]
+                .astype(str)
+                .str.strip()
+                .str.lower()
+                .isin(segment_methods)
+            ]
         for column in available_activity_columns:
-            missing_mask = merged[column].isna()
+            missing_mask = _missing_activity_mask(column)
             if not missing_mask.any():
                 continue
+            valid_segment_source = _valid_profile_rows(segment_source, column)
             segment_defaults = (
-                activity_profiles.loc[
-                    activity_profiles["segment"].astype(str).str.strip() != "",
+                valid_segment_source.loc[
+                    valid_segment_source["segment"].astype(str).str.strip() != "",
                     ["segment", column],
                 ]
-                .dropna(subset=[column])
                 .groupby("segment", dropna=False)[column]
                 .first()
             )
