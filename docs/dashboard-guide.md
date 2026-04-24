@@ -148,13 +148,54 @@ The current dashboards provide:
 - technology mix by year
 - energy by carrier
 - investments by operator
+- operator drill-down cards
+- report-ready summary tables
+- aviation preprocessing and OpenAP output explorer
+- aviation flight-route network
+- aviation airport fuel-demand map
 
 Important note on energy units:
 
 - the model stores raw energy internally in `kWh`
 - the dashboard converts displayed energy values to `TWh`
 
-## 8. Typical Workflow
+## 8. Aviation Preprocessing And OpenAP Views
+
+For aviation dashboards, extra cards are shown when files exist under:
+
+```text
+data/processed/aviation/
+```
+
+These cards use outputs from the aviation preprocessing pipeline, especially:
+
+- `aviation_fleet_stock_enriched.csv`
+- `aviation_stock_matching_report.csv`
+- `aviation_activity_profiles.csv`
+- `aviation_airport_allocation.csv`
+- `openap_flight_fuel_emissions.csv`
+- `openap_aircraft_type_summary.csv`
+- `openap_route_summary.csv`
+- `openap_aircraft_type_mapping_log.csv`
+
+The `Aviation Preprocessing Explorer` summarizes stock matching, activity
+profiles, airport allocation, OpenAP aircraft type mapping, and OpenAP fuel and
+emissions totals.
+
+The `Flight Route Network` shows a schematic airport network. It is useful for
+seeing which routes dominate by trips, fuel, energy, or CO2, but it is not a
+geographic map.
+
+The `Airport Fuel Demand Map` uses airport coordinates from the aviation
+preprocessing `airport_metadata` path in `scenario.yaml`. It draws the airports
+and route lines on a lightweight Europe basemap, so it is geographically
+anchored rather than a pure network graph. Airport bubbles show demand
+associated with each airport, and route lines show the selected route metric. By
+default, airport demand is assigned to departing airports, which is the better
+first proxy for airport fuel demand. The map can also switch to
+`Origin + destination activity` if you want an activity-footprint view.
+
+## 9. Typical Workflow
 
 ### Generate a saved run
 
@@ -181,7 +222,7 @@ In the browser:
 - `Dashboard Source` -> `Saved results`
 - choose the run folder from the dropdown
 
-## 9. Current Design
+## 10. Current Design
 
 All four dashboard entrypoints use the shared helper:
 

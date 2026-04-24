@@ -208,15 +208,9 @@ class OpenAPFuelEmissionBackend:
         first_occupancy = self._numeric_value(row, ("first_occupancy",)) or 0.0
 
         cabin_payload = (
-            (economy_seats or 0.0)
-            * economy_occupancy
-            * self.config.economy_passenger_mass_kg
-            + (business_seats or 0.0)
-            * business_occupancy
-            * self.config.business_passenger_mass_kg
-            + (first_seats or 0.0)
-            * first_occupancy
-            * self.config.first_passenger_mass_kg
+            (economy_seats or 0.0) * economy_occupancy * self.config.economy_passenger_mass_kg
+            + (business_seats or 0.0) * business_occupancy * self.config.business_passenger_mass_kg
+            + (first_seats or 0.0) * first_occupancy * self.config.first_passenger_mass_kg
         )
         if cabin_payload > 0.0:
             return cabin_payload
@@ -243,8 +237,7 @@ class OpenAPFuelEmissionBackend:
         if payload_capacity is None:
             return 0.0
         load_factor = (
-            self._numeric_value(row, ("load_factor",))
-            or self.config.default_cargo_load_factor
+            self._numeric_value(row, ("load_factor",)) or self.config.default_cargo_load_factor
         )
         return payload_capacity * load_factor
 

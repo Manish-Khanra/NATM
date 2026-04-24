@@ -3,7 +3,7 @@ from __future__ import annotations
 from dashboard_examples.common_case_dashboard import build_case_dashboard
 from navaero_transition_model.core.model import NATMModel
 
-page = build_case_dashboard(
+Page = build_case_dashboard(
     case_name="baseline-cargo-transition",
     title="NATM Aviation Cargo Dashboard",
     sector_name="aviation",

@@ -7,8 +7,10 @@ from pathlib import Path
 import pandas as pd
 
 try:
+    import networkx as nx
     import solara
     from matplotlib.figure import Figure
+    from matplotlib.patches import Polygon
     from matplotlib.ticker import FuncFormatter
     from mesa.visualization import SolaraViz, make_plot_component
     from mesa.visualization.utils import update_counter
@@ -25,7 +27,54 @@ from navaero_transition_model.core.model import NATMModel
 from navaero_transition_model.core.scenario import NATMScenario
 
 KWH_PER_TWH = 1_000_000_000.0
-RESULTS_ROOT = Path(__file__).resolve().parents[1] / "simulation_results"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+RESULTS_ROOT = PROJECT_ROOT / "simulation_results"
+PROCESSED_AVIATION_ROOT = PROJECT_ROOT / "data" / "processed" / "aviation"
+EUROPE_BASEMAP_POLYGONS = [
+    [
+        (-10.0, 36.0),
+        (-9.4, 43.8),
+        (-5.0, 48.5),
+        (-1.5, 50.4),
+        (4.5, 53.7),
+        (8.8, 54.9),
+        (13.8, 54.7),
+        (18.8, 56.2),
+        (24.5, 59.9),
+        (31.5, 60.8),
+        (33.0, 55.5),
+        (30.0, 50.0),
+        (25.0, 45.0),
+        (22.0, 40.5),
+        (19.0, 39.0),
+        (15.2, 40.0),
+        (12.0, 43.2),
+        (8.2, 43.8),
+        (3.2, 43.1),
+        (-1.8, 41.0),
+        (-6.0, 36.5),
+    ],
+    [(-8.7, 50.0), (-5.5, 58.4), (-2.0, 58.8), (1.7, 52.0), (-2.5, 50.0)],
+    [(-10.8, 51.4), (-9.0, 55.4), (-6.0, 55.1), (-5.2, 52.0), (-8.0, 51.2)],
+    [
+        (5.5, 58.0),
+        (10.0, 63.5),
+        (17.8, 68.5),
+        (25.5, 69.7),
+        (30.0, 66.0),
+        (23.0, 60.0),
+        (13.0, 55.3),
+    ],
+    [
+        (7.0, 44.8),
+        (10.5, 46.0),
+        (13.5, 43.0),
+        (15.6, 40.1),
+        (16.2, 37.4),
+        (13.0, 38.8),
+        (10.0, 42.0),
+    ],
+]
 
 
 def _compact_number_formatter(unit_suffix: str = ""):
@@ -72,6 +121,150 @@ def _show_figure(fig: Figure) -> None:
             f'<img src="data:image/png;base64,{data}" style="width:100%;height:auto;display:block">'
         ),
     )
+
+
+def _read_csv_if_exists(path: Path) -> pd.DataFrame:
+    if not path.exists():
+        return pd.DataFrame()
+    try:
+        return pd.read_csv(path)
+    except Exception:
+        return pd.DataFrame()
+
+
+def _filter_application(frame: pd.DataFrame, application_name: str) -> pd.DataFrame:
+    if frame.empty or "application_name" not in frame.columns:
+        return frame.copy()
+    return frame.loc[frame["application_name"].astype(str).eq(application_name)].copy()
+
+
+def _latest_year(frame: pd.DataFrame) -> int | None:
+    if frame.empty or "year" not in frame.columns:
+        return None
+    years = pd.to_numeric(frame["year"], errors="coerce").dropna()
+    return int(years.max()) if not years.empty else None
+
+
+def _show_dataframe(frame: pd.DataFrame, max_rows: int = 12) -> None:
+    if frame.empty:
+        solara.Markdown("_No rows available._")
+        return
+    display_frame = frame.head(max_rows).copy()
+    for column in display_frame.columns:
+        if pd.api.types.is_numeric_dtype(display_frame[column]):
+            display_frame[column] = display_frame[column].round(4)
+    table_html = display_frame.to_html(index=False, escape=True, classes="natm-table")
+    solara.HTML(
+        tag="div",
+        unsafe_innerHTML=(
+            "<style>"
+            ".natm-table{border-collapse:collapse;width:100%;font-size:0.88rem;}"
+            ".natm-table th,.natm-table td{border:1px solid #ddd;padding:6px 8px;}"
+            ".natm-table th{background:#f5f5f5;text-align:left;}"
+            "</style>"
+            f"{table_html}"
+        ),
+    )
+
+
+def _normalize_airport_metadata(frame: pd.DataFrame) -> pd.DataFrame:
+    if frame.empty:
+        return pd.DataFrame(
+            columns=["airport_code", "airport_name", "country", "latitude", "longitude"],
+        )
+    normalized = frame.copy()
+    rename_map = {
+        "iata": "airport_code",
+        "airport": "airport_code",
+        "airport_iata": "airport_code",
+        "latitude_deg": "latitude",
+        "longitude_deg": "longitude",
+        "lat": "latitude",
+        "lon": "longitude",
+        "name": "airport_name",
+    }
+    normalized = normalized.rename(columns=rename_map)
+    if "airport_code" not in normalized.columns and "icao" in normalized.columns:
+        normalized["airport_code"] = normalized["icao"]
+    for column in ("airport_code", "airport_name", "country"):
+        if column not in normalized.columns:
+            normalized[column] = ""
+    if "latitude" not in normalized.columns or "longitude" not in normalized.columns:
+        return pd.DataFrame(
+            columns=["airport_code", "airport_name", "country", "latitude", "longitude"],
+        )
+    normalized["airport_code"] = normalized["airport_code"].astype(str).str.upper().str.strip()
+    normalized["latitude"] = pd.to_numeric(normalized["latitude"], errors="coerce")
+    normalized["longitude"] = pd.to_numeric(normalized["longitude"], errors="coerce")
+    return normalized.dropna(subset=["airport_code", "latitude", "longitude"])[
+        ["airport_code", "airport_name", "country", "latitude", "longitude"]
+    ].drop_duplicates(subset=["airport_code"], keep="first")
+
+
+def _draw_europe_basemap(ax) -> None:
+    ax.set_facecolor("#d8eef7")
+    for coordinates in EUROPE_BASEMAP_POLYGONS:
+        ax.add_patch(
+            Polygon(
+                coordinates,
+                closed=True,
+                facecolor="#eef1e6",
+                edgecolor="#aeb8a6",
+                linewidth=0.8,
+                alpha=0.96,
+                zorder=0,
+            )
+        )
+    ax.text(
+        -7.5,
+        60.8,
+        "North Atlantic",
+        color="#6b8794",
+        fontsize=9,
+        alpha=0.8,
+    )
+    ax.text(
+        11.5,
+        55.6,
+        "Europe",
+        color="#5f6f52",
+        fontsize=17,
+        fontweight="bold",
+        alpha=0.45,
+    )
+    ax.text(5.0, 36.3, "Mediterranean Sea", color="#6b8794", fontsize=9, alpha=0.8)
+
+
+def _energy_by_carrier_table(energy_frame: pd.DataFrame, year: int | None) -> pd.DataFrame:
+    if energy_frame.empty or year is None:
+        return pd.DataFrame()
+    selected = energy_frame.loc[pd.to_numeric(energy_frame["year"], errors="coerce").eq(year)]
+    if selected.empty:
+        return pd.DataFrame()
+    primary = (
+        selected.groupby("primary_energy_carrier", dropna=False)["primary_energy_consumption"]
+        .sum()
+        .rename("energy_kwh")
+        .reset_index()
+        .rename(columns={"primary_energy_carrier": "carrier"})
+    )
+    secondary = (
+        selected.loc[
+            selected["secondary_energy_carrier"].fillna("").astype(str).str.strip().ne("")
+            & selected["secondary_energy_carrier"].fillna("").astype(str).str.strip().ne("none")
+        ]
+        .groupby("secondary_energy_carrier", dropna=False)["secondary_energy_consumption"]
+        .sum()
+        .rename("energy_kwh")
+        .reset_index()
+        .rename(columns={"secondary_energy_carrier": "carrier"})
+    )
+    table = pd.concat([primary, secondary], ignore_index=True)
+    if table.empty:
+        return table
+    table = table.groupby("carrier", as_index=False)["energy_kwh"].sum()
+    table["energy_twh"] = table["energy_kwh"] / KWH_PER_TWH
+    return table.sort_values("energy_kwh", ascending=False)
 
 
 @solara.component
@@ -137,6 +330,66 @@ def build_case_dashboard(
         if investment_frame.empty:
             return investment_frame
         return investment_frame.loc[investment_frame["application_name"] == application_name].copy()
+
+    def _live_result_frames(model: NATMModel) -> dict[str, pd.DataFrame]:
+        return {
+            "summary": model.to_frame(),
+            "agents": _agent_frame(model),
+            "technology": _technology_frame(model),
+            "energy": _energy_frame(model),
+            "investments": _investment_frame(model),
+        }
+
+    def _load_aviation_preprocessing_frames() -> dict[str, pd.DataFrame]:
+        if sector_name != "aviation":
+            return {}
+        preprocessing_config = scenario.aviation_preprocessing_config()
+        airport_metadata_path = None
+        if preprocessing_config is not None:
+            airport_metadata_path = preprocessing_config.resolve_path(
+                scenario.base_path,
+                "airport_metadata",
+            )
+        if airport_metadata_path is None:
+            airport_metadata_path = (
+                PROJECT_ROOT
+                / "data"
+                / "examples"
+                / "aviation_preprocessing"
+                / "airports_sample.csv"
+            )
+        return {
+            "airport_metadata": _normalize_airport_metadata(
+                _read_csv_if_exists(airport_metadata_path),
+            ),
+            "enriched_stock": _read_csv_if_exists(
+                PROCESSED_AVIATION_ROOT / "aviation_fleet_stock_enriched.csv",
+            ),
+            "matching_report": _read_csv_if_exists(
+                PROCESSED_AVIATION_ROOT / "aviation_stock_matching_report.csv",
+            ),
+            "activity_profiles": _read_csv_if_exists(
+                PROCESSED_AVIATION_ROOT / "aviation_activity_profiles.csv",
+            ),
+            "airport_allocation": _read_csv_if_exists(
+                PROCESSED_AVIATION_ROOT / "aviation_airport_allocation.csv",
+            ),
+            "calibration_targets": _read_csv_if_exists(
+                PROCESSED_AVIATION_ROOT / "aviation_calibration_targets.csv",
+            ),
+            "openap_flights": _read_csv_if_exists(
+                PROCESSED_AVIATION_ROOT / "openap_flight_fuel_emissions.csv",
+            ),
+            "openap_type_summary": _read_csv_if_exists(
+                PROCESSED_AVIATION_ROOT / "openap_aircraft_type_summary.csv",
+            ),
+            "openap_route_summary": _read_csv_if_exists(
+                PROCESSED_AVIATION_ROOT / "openap_route_summary.csv",
+            ),
+            "openap_mapping_log": _read_csv_if_exists(
+                PROCESSED_AVIATION_ROOT / "openap_aircraft_type_mapping_log.csv",
+            ),
+        }
 
     def _available_result_folders() -> list[str]:
         if not RESULTS_ROOT.exists():
@@ -772,6 +1025,672 @@ def build_case_dashboard(
         _ChartContainer("Investments by Operator", _content)
 
     @solara.component
+    def OperatorDrilldownContent(frames: dict[str, pd.DataFrame], source_label: str):
+        agent_frame = frames.get("agents", pd.DataFrame())
+        technology_frame = frames.get("technology", pd.DataFrame())
+        energy_frame = frames.get("energy", pd.DataFrame())
+        investment_frame = frames.get("investments", pd.DataFrame())
+
+        operator_sources = [
+            frame["operator_name"].dropna().astype(str)
+            for frame in (agent_frame, technology_frame, energy_frame, investment_frame)
+            if not frame.empty and "operator_name" in frame.columns
+        ]
+        operators = sorted(set(pd.concat(operator_sources).str.strip())) if operator_sources else []
+        operators = [operator for operator in operators if operator]
+        selected_operator, set_selected_operator = solara.use_state(
+            operators[0] if operators else "",
+        )
+        if not operators:
+            solara.Markdown(f"No {title.lower()} operator data is available for drill-down.")
+            return
+
+        effective_operator = selected_operator if selected_operator in operators else operators[0]
+        solara.Select(
+            "Operator",
+            values=operators,
+            value=effective_operator,
+            on_value=set_selected_operator,
+        )
+
+        operator_agents = (
+            agent_frame.loc[agent_frame["operator_name"].astype(str).eq(effective_operator)].copy()
+            if not agent_frame.empty and "operator_name" in agent_frame.columns
+            else pd.DataFrame()
+        )
+        operator_technology = (
+            technology_frame.loc[
+                technology_frame["operator_name"].astype(str).eq(effective_operator)
+            ].copy()
+            if not technology_frame.empty and "operator_name" in technology_frame.columns
+            else pd.DataFrame()
+        )
+        operator_energy = (
+            energy_frame.loc[
+                energy_frame["operator_name"].astype(str).eq(effective_operator)
+            ].copy()
+            if not energy_frame.empty and "operator_name" in energy_frame.columns
+            else pd.DataFrame()
+        )
+        operator_investments = (
+            investment_frame.loc[
+                investment_frame["operator_name"].astype(str).eq(effective_operator)
+            ].copy()
+            if not investment_frame.empty and "operator_name" in investment_frame.columns
+            else pd.DataFrame()
+        )
+
+        latest_year = (
+            _latest_year(operator_agents)
+            or _latest_year(operator_technology)
+            or _latest_year(operator_energy)
+            or _latest_year(operator_investments)
+        )
+        latest_agents = (
+            operator_agents.loc[
+                pd.to_numeric(operator_agents["year"], errors="coerce").eq(latest_year)
+            ]
+            if latest_year is not None and not operator_agents.empty
+            else pd.DataFrame()
+        )
+        latest_assets = (
+            int(pd.to_numeric(latest_agents["total_assets"], errors="coerce").sum())
+            if not latest_agents.empty and "total_assets" in latest_agents.columns
+            else 0
+        )
+        latest_alternative_share = (
+            float(pd.to_numeric(latest_agents["alternative_share"], errors="coerce").mean())
+            if not latest_agents.empty and "alternative_share" in latest_agents.columns
+            else 0.0
+        )
+        total_investment = (
+            float(pd.to_numeric(operator_investments["investment_cost_eur"], errors="coerce").sum())
+            if not operator_investments.empty
+            and "investment_cost_eur" in operator_investments.columns
+            else 0.0
+        )
+        total_energy_twh = 0.0
+        if not operator_energy.empty:
+            total_energy_twh = (
+                pd.to_numeric(
+                    operator_energy.get("primary_energy_consumption", pd.Series(dtype=float)),
+                    errors="coerce",
+                ).sum()
+                + pd.to_numeric(
+                    operator_energy.get("secondary_energy_consumption", pd.Series(dtype=float)),
+                    errors="coerce",
+                ).sum()
+            ) / KWH_PER_TWH
+
+        solara.Markdown(
+            "\n".join(
+                [
+                    f"### {effective_operator} Drill-Down",
+                    f"- Source: `{source_label}`",
+                    f"- Latest year: `{latest_year or 'n/a'}`",
+                    f"- Latest fleet stock: `{latest_assets}`",
+                    f"- Latest alternative share: `{latest_alternative_share:.2%}`",
+                    f"- Total investment in view: `{total_investment:,.0f} EUR`",
+                    f"- Total energy in view: `{total_energy_twh:,.4f} TWh`",
+                ],
+            ),
+        )
+
+        if not operator_agents.empty:
+            ordered = operator_agents.sort_values("year")
+            fig = Figure(figsize=(9.2, 4.8))
+            ax = fig.subplots()
+            ax.plot(
+                ordered["year"].astype(int),
+                ordered["alternative_share"].astype(float),
+                marker="o",
+                color="#2a6f97",
+                label="Alternative share",
+            )
+            ax.set_ylim(0.0, 1.0)
+            ax.set_ylabel("Alternative share")
+            ax.set_xlabel("Year")
+            ax.grid(alpha=0.25)
+            ax2 = ax.twinx()
+            ax2.plot(
+                ordered["year"].astype(int),
+                ordered["total_assets"].astype(float),
+                marker="s",
+                color="#386641",
+                label="Fleet stock",
+            )
+            ax2.set_ylabel("Fleet stock")
+            ax.set_title(f"{effective_operator}: Adoption and Fleet Stock")
+            _show_figure(fig)
+
+        if latest_year is not None and not operator_technology.empty:
+            latest_tech = operator_technology.loc[
+                pd.to_numeric(operator_technology["year"], errors="coerce").eq(latest_year)
+            ]
+            if not latest_tech.empty and stock_count_column in latest_tech.columns:
+                table = (
+                    latest_tech.groupby("current_technology", as_index=False)[stock_count_column]
+                    .sum()
+                    .sort_values(stock_count_column, ascending=False)
+                )
+                solara.Markdown("#### Latest Technology Mix")
+                _show_dataframe(table, max_rows=8)
+
+        if latest_year is not None and not operator_energy.empty:
+            solara.Markdown("#### Latest Energy by Carrier")
+            _show_dataframe(_energy_by_carrier_table(operator_energy, latest_year), max_rows=8)
+
+        if latest_year is not None and not operator_investments.empty:
+            latest_investments = operator_investments.loc[
+                pd.to_numeric(operator_investments["year"], errors="coerce").eq(latest_year)
+            ]
+            if not latest_investments.empty:
+                columns = [
+                    column
+                    for column in (
+                        "year",
+                        "operator_name",
+                        "investment_cost_eur",
+                        "technology_name",
+                        "current_technology",
+                    )
+                    if column in latest_investments.columns
+                ]
+                solara.Markdown("#### Latest Investment Rows")
+                _show_dataframe(latest_investments[columns], max_rows=8)
+
+    @solara.component
+    def OperatorDrilldown(model: NATMModel):
+        update_counter.get()
+        with solara.Card("Operator Drill-Down", style={"margin-bottom": "28px"}):
+            OperatorDrilldownContent(_live_result_frames(model), "live case")
+
+    @solara.component
+    def SavedOperatorDrilldown(folder_name: str):
+        with solara.Card("Operator Drill-Down", style={"margin-bottom": "28px"}):
+            OperatorDrilldownContent(_load_result_frames(folder_name), f"saved: {folder_name}")
+
+    @solara.component
+    def ReportTablesContent(frames: dict[str, pd.DataFrame], source_label: str):
+        agent_frame = frames.get("agents", pd.DataFrame())
+        technology_frame = frames.get("technology", pd.DataFrame())
+        energy_frame = frames.get("energy", pd.DataFrame())
+        investment_frame = frames.get("investments", pd.DataFrame())
+        latest_year = (
+            _latest_year(agent_frame)
+            or _latest_year(technology_frame)
+            or _latest_year(energy_frame)
+            or _latest_year(investment_frame)
+        )
+        solara.Markdown(f"### Report Tables ({source_label})")
+        solara.Markdown("Compact tables for checking values and preparing report screenshots.")
+        if latest_year is None:
+            solara.Markdown("No year-indexed data is available.")
+            return
+
+        if not agent_frame.empty:
+            latest_agents = agent_frame.loc[
+                pd.to_numeric(agent_frame["year"], errors="coerce").eq(latest_year)
+            ]
+            columns = [
+                column
+                for column in (
+                    "year",
+                    "operator_name",
+                    "operator_country",
+                    "total_assets",
+                    "alternative_assets",
+                    "alternative_share",
+                )
+                if column in latest_agents.columns
+            ]
+            solara.Markdown("#### Final Operator Stock")
+            _show_dataframe(
+                latest_agents[columns].sort_values("operator_name"),
+                max_rows=16,
+            )
+
+        if not technology_frame.empty:
+            latest_technology = technology_frame.loc[
+                pd.to_numeric(technology_frame["year"], errors="coerce").eq(latest_year)
+            ]
+            if stock_count_column in latest_technology.columns:
+                technology_table = (
+                    latest_technology.groupby("current_technology", as_index=False)[
+                        stock_count_column
+                    ]
+                    .sum()
+                    .sort_values(stock_count_column, ascending=False)
+                )
+                solara.Markdown("#### Final Technology Mix")
+                _show_dataframe(technology_table, max_rows=16)
+
+        if not energy_frame.empty:
+            solara.Markdown("#### Final Energy by Carrier")
+            _show_dataframe(_energy_by_carrier_table(energy_frame, latest_year), max_rows=16)
+
+        if not investment_frame.empty and "investment_cost_eur" in investment_frame.columns:
+            investment_table = (
+                investment_frame.groupby("operator_name", as_index=False)["investment_cost_eur"]
+                .sum()
+                .sort_values("investment_cost_eur", ascending=False)
+            )
+            solara.Markdown("#### Total Investments by Operator")
+            _show_dataframe(investment_table, max_rows=16)
+
+    @solara.component
+    def ReportTables(model: NATMModel):
+        update_counter.get()
+        with solara.Card("Report Tables", style={"margin-bottom": "28px"}):
+            ReportTablesContent(_live_result_frames(model), "live case")
+
+    @solara.component
+    def SavedReportTables(folder_name: str):
+        with solara.Card("Report Tables", style={"margin-bottom": "28px"}):
+            ReportTablesContent(_load_result_frames(folder_name), f"saved: {folder_name}")
+
+    @solara.component
+    def AviationPreprocessingExplorer(_model: NATMModel | None = None):
+        if sector_name != "aviation":
+            return
+        frames = _load_aviation_preprocessing_frames()
+        if not frames or all(frame.empty for frame in frames.values()):
+            with solara.Card("Aviation Preprocessing Explorer"):
+                solara.Markdown(
+                    "No aviation preprocessing outputs were found in `data/processed/aviation`.",
+                )
+            return
+
+        enriched_stock = frames.get("enriched_stock", pd.DataFrame())
+        openap_flights = frames.get("openap_flights", pd.DataFrame())
+        route_summary = frames.get("openap_route_summary", pd.DataFrame())
+        activity_profiles = frames.get("activity_profiles", pd.DataFrame())
+
+        with solara.Card("Aviation Preprocessing Explorer", style={"margin-bottom": "28px"}):
+            solara.Markdown("### Processed Data Snapshot")
+            solara.Markdown(
+                "\n".join(
+                    [
+                        f"- Enriched stock rows: `{len(enriched_stock)}`",
+                        f"- OpenAP flight rows: `{len(openap_flights)}`",
+                        f"- OpenAP route rows: `{len(route_summary)}`",
+                        f"- Activity profile rows: `{len(activity_profiles)}`",
+                        f"- Folder: `{PROCESSED_AVIATION_ROOT}`",
+                    ],
+                ),
+            )
+
+            if not openap_flights.empty:
+                processed = openap_flights.loc[
+                    pd.to_numeric(openap_flights.get("fuel_kg"), errors="coerce") > 0.0
+                ]
+                total_fuel = pd.to_numeric(processed.get("fuel_kg"), errors="coerce").sum()
+                total_energy = pd.to_numeric(processed.get("energy_mwh"), errors="coerce").sum()
+                total_co2 = pd.to_numeric(processed.get("co2_kg"), errors="coerce").sum()
+                solara.Markdown(
+                    "\n".join(
+                        [
+                            "### OpenAP Baseline Totals",
+                            f"- Flights with estimated fuel: `{len(processed)}`",
+                            f"- Fuel: `{total_fuel:,.1f} kg`",
+                            f"- Energy: `{total_energy:,.4f} MWh`",
+                            f"- CO2: `{total_co2:,.1f} kg`",
+                        ],
+                    ),
+                )
+
+            mapping_log = frames.get("openap_mapping_log", pd.DataFrame())
+            if not mapping_log.empty:
+                solara.Markdown("#### Aircraft Type Mapping Log")
+                _show_dataframe(mapping_log, max_rows=12)
+
+            type_summary = frames.get("openap_type_summary", pd.DataFrame())
+            if not type_summary.empty:
+                solara.Markdown("#### OpenAP Aircraft Type Summary")
+                _show_dataframe(type_summary, max_rows=12)
+
+            matching_report = frames.get("matching_report", pd.DataFrame())
+            if not matching_report.empty:
+                solara.Markdown("#### Stock Matching Report")
+                _show_dataframe(matching_report, max_rows=12)
+
+            airport_allocation = frames.get("airport_allocation", pd.DataFrame())
+            if not airport_allocation.empty:
+                solara.Markdown("#### Airport Allocation")
+                _show_dataframe(airport_allocation, max_rows=12)
+
+    @solara.component
+    def FlightRouteNetwork(_model: NATMModel | None = None):
+        if sector_name != "aviation":
+            return
+        route_summary = _load_aviation_preprocessing_frames().get(
+            "openap_route_summary",
+            pd.DataFrame(),
+        )
+        with solara.Card("Flight Route Network", style={"margin-bottom": "28px"}):
+            if route_summary.empty:
+                solara.Markdown(
+                    "No OpenAP route summary was found. Run aviation preprocessing with "
+                    "`openap.estimate_fuel: true` first.",
+                )
+                return
+            metric_options = [
+                column
+                for column in (
+                    "number_of_trips",
+                    "total_fuel_kg",
+                    "total_energy_mwh",
+                    "total_co2_kg",
+                )
+                if column in route_summary.columns
+            ]
+            metric, set_metric = solara.use_state(
+                metric_options[0] if metric_options else "number_of_trips",
+            )
+            top_n_default = min(12, max(len(route_summary), 1))
+            top_n, set_top_n = solara.use_state(top_n_default)
+            if not metric_options:
+                solara.Markdown("Route summary has no plottable metric columns.")
+                return
+
+            effective_metric = metric if metric in metric_options else metric_options[0]
+            solara.Select(
+                "Edge weight",
+                values=metric_options,
+                value=effective_metric,
+                on_value=set_metric,
+            )
+            solara.SliderInt(
+                "Top routes",
+                value=min(top_n, len(route_summary)),
+                min=1,
+                max=max(len(route_summary), 1),
+                step=1,
+                on_value=set_top_n,
+            )
+
+            routes = route_summary.copy()
+            routes[effective_metric] = pd.to_numeric(routes[effective_metric], errors="coerce")
+            routes = routes.dropna(subset=[effective_metric])
+            routes = routes.loc[routes[effective_metric] > 0.0]
+            routes = routes.sort_values(effective_metric, ascending=False).head(top_n)
+            if routes.empty:
+                solara.Markdown("No positive route weights are available.")
+                return
+
+            graph = nx.DiGraph()
+            for row in routes.itertuples(index=False):
+                origin = str(getattr(row, "origin", "")).strip()
+                destination = str(getattr(row, "destination", "")).strip()
+                weight = float(getattr(row, effective_metric))
+                if origin and destination:
+                    graph.add_edge(origin, destination, weight=weight)
+
+            fig = Figure(figsize=(9.4, 6.4))
+            ax = fig.subplots()
+            positions = nx.spring_layout(graph, seed=42, k=1.6)
+            weights = [graph[u][v]["weight"] for u, v in graph.edges()]
+            max_weight = max(weights) if weights else 1.0
+            widths = [1.0 + 5.0 * weight / max_weight for weight in weights]
+            node_sizes = [900 + 280 * graph.degree(node) for node in graph.nodes()]
+            nx.draw_networkx_nodes(
+                graph,
+                positions,
+                node_size=node_sizes,
+                node_color="#2a6f97",
+                alpha=0.9,
+                ax=ax,
+            )
+            nx.draw_networkx_edges(
+                graph,
+                positions,
+                width=widths,
+                edge_color="#9c6644",
+                arrows=True,
+                arrowsize=18,
+                alpha=0.7,
+                ax=ax,
+            )
+            nx.draw_networkx_labels(
+                graph,
+                positions,
+                font_size=10,
+                font_color="white",
+                ax=ax,
+            )
+            ax.set_title(f"Top Flight Routes by {effective_metric}")
+            ax.axis("off")
+            _show_figure(fig)
+
+            solara.Markdown("#### Route Table")
+            columns = [
+                column
+                for column in (
+                    "origin",
+                    "destination",
+                    "route",
+                    "raw_aircraft_type",
+                    "openap_type",
+                    "year",
+                    effective_metric,
+                )
+                if column in routes.columns
+            ]
+            _show_dataframe(routes[columns], max_rows=top_n)
+
+    @solara.component
+    def FlightFuelDemandMap(_model: NATMModel | None = None):
+        if sector_name != "aviation":
+            return
+        frames = _load_aviation_preprocessing_frames()
+        route_summary = frames.get("openap_route_summary", pd.DataFrame())
+        airports = frames.get("airport_metadata", pd.DataFrame())
+        with solara.Card("Airport Fuel Demand Map", style={"margin-bottom": "28px"}):
+            if route_summary.empty:
+                solara.Markdown(
+                    "No OpenAP route summary was found. Run aviation preprocessing with "
+                    "`openap.estimate_fuel: true` first.",
+                )
+                return
+            if airports.empty:
+                solara.Markdown(
+                    "No airport coordinate metadata was found, so the map cannot be drawn.",
+                )
+                return
+
+            metric_options = [
+                column
+                for column in (
+                    "total_fuel_kg",
+                    "total_energy_mwh",
+                    "total_co2_kg",
+                    "number_of_trips",
+                )
+                if column in route_summary.columns
+            ]
+            if not metric_options:
+                solara.Markdown("Route summary has no map metric columns.")
+                return
+
+            selected_metric, set_selected_metric = solara.use_state(metric_options[0])
+            basis_options = ["Departures only", "Origin + destination activity"]
+            selected_basis, set_selected_basis = solara.use_state(basis_options[0])
+            top_n_default = min(20, max(len(route_summary), 1))
+            top_n, set_top_n = solara.use_state(top_n_default)
+
+            effective_metric = (
+                selected_metric if selected_metric in metric_options else metric_options[0]
+            )
+            effective_basis = (
+                selected_basis if selected_basis in basis_options else basis_options[0]
+            )
+            solara.Markdown(
+                "Airport bubbles show demand associated with airports; route lines are drawn "
+                "on a lightweight Europe basemap using airport coordinates.",
+            )
+            solara.Select(
+                "Map metric",
+                values=metric_options,
+                value=effective_metric,
+                on_value=set_selected_metric,
+            )
+            solara.ToggleButtonsSingle(
+                value=effective_basis,
+                values=basis_options,
+                on_value=set_selected_basis,
+            )
+            solara.SliderInt(
+                "Top routes on map",
+                value=min(top_n, len(route_summary)),
+                min=1,
+                max=max(len(route_summary), 1),
+                step=1,
+                on_value=set_top_n,
+            )
+
+            routes = route_summary.copy()
+            routes[effective_metric] = pd.to_numeric(routes[effective_metric], errors="coerce")
+            routes = routes.dropna(subset=[effective_metric])
+            routes = routes.loc[routes[effective_metric] > 0.0]
+            routes = routes.sort_values(effective_metric, ascending=False).head(top_n)
+            if routes.empty:
+                solara.Markdown("No positive route weights are available.")
+                return
+
+            airport_lookup = airports.set_index("airport_code")
+            routes = routes.merge(
+                airport_lookup[["latitude", "longitude"]].add_prefix("origin_"),
+                left_on="origin",
+                right_index=True,
+                how="left",
+            )
+            routes = routes.merge(
+                airport_lookup[["latitude", "longitude"]].add_prefix("destination_"),
+                left_on="destination",
+                right_index=True,
+                how="left",
+            )
+            routes = routes.dropna(
+                subset=[
+                    "origin_latitude",
+                    "origin_longitude",
+                    "destination_latitude",
+                    "destination_longitude",
+                ],
+            )
+            if routes.empty:
+                solara.Markdown(
+                    "Routes exist, but their airports were not found in the coordinate metadata.",
+                )
+                return
+
+            origin_demand = routes[["origin", effective_metric]].rename(
+                columns={"origin": "airport_code", effective_metric: "airport_metric"},
+            )
+            if effective_basis == "Origin + destination activity":
+                destination_demand = routes[["destination", effective_metric]].rename(
+                    columns={
+                        "destination": "airport_code",
+                        effective_metric: "airport_metric",
+                    },
+                )
+                airport_demand = pd.concat(
+                    [origin_demand, destination_demand],
+                    ignore_index=True,
+                )
+            else:
+                airport_demand = origin_demand
+            airport_demand = (
+                airport_demand.groupby("airport_code", as_index=False)["airport_metric"]
+                .sum()
+                .merge(airports, on="airport_code", how="left")
+                .dropna(subset=["latitude", "longitude"])
+            )
+
+            max_airport_metric = float(airport_demand["airport_metric"].max())
+            max_route_metric = float(routes[effective_metric].max())
+            fig = Figure(figsize=(10.2, 6.8))
+            ax = fig.subplots()
+            _draw_europe_basemap(ax)
+            for row in routes.itertuples(index=False):
+                weight = float(getattr(row, effective_metric))
+                width = 0.8 + 5.2 * weight / max_route_metric
+                ax.plot(
+                    [row.origin_longitude, row.destination_longitude],
+                    [row.origin_latitude, row.destination_latitude],
+                    color="#8d5524",
+                    linewidth=width,
+                    alpha=0.42,
+                    zorder=1,
+                )
+                mid_lon = (row.origin_longitude + row.destination_longitude) / 2
+                mid_lat = (row.origin_latitude + row.destination_latitude) / 2
+                ax.annotate(
+                    "",
+                    xy=(row.destination_longitude, row.destination_latitude),
+                    xytext=(mid_lon, mid_lat),
+                    arrowprops={
+                        "arrowstyle": "->",
+                        "color": "#8d5524",
+                        "alpha": 0.5,
+                        "lw": max(width * 0.45, 0.8),
+                    },
+                    zorder=2,
+                )
+
+            sizes = 280 + 1500 * airport_demand["airport_metric"] / max_airport_metric
+            scatter = ax.scatter(
+                airport_demand["longitude"],
+                airport_demand["latitude"],
+                s=sizes,
+                c=airport_demand["airport_metric"],
+                cmap="YlOrRd",
+                edgecolor="#1f2933",
+                linewidth=1.0,
+                alpha=0.88,
+                zorder=3,
+            )
+            for row in airport_demand.itertuples(index=False):
+                ax.text(
+                    row.longitude,
+                    row.latitude + 0.22,
+                    row.airport_code,
+                    ha="center",
+                    va="bottom",
+                    fontsize=10,
+                    fontweight="bold",
+                    color="#1f2933",
+                    zorder=4,
+                )
+
+            lon_values = pd.concat([routes["origin_longitude"], routes["destination_longitude"]])
+            lat_values = pd.concat([routes["origin_latitude"], routes["destination_latitude"]])
+            lon_margin = max((lon_values.max() - lon_values.min()) * 0.12, 2.0)
+            lat_margin = max((lat_values.max() - lat_values.min()) * 0.18, 2.0)
+            ax.set_xlim(
+                min(-12.0, lon_values.min() - lon_margin),
+                max(32.0, lon_values.max() + lon_margin),
+            )
+            ax.set_ylim(
+                min(35.0, lat_values.min() - lat_margin),
+                max(62.0, lat_values.max() + lat_margin),
+            )
+            ax.set_xlabel("Longitude")
+            ax.set_ylabel("Latitude")
+            ax.set_title(f"Europe Airport Demand and Flight Routes by {effective_metric}")
+            ax.grid(color="white", linewidth=0.8, alpha=0.55)
+            ax.set_aspect("equal", adjustable="box")
+            colorbar = fig.colorbar(scatter, ax=ax, fraction=0.036, pad=0.02)
+            colorbar.set_label(effective_metric)
+            _show_figure(fig)
+
+            solara.Markdown("#### Airport Demand Table")
+            table = airport_demand[
+                ["airport_code", "airport_name", "country", "airport_metric"]
+            ].sort_values("airport_metric", ascending=False)
+            _show_dataframe(table, max_rows=16)
+
+    @solara.component
     def SavedResultsView(folder_name: str):
         with solara.Column():
             SavedLatestSummary(folder_name)
@@ -779,6 +1698,12 @@ def build_case_dashboard(
             SavedTechnologyMix(folder_name)
             SavedEnergyByCarrier(folder_name)
             SavedInvestmentsByOperator(folder_name)
+            SavedOperatorDrilldown(folder_name)
+            SavedReportTables(folder_name)
+            if sector_name == "aviation":
+                AviationPreprocessingExplorer()
+                FlightRouteNetwork()
+                FlightFuelDemandMap()
 
     model_params = {
         "scenario": scenario,
@@ -792,19 +1717,31 @@ def build_case_dashboard(
         },
     }
 
+    live_components = [
+        LatestSummary,
+        make_plot_component(f"{sector_name}_alternative_share"),
+        make_plot_component(f"{sector_name}_transition_pressure"),
+        make_plot_component(f"{sector_name}_policy_support"),
+        OperatorShares,
+        TechnologyMix,
+        EnergyByCarrier,
+        InvestmentsByOperator,
+        OperatorDrilldown,
+        ReportTables,
+    ]
+    if sector_name == "aviation":
+        live_components.extend(
+            [
+                AviationPreprocessingExplorer,
+                FlightRouteNetwork,
+                FlightFuelDemandMap,
+            ],
+        )
+
     model = _build_model(scenario=scenario, seed=42)
     live_dashboard = SolaraViz(
         model,
-        components=[
-            LatestSummary,
-            make_plot_component(f"{sector_name}_alternative_share"),
-            make_plot_component(f"{sector_name}_transition_pressure"),
-            make_plot_component(f"{sector_name}_policy_support"),
-            OperatorShares,
-            TechnologyMix,
-            EnergyByCarrier,
-            InvestmentsByOperator,
-        ],
+        components=live_components,
         model_params=model_params,
         name=title,
     )
@@ -853,4 +1790,4 @@ def build_case_dashboard(
             else:
                 solara.Markdown("No compatible saved results are available yet.")
 
-    return Page()
+    return Page

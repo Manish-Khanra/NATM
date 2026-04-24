@@ -98,9 +98,7 @@ def generate_synthetic_mission_profile(
         - descent_tas_kt * KNOT_TO_KM_PER_H * (descent_time_seconds / 3600.0),
         0.0,
     )
-    cruise_time_seconds = (
-        cruise_distance / max(cruise_tas_kt * KNOT_TO_KM_PER_H, 1e-6)
-    ) * 3600.0
+    cruise_time_seconds = (cruise_distance / max(cruise_tas_kt * KNOT_TO_KM_PER_H, 1e-6)) * 3600.0
 
     rows: list[dict[str, float | str]] = []
     rows.extend(

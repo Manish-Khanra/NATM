@@ -311,9 +311,7 @@ def estimate_trajectory_fuel_and_emissions(
             delta_t = max((current["timestamp"] - previous["timestamp"]).total_seconds(), 0.0)
             if delta_t <= 0.0:
                 continue
-            tas = float(
-                _first_value(current, ("tas_kt", "velocity", "groundspeed"), default=250.0)
-            )
+            tas = float(_first_value(current, ("tas_kt", "velocity", "groundspeed"), default=250.0))
             altitude = float(
                 _first_value(current, ("alt_ft", "baroaltitude", "geoaltitude"), default=0.0)
             )
@@ -465,9 +463,7 @@ def merge_openap_activity_profiles(
         if key_column not in openap_profiles.columns or key_column not in merged.columns:
             return
         lookup = (
-            openap_profiles.loc[
-                openap_profiles[key_column].astype(str).str.strip() != "",
-            ]
+            openap_profiles.loc[openap_profiles[key_column].astype(str).str.strip() != "",]
             .drop_duplicates(subset=[key_column], keep="first")
             .set_index(key_column)
         )
@@ -553,8 +549,10 @@ def build_validation_report(flight_results: pd.DataFrame) -> str:
                 (pd.to_numeric(valid["fuel_kg"], errors="coerce") <= 0)
                 | (pd.to_numeric(valid["distance_km"], errors="coerce") <= 0)
                 | (pd.to_numeric(valid["duration_min"], errors="coerce") <= 0)
-                | (pd.to_numeric(valid["final_mass_kg"], errors="coerce")
-                   > pd.to_numeric(valid["initial_mass_kg"], errors="coerce"))
+                | (
+                    pd.to_numeric(valid["final_mass_kg"], errors="coerce")
+                    > pd.to_numeric(valid["initial_mass_kg"], errors="coerce")
+                )
             ).sum()
         )
         lines.append(f"sanity_warnings: {outlier_count}")
@@ -789,10 +787,10 @@ def prepare_trip_level_flights(
 
     if aircraft_db_processed_path is not None and Path(aircraft_db_processed_path).exists():
         aircraft_db = pd.read_csv(aircraft_db_processed_path)
-        if (
-            {"registration", "icao24", "operator"}.issubset(aircraft_db.columns)
-            and {"registration", "icao24"}.issubset(prepared.columns)
-        ):
+        if {"registration", "icao24", "operator"}.issubset(aircraft_db.columns) and {
+            "registration",
+            "icao24",
+        }.issubset(prepared.columns):
             metadata = aircraft_db.drop_duplicates(subset=["registration", "icao24"], keep="first")
             prepared = prepared.merge(
                 metadata[["registration", "icao24", "operator"]],
