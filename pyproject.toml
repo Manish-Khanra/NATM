@@ -8,6 +8,15 @@ version = "0.1.0"
 description = "Technology transition diffusion model for aviation and maritime systems"
 readme = "README.md"
 requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Manish Gaebelein-Khanra" },
+]
+classifiers = [
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+]
 dependencies = [
     "mesa>=3.1",
     "numpy>=1.26",

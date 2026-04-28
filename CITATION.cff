@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If you use NATM, please cite it using this metadata."
+title: "NATM: NavAero Transition Model"
+authors:
+  - family-names: "Gaebelein-Khanra"
+    given-names: "Manish"
+repository-code: "https://github.com/Manish-Khanra/NATM"
+license: "GPL-3.0-only"
+version: "0.1.0"

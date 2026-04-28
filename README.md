@@ -388,6 +388,20 @@ For the dashboard workflow, see `docs/dashboard-guide.md`.
 - A shared environment layer with country states and route/corridor effects
 - Detailed aviation passenger, aviation cargo, maritime cargo, and maritime passenger outputs for stock, technology diffusion, energy/emissions, and investment activity
 
+## License And Citation
+
+NATM is licensed under the GNU General Public License, version 3 only
+(`GPL-3.0-only`). See `LICENSE` for the full license text.
+
+Copyright (C) 2026 Manish Gaebelein-Khanra.
+
+If you use NATM in academic, policy, consulting, or engineering work, please
+cite the project repository and any associated publications. GitHub should show
+a "Cite this repository" button using the metadata in `CITATION.cff`.
+
+Third-party software dependencies, datasets, and external data sources retain
+their own licenses, citation requirements, and terms of use.
+
 ## Near-Term Next Steps
 
 1. Replace the sample aviation fleet-stock CSV with calibrated operator and fleet data.
