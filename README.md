@@ -2,6 +2,13 @@
 
 NATM stands for NavAero Transition Model.
 
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
+[![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
+[![Mesa](https://img.shields.io/badge/agent--based-Mesa-2a6f97.svg)](https://mesa.readthedocs.io/)
+[![Dashboard](https://img.shields.io/badge/dashboard-Solara-ffb703.svg)](docs/dashboard-guide.md)
+[![DOI](https://img.shields.io/badge/DOI-10.1016%2Fj.nexus.2025.100557-blue.svg)](https://doi.org/10.1016/j.nexus.2025.100557)
+[![Status](https://img.shields.io/badge/status-active%20development-orange.svg)](#near-term-next-steps)
+
 NATM is a technology transition diffusion model for aviation and maritime
 transport systems. It is designed to simulate how operators adopt new aircraft,
 vessels, fuels, and related technologies over time under changing policy,
@@ -24,6 +31,26 @@ The current repository includes working aviation-passenger, aviation-cargo,
 maritime-cargo, and maritime-passenger test cases, while the architecture is
 designed to extend further into additional transport applications as the model
 grows.
+
+## Highlights
+
+- Mesa-based agent-based simulation for aviation and maritime transition pathways
+- Aviation passenger, aviation cargo, maritime cargo, and maritime passenger cases
+- Flexible operator decision logic selected through case input data
+- Demand-driven aviation growth using passenger-km and tonne-km planning inputs
+- Optional OpenSky/OpenAP preprocessing for aviation activity, fuel, and emissions
+- Structured CSV and SQLite outputs for analysis and dashboards
+- Solara dashboards for live cases, saved runs, preprocessing outputs, and route maps
+
+## Documentation
+
+- [Architecture](docs/architecture.md)
+- [Aviation preprocessing guide](docs/aviation-preprocessing-guide.md)
+- [Dashboard guide](docs/dashboard-guide.md)
+- [Aviation passenger input reference](docs/aviation-passenger-reference.md)
+- [Aviation cargo input reference](docs/aviation-cargo-scenario-reference.md)
+- [Maritime cargo input reference](docs/maritime-cargo-reference.md)
+- [Maritime passenger input reference](docs/maritime-passenger-reference.md)
 
 ## Installation
 
@@ -388,16 +415,43 @@ For the dashboard workflow, see `docs/dashboard-guide.md`.
 - A shared environment layer with country states and route/corridor effects
 - Detailed aviation passenger, aviation cargo, maritime cargo, and maritime passenger outputs for stock, technology diffusion, energy/emissions, and investment activity
 
-## License And Citation
+## Citing NATM
+
+If you use NATM in your research, policy analysis, consulting, or engineering
+work, please cite the following paper:
+
+- Manish Khanra, Shashank Deepak Prabhu, Martin Wietschel,
+  [Estimating energy demand for decarbonising the aviation and maritime fleets
+  of Germany: An agent-based technology diffusion approach considering
+  investment behaviour](https://doi.org/10.1016/j.nexus.2025.100557),
+  published in *Energy Nexus*, Volume 20, 2025, Article 100557.
+
+Please use the following BibTeX to cite the work:
+
+```bibtex
+@article{khanra2025estimating,
+  title = {Estimating energy demand for decarbonising the aviation and maritime fleets of Germany: An agent-based technology diffusion approach considering investment behaviour},
+  author = {Khanra, Manish and Prabhu, Shashank Deepak and Wietschel, Martin},
+  journal = {Energy Nexus},
+  volume = {20},
+  pages = {100557},
+  year = {2025},
+  issn = {2772-4271},
+  doi = {10.1016/j.nexus.2025.100557},
+  url = {https://www.sciencedirect.com/science/article/pii/S2772427125001974},
+  keywords = {Hard-to-abate sector, Agent-based model, Technology diffusion, Demand analysis, Aviation, Maritime}
+}
+```
+
+For citing a specific software version of NATM, use the repository citation
+metadata in `CITATION.cff`.
+
+## License
 
 NATM is licensed under the GNU General Public License, version 3 only
 (`GPL-3.0-only`). See `LICENSE` for the full license text.
 
 Copyright (C) 2026 Manish Gaebelein-Khanra.
-
-If you use NATM in academic, policy, consulting, or engineering work, please
-cite the project repository and any associated publications. GitHub should show
-a "Cite this repository" button using the metadata in `CITATION.cff`.
 
 Third-party software dependencies, datasets, and external data sources retain
 their own licenses, citation requirements, and terms of use.

@@ -16,6 +16,9 @@ classifiers = [
     "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Artificial Life",
+    "Topic :: Scientific/Engineering :: Information Analysis",
 ]
 dependencies = [
     "mesa>=3.1",
@@ -24,6 +27,12 @@ dependencies = [
     "pyarrow>=15.0",
     "PyYAML>=6.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Manish-Khanra/NATM"
+Repository = "https://github.com/Manish-Khanra/NATM"
+Documentation = "https://github.com/Manish-Khanra/NATM/tree/main/docs"
+Issues = "https://github.com/Manish-Khanra/NATM/issues"
 
 [project.optional-dependencies]
 dev = [

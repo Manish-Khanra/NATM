@@ -7,3 +7,19 @@ authors:
 repository-code: "https://github.com/Manish-Khanra/NATM"
 license: "GPL-3.0-only"
 version: "0.1.0"
+preferred-citation:
+  type: article
+  title: "Estimating energy demand for decarbonising the aviation and maritime fleets of Germany: An agent-based technology diffusion approach considering investment behaviour"
+  authors:
+    - family-names: "Khanra"
+      given-names: "Manish"
+    - family-names: "Prabhu"
+      given-names: "Shashank Deepak"
+    - family-names: "Wietschel"
+      given-names: "Martin"
+  journal: "Energy Nexus"
+  volume: "20"
+  pages: "100557"
+  year: 2025
+  doi: "10.1016/j.nexus.2025.100557"
+  url: "https://www.sciencedirect.com/science/article/pii/S2772427125001974"
