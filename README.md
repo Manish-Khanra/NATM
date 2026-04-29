@@ -456,11 +456,5 @@ Copyright (C) 2026 Manish Gaebelein-Khanra.
 Third-party software dependencies, datasets, and external data sources retain
 their own licenses, citation requirements, and terms of use.
 
-## Near-Term Next Steps
-
-1. Replace the sample aviation fleet-stock CSV with calibrated operator and fleet data.
-2. Split aviation operator agents further into fleet, route, or airport-linked Mesa agents.
-3. Add energy pathways, emissions accounting, and richer reporting outputs.
-
 
 
