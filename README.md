@@ -234,13 +234,20 @@ dashboard dependencies:
 python -m pip install -e .[dashboard]
 ```
 
-Then you can launch any of the four dashboards:
+Then you can launch any of the standard live/saved-results dashboards:
 
 ```powershell
 solara run dashboard_examples/aviation_passenger_baseline_dashboard.py
 solara run dashboard_examples/aviation_cargo_baseline_dashboard.py
 solara run dashboard_examples/maritime_cargo_baseline_dashboard.py
 solara run dashboard_examples/maritime_passenger_baseline_dashboard.py
+```
+
+The standalone cartographic dashboard opens a browser-native deck.gl map for
+aviation result folders:
+
+```powershell
+solara run dashboard_examples/cartographic_dashboard.py
 ```
 
 Each dashboard supports two modes inside the browser:
@@ -264,6 +271,11 @@ In the dashboard UI:
 
 The saved-results dropdown only shows folders that contain the expected CSV
 outputs for that application.
+
+The cartographic dashboard reads `simulation_results/<your-run-name>/`
+directly, uses `aircraft.csv` for simulated years and airport demand, and falls
+back to processed aviation route geometry when route-level map outputs are not
+present.
 
 If you already installed the dashboard stack and see a `Starlette.__init__()`
 error mentioning `on_startup`, repair the environment with:

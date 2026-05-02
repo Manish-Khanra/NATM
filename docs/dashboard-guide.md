@@ -65,6 +65,12 @@ solara run dashboard_examples/maritime_cargo_baseline_dashboard.py
 solara run dashboard_examples/maritime_passenger_baseline_dashboard.py
 ```
 
+### Cartographic (deck.gl)
+
+```powershell
+solara run dashboard_examples/cartographic_dashboard.py
+```
+
 If the `solara` command is not recognized, use:
 
 ```powershell
@@ -115,6 +121,11 @@ Steps:
 4. Choose your results folder from the `Results folder` dropdown.
 
 The dashboard will then read the saved CSV files from that folder.
+
+The standalone cartographic dashboard also reads folders under
+`simulation_results/`, but it does not use the `Dashboard Source` live/saved
+toggle. It always visualizes saved result folders when present, and falls back
+to processed aviation sample data when no saved results exist.
 
 ## 6. What A Results Folder Must Contain
 
@@ -215,6 +226,12 @@ simulation_results/<selected_example>/
 solara run dashboard_examples/aviation_passenger_baseline_dashboard.py
 ```
 
+For the standalone cartographic map:
+
+```powershell
+solara run dashboard_examples/cartographic_dashboard.py
+```
+
 ### Switch to saved results
 
 In the browser:
@@ -234,3 +251,71 @@ This file provides:
 - shared chart structure
 - shared results-folder loading
 - shared formatting for energy and investment charts
+
+## 11. Cartographic Dashboard Architecture
+
+`dashboard_examples/cartographic_dashboard.py` provides a browser-native
+cartographic dashboard with Solara + deck.gl (no QGIS Desktop required).
+
+Pipeline:
+
+`NATM simulation output -> map-ready layer builder -> Solara controls -> deck.gl map`
+
+### Data Sources And Year Handling
+
+When a selected result folder contains `aircraft.csv`, the cartographic
+dashboard uses that file as the primary simulation source. It aggregates
+aircraft-level records by year, hub airport, and energy carrier, so the year
+slider follows the simulated years in the run, for example `2025`-`2030`.
+
+The generated airport bubbles use:
+
+- `main_hub_base` / `main_hub` for airport placement
+- `primary_energy_carrier` for carrier filtering
+- `primary_energy_consumption + secondary_energy_consumption` for `energy_demand`
+- `total_emission` for `co2`
+- aircraft counts for `trips`
+
+Route arcs need geographic endpoints. If the result folder does not provide a
+dedicated route-flow file, the dashboard reuses route geometry from:
+
+```text
+data/processed/aviation/openap_route_summary.csv
+```
+
+Those OpenAP route endpoints are treated as geometry only in that case; the
+visible route width is scaled from the selected simulated year and hub totals.
+This allows a multi-year simulation run to use baseline/preprocessing route
+geometry while still showing year-specific simulated demand intensity.
+
+### Optional Map-Ready Files
+
+For fully route-specific cartographic output, place these optional files into a
+result folder:
+
+- `airport_fuel_demand.csv` with airport coordinates and demand metrics
+- `route_energy_flow.csv` with route-level endpoints and flow metrics
+
+When those files are present, they can provide direct map-ready airport and
+route layers. When they are missing, the dashboard falls back to the simulation
+`aircraft.csv` aggregation and processed aviation route geometry described
+above.
+
+### Controls And Rendering
+
+Key capabilities:
+
+- clickable airports and route/corridor arcs
+- hover tooltips for airport and route metrics
+- year slider for simulated-year playback
+- result-folder switching
+- carrier filtering (`kerosene`, `saf`, `hydrogen`, `electricity`, `ammonia` when present)
+- metric switching (`energy_demand`, `trips`, `co2`)
+
+The map is rendered as deck.gl JavaScript inside an iframe. This avoids the
+Jupyter-widget rendering path that can cause blank Solara pages in a normal
+browser session. The browser must be able to load deck.gl, MapLibre, and the
+CARTO basemap assets from their public CDNs.
+
+Visual widths and bubble radii are normalized per selected year so large
+simulated energy or emissions values do not turn arcs into filled color bands.
