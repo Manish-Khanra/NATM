@@ -30,6 +30,20 @@ KWH_PER_TWH = 1_000_000_000.0
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RESULTS_ROOT = PROJECT_ROOT / "simulation_results"
 PROCESSED_AVIATION_ROOT = PROJECT_ROOT / "data" / "processed" / "aviation"
+EMISSION_COLUMN_METADATA = {
+    "total_emission": {"label": "Total emissions", "unit": "tonnes"},
+    "chargeable_emission": {"label": "Chargeable emissions", "unit": "tonnes"},
+    "co2_kg": {"label": "CO2", "unit": "tonnes"},
+    "total_co2_kg": {"label": "CO2", "unit": "tonnes"},
+    "h2o_kg": {"label": "H2O", "unit": "tonnes"},
+    "nox_kg": {"label": "NOx", "unit": "tonnes"},
+    "total_nox_kg": {"label": "NOx", "unit": "tonnes"},
+    "co_kg": {"label": "CO", "unit": "tonnes"},
+    "hc_kg": {"label": "HC", "unit": "tonnes"},
+    "soot_kg": {"label": "Soot", "unit": "tonnes"},
+    "sox_kg": {"label": "SOx", "unit": "tonnes"},
+}
+EMISSION_KG_TO_TONNES = 1_000.0
 EUROPE_BASEMAP_POLYGONS = [
     [
         (-10.0, 36.0),
@@ -145,6 +159,34 @@ def _latest_year(frame: pd.DataFrame) -> int | None:
     return int(years.max()) if not years.empty else None
 
 
+def _emission_columns(frame: pd.DataFrame) -> list[str]:
+    if frame.empty:
+        return []
+    return [
+        column
+        for column in EMISSION_COLUMN_METADATA
+        if column in frame.columns and pd.to_numeric(frame[column], errors="coerce").notna().any()
+    ]
+
+
+def _emission_label(column: str) -> str:
+    return EMISSION_COLUMN_METADATA.get(column, {"label": column})["label"]
+
+
+def _emission_totals_table(frame: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    rows = []
+    for column in columns:
+        value_kg = pd.to_numeric(frame[column], errors="coerce").fillna(0.0).sum()
+        rows.append(
+            {
+                "pollutant": _emission_label(column),
+                "source_column": column,
+                "emissions_tonnes": value_kg / EMISSION_KG_TO_TONNES,
+            }
+        )
+    return pd.DataFrame(rows).sort_values("emissions_tonnes", ascending=False)
+
+
 def _show_dataframe(frame: pd.DataFrame, max_rows: int = 12) -> None:
     if frame.empty:
         solara.Markdown("_No rows available._")
@@ -199,6 +241,111 @@ def _normalize_airport_metadata(frame: pd.DataFrame) -> pd.DataFrame:
     return normalized.dropna(subset=["airport_code", "latitude", "longitude"])[
         ["airport_code", "airport_name", "country", "latitude", "longitude"]
     ].drop_duplicates(subset=["airport_code"], keep="first")
+
+
+def _normalize_airport_fuel_demand(
+    frame: pd.DataFrame, airport_metadata: pd.DataFrame
+) -> pd.DataFrame:
+    if frame.empty:
+        return pd.DataFrame()
+    normalized = frame.rename(
+        columns={
+            "airport": "airport_code",
+            "airport_iata": "airport_code",
+            "lat": "latitude",
+            "lon": "longitude",
+        },
+    ).copy()
+    if "airport_code" not in normalized.columns:
+        return pd.DataFrame()
+    normalized["airport_code"] = normalized["airport_code"].astype(str).str.upper().str.strip()
+    for column in (
+        "latitude",
+        "longitude",
+        "fuel_demand",
+        "fuel_uplift_mwh",
+        "fuel_uplift_kg",
+        "energy_demand",
+        "co2",
+        "trips",
+        "year",
+    ):
+        if column in normalized.columns:
+            normalized[column] = pd.to_numeric(normalized[column], errors="coerce")
+    if not airport_metadata.empty:
+        metadata_columns = [
+            column
+            for column in ("airport_name", "country", "latitude", "longitude")
+            if column not in normalized.columns
+        ]
+        if metadata_columns:
+            normalized = normalized.merge(
+                airport_metadata[["airport_code", *metadata_columns]],
+                on="airport_code",
+                how="left",
+            )
+    if not {"latitude", "longitude"}.issubset(normalized.columns):
+        return pd.DataFrame()
+    return normalized.dropna(subset=["airport_code", "latitude", "longitude"])
+
+
+def _normalize_route_energy_flow(
+    frame: pd.DataFrame, airport_metadata: pd.DataFrame
+) -> pd.DataFrame:
+    if frame.empty:
+        return pd.DataFrame()
+    normalized = frame.rename(
+        columns={
+            "origin_airport": "origin",
+            "destination_airport": "destination",
+            "origin_lat": "origin_latitude",
+            "origin_lon": "origin_longitude",
+            "destination_lat": "destination_latitude",
+            "destination_lon": "destination_longitude",
+        },
+    ).copy()
+    if not {"origin", "destination"}.issubset(normalized.columns):
+        return pd.DataFrame()
+    normalized["origin"] = normalized["origin"].astype(str).str.upper().str.strip()
+    normalized["destination"] = normalized["destination"].astype(str).str.upper().str.strip()
+    for column in (
+        "origin_latitude",
+        "origin_longitude",
+        "destination_latitude",
+        "destination_longitude",
+        "fuel_demand",
+        "fuel_uplift_mwh",
+        "fuel_uplift_kg",
+        "energy_demand",
+        "co2",
+        "trips",
+        "year",
+    ):
+        if column in normalized.columns:
+            normalized[column] = pd.to_numeric(normalized[column], errors="coerce")
+    coordinate_columns = {
+        "origin_latitude",
+        "origin_longitude",
+        "destination_latitude",
+        "destination_longitude",
+    }
+    if not coordinate_columns.issubset(normalized.columns) and not airport_metadata.empty:
+        airport_lookup = airport_metadata.set_index("airport_code")
+        normalized = normalized.merge(
+            airport_lookup[["latitude", "longitude"]].add_prefix("origin_"),
+            left_on="origin",
+            right_index=True,
+            how="left",
+        )
+        normalized = normalized.merge(
+            airport_lookup[["latitude", "longitude"]].add_prefix("destination_"),
+            left_on="destination",
+            right_index=True,
+            how="left",
+        )
+    if not coordinate_columns.issubset(normalized.columns):
+        return pd.DataFrame()
+    return normalized.dropna(subset=list(coordinate_columns))
 
 
 def _draw_europe_basemap(ax) -> None:
@@ -416,6 +563,8 @@ def build_case_dashboard(
             "technology": pd.DataFrame(),
             "energy": pd.DataFrame(),
             "investments": pd.DataFrame(),
+            "airport_fuel_demand": pd.DataFrame(),
+            "route_energy_flow": pd.DataFrame(),
         }
         if not folder_name:
             return empty_frames
@@ -430,6 +579,8 @@ def build_case_dashboard(
             "technology": pd.read_csv(result_dir / technology_filename),
             "energy": pd.read_csv(result_dir / energy_filename),
             "investments": pd.read_csv(result_dir / investment_filename),
+            "airport_fuel_demand": _read_csv_if_exists(result_dir / "airport_fuel_demand.csv"),
+            "route_energy_flow": _read_csv_if_exists(result_dir / "route_energy_flow.csv"),
         }
 
     @solara.component
@@ -660,6 +811,157 @@ def build_case_dashboard(
             _show_figure(fig)
 
         _ChartContainer("Energy by Carrier", _content)
+
+    @solara.component
+    def EmissionsOverviewContent(
+        frames: dict[str, pd.DataFrame],
+        source_label: str,
+        default_year: int,
+    ):
+        energy_frame = frames.get("energy", pd.DataFrame())
+        if not energy_frame.empty:
+            energy_frame = _filter_application(energy_frame, application_name)
+
+        openap_flights = pd.DataFrame()
+        if sector_name == "aviation":
+            openap_flights = _load_aviation_preprocessing_frames().get(
+                "openap_flights",
+                pd.DataFrame(),
+            )
+            if not openap_flights.empty and "application_name" in openap_flights.columns:
+                openap_flights = _filter_application(openap_flights, application_name)
+
+        datasets: dict[str, pd.DataFrame] = {}
+        if _emission_columns(energy_frame):
+            datasets["Simulation emissions"] = energy_frame
+        if _emission_columns(openap_flights):
+            datasets["OpenAP pollutants"] = openap_flights
+
+        if not datasets:
+            solara.Markdown("No emissions or pollutant columns are available for this dashboard.")
+            return
+
+        dataset_options = list(datasets)
+        selected_dataset, set_selected_dataset = solara.use_state(dataset_options[0])
+        effective_dataset = (
+            selected_dataset if selected_dataset in dataset_options else dataset_options[0]
+        )
+        frame = datasets[effective_dataset].copy()
+        emission_columns = _emission_columns(frame)
+        available_years = (
+            sorted(frame["year"].dropna().astype(int).unique().tolist())
+            if "year" in frame.columns
+            else []
+        )
+        selected_year, set_selected_year = solara.use_state(
+            available_years[-1] if available_years else default_year,
+        )
+        effective_year = (
+            (selected_year if selected_year in available_years else available_years[-1])
+            if available_years
+            else None
+        )
+        selected_pollutant, set_selected_pollutant = solara.use_state(emission_columns[0])
+        effective_pollutant = (
+            selected_pollutant if selected_pollutant in emission_columns else emission_columns[0]
+        )
+
+        solara.Markdown(f"### Emissions ({source_label})")
+        if len(dataset_options) > 1:
+            solara.ToggleButtonsSingle(
+                value=effective_dataset,
+                values=dataset_options,
+                on_value=set_selected_dataset,
+            )
+        if available_years:
+            solara.SliderInt(
+                "Emissions year",
+                value=effective_year,
+                min=available_years[0],
+                max=available_years[-1],
+                step=1,
+                on_value=set_selected_year,
+            )
+        solara.Select(
+            "Pollutant breakdown",
+            values=emission_columns,
+            value=effective_pollutant,
+            on_value=set_selected_pollutant,
+        )
+
+        selected_frame = frame
+        if effective_year is not None and "year" in selected_frame.columns:
+            selected_frame = selected_frame.loc[
+                selected_frame["year"].astype(int).eq(effective_year)
+            ].copy()
+        if selected_frame.empty:
+            solara.Markdown("No emissions rows are available for this selection.")
+            return
+
+        totals = _emission_totals_table(selected_frame, emission_columns)
+        positions = list(range(len(totals)))
+        fig = Figure(figsize=(8.8, 5.4))
+        ax = fig.subplots()
+        ax.bar(
+            positions,
+            totals["emissions_tonnes"].astype(float),
+            color="#6a994e",
+        )
+        ax.set_xticks(positions)
+        ax.set_xticklabels(totals["pollutant"].astype(str).tolist(), rotation=25, ha="right")
+        ax.set_ylabel("Emissions (tonnes)")
+        title_year = f" ({effective_year})" if effective_year is not None else ""
+        ax.set_title(f"{title} Emissions by Pollutant{title_year}")
+        ax.yaxis.set_major_formatter(_compact_number_formatter(" t"))
+        ax.grid(axis="y", alpha=0.25)
+        _show_figure(fig)
+
+        breakdown_key = next(
+            (
+                column
+                for column in ("operator_name", "route", "origin", "current_technology")
+                if column in selected_frame.columns
+            ),
+            None,
+        )
+        selected_frame[effective_pollutant] = pd.to_numeric(
+            selected_frame[effective_pollutant],
+            errors="coerce",
+        ).fillna(0.0)
+        if breakdown_key is not None:
+            breakdown = (
+                selected_frame.groupby(breakdown_key, dropna=False, as_index=False)[
+                    effective_pollutant
+                ]
+                .sum()
+                .rename(
+                    columns={
+                        breakdown_key: "group",
+                        effective_pollutant: "emissions_kg",
+                    }
+                )
+            )
+            breakdown["pollutant"] = _emission_label(effective_pollutant)
+            breakdown["emissions_tonnes"] = breakdown["emissions_kg"] / EMISSION_KG_TO_TONNES
+            breakdown = breakdown.sort_values("emissions_tonnes", ascending=False)
+            solara.Markdown(f"#### {_emission_label(effective_pollutant)} Breakdown")
+            _show_dataframe(
+                breakdown[["group", "pollutant", "emissions_tonnes"]],
+                max_rows=16,
+            )
+
+        solara.Markdown("#### Pollutant Totals")
+        _show_dataframe(totals, max_rows=len(totals))
+
+    @solara.component
+    def EmissionsOverview(model: NATMModel):
+        update_counter.get()
+        with solara.Card("Emissions", style={"margin-bottom": "28px"}):
+            EmissionsOverviewContent(
+                _live_result_frames(model),
+                "live case",
+                model.current_year,
+            )
 
     @solara.component
     def InvestmentsByOperator(model: NATMModel):
@@ -962,6 +1264,15 @@ def build_case_dashboard(
             _show_figure(fig)
 
         _ChartContainer("Energy by Carrier", _content)
+
+    @solara.component
+    def SavedEmissionsOverview(folder_name: str):
+        with solara.Card("Emissions", style={"margin-bottom": "28px"}):
+            EmissionsOverviewContent(
+                _load_result_frames(folder_name),
+                f"saved: {folder_name}",
+                scenario.end_year,
+            )
 
     @solara.component
     def SavedInvestmentsByOperator(folder_name: str):
@@ -1326,7 +1637,6 @@ def build_case_dashboard(
                 ]
                 total_fuel = pd.to_numeric(processed.get("fuel_kg"), errors="coerce").sum()
                 total_energy = pd.to_numeric(processed.get("energy_mwh"), errors="coerce").sum()
-                total_co2 = pd.to_numeric(processed.get("co2_kg"), errors="coerce").sum()
                 solara.Markdown(
                     "\n".join(
                         [
@@ -1334,10 +1644,16 @@ def build_case_dashboard(
                             f"- Flights with estimated fuel: `{len(processed)}`",
                             f"- Fuel: `{total_fuel:,.1f} kg`",
                             f"- Energy: `{total_energy:,.4f} MWh`",
-                            f"- CO2: `{total_co2:,.1f} kg`",
                         ],
                     ),
                 )
+                emission_columns = _emission_columns(processed)
+                if emission_columns:
+                    solara.Markdown("#### OpenAP Pollutants")
+                    _show_dataframe(
+                        _emission_totals_table(processed, emission_columns),
+                        max_rows=len(emission_columns),
+                    )
 
             mapping_log = frames.get("openap_mapping_log", pd.DataFrame())
             if not mapping_log.empty:
@@ -1479,20 +1795,35 @@ def build_case_dashboard(
             _show_dataframe(routes[columns], max_rows=top_n)
 
     @solara.component
-    def FlightFuelDemandMap(_model: NATMModel | None = None):
+    def FlightFuelDemandMap(_model: NATMModel | None = None, result_folder: str | None = None):
         if sector_name != "aviation":
             return
         frames = _load_aviation_preprocessing_frames()
-        route_summary = frames.get("openap_route_summary", pd.DataFrame())
-        airports = frames.get("airport_metadata", pd.DataFrame())
+        airport_metadata = frames.get("airport_metadata", pd.DataFrame())
+        saved_frames = _load_result_frames(result_folder) if result_folder else {}
+        allocated_airports = _normalize_airport_fuel_demand(
+            saved_frames.get("airport_fuel_demand", pd.DataFrame()),
+            airport_metadata,
+        )
+        allocated_routes = _normalize_route_energy_flow(
+            saved_frames.get("route_energy_flow", pd.DataFrame()),
+            airport_metadata,
+        )
+        uses_allocated_outputs = not allocated_routes.empty
+        route_summary = (
+            allocated_routes
+            if uses_allocated_outputs
+            else frames.get("openap_route_summary", pd.DataFrame())
+        )
         with solara.Card("Airport Fuel Demand Map", style={"margin-bottom": "28px"}):
             if route_summary.empty:
                 solara.Markdown(
-                    "No OpenAP route summary was found. Run aviation preprocessing with "
-                    "`openap.estimate_fuel: true` first.",
+                    "No route fuel data was found. Run aviation preprocessing with "
+                    "`openap.estimate_fuel: true`, or generate postprocessed airport fuel "
+                    "allocation outputs for the selected results folder.",
                 )
                 return
-            if airports.empty:
+            if airport_metadata.empty and not uses_allocated_outputs:
                 solara.Markdown(
                     "No airport coordinate metadata was found, so the map cannot be drawn.",
                 )
@@ -1501,10 +1832,21 @@ def build_case_dashboard(
             metric_options = [
                 column
                 for column in (
-                    "total_fuel_kg",
-                    "total_energy_mwh",
-                    "total_co2_kg",
-                    "number_of_trips",
+                    (
+                        "fuel_uplift_mwh",
+                        "fuel_demand",
+                        "energy_demand",
+                        "fuel_uplift_kg",
+                        "co2",
+                        "trips",
+                    )
+                    if uses_allocated_outputs
+                    else (
+                        "total_fuel_kg",
+                        "total_energy_mwh",
+                        "total_co2_kg",
+                        "number_of_trips",
+                    )
                 )
                 if column in route_summary.columns
             ]
@@ -1515,8 +1857,14 @@ def build_case_dashboard(
             selected_metric, set_selected_metric = solara.use_state(metric_options[0])
             basis_options = ["Departures only", "Origin + destination activity"]
             selected_basis, set_selected_basis = solara.use_state(basis_options[0])
-            top_n_default = min(20, max(len(route_summary), 1))
-            top_n, set_top_n = solara.use_state(top_n_default)
+            available_years = (
+                sorted(route_summary["year"].dropna().astype(int).unique().tolist())
+                if "year" in route_summary.columns
+                else []
+            )
+            selected_year, set_selected_year = solara.use_state(
+                available_years[-1] if available_years else None,
+            )
 
             effective_metric = (
                 selected_metric if selected_metric in metric_options else metric_options[0]
@@ -1524,90 +1872,161 @@ def build_case_dashboard(
             effective_basis = (
                 selected_basis if selected_basis in basis_options else basis_options[0]
             )
+            effective_year = (
+                (selected_year if selected_year in available_years else available_years[-1])
+                if available_years
+                else None
+            )
+
             solara.Markdown(
                 "Airport bubbles show demand associated with airports; route lines are drawn "
                 "on a lightweight Europe basemap using airport coordinates.",
             )
+            if uses_allocated_outputs:
+                solara.Markdown(
+                    "Using postprocessed airport fuel allocation outputs from "
+                    f"`simulation_results/{result_folder}`.",
+                )
             solara.Select(
                 "Map metric",
                 values=metric_options,
                 value=effective_metric,
                 on_value=set_selected_metric,
             )
-            solara.ToggleButtonsSingle(
-                value=effective_basis,
-                values=basis_options,
-                on_value=set_selected_basis,
-            )
-            solara.SliderInt(
-                "Top routes on map",
-                value=min(top_n, len(route_summary)),
-                min=1,
-                max=max(len(route_summary), 1),
-                step=1,
-                on_value=set_top_n,
-            )
+            if available_years:
+                solara.SliderInt(
+                    "Map year",
+                    value=effective_year,
+                    min=available_years[0],
+                    max=available_years[-1],
+                    step=1,
+                    on_value=set_selected_year,
+                )
+            if not uses_allocated_outputs:
+                solara.ToggleButtonsSingle(
+                    value=effective_basis,
+                    values=basis_options,
+                    on_value=set_selected_basis,
+                )
 
             routes = route_summary.copy()
+            if effective_year is not None and "year" in routes.columns:
+                routes = routes.loc[routes["year"].astype(int).eq(effective_year)].copy()
             routes[effective_metric] = pd.to_numeric(routes[effective_metric], errors="coerce")
             routes = routes.dropna(subset=[effective_metric])
             routes = routes.loc[routes[effective_metric] > 0.0]
-            routes = routes.sort_values(effective_metric, ascending=False).head(top_n)
             if routes.empty:
                 solara.Markdown("No positive route weights are available.")
                 return
 
-            airport_lookup = airports.set_index("airport_code")
-            routes = routes.merge(
-                airport_lookup[["latitude", "longitude"]].add_prefix("origin_"),
-                left_on="origin",
-                right_index=True,
-                how="left",
+            top_n_default = min(20, max(len(routes), 1))
+            top_n, set_top_n = solara.use_state(top_n_default)
+            effective_top_n = min(top_n, len(routes))
+            solara.SliderInt(
+                "Top routes on map",
+                value=effective_top_n,
+                min=1,
+                max=max(len(routes), 1),
+                step=1,
+                on_value=set_top_n,
             )
-            routes = routes.merge(
-                airport_lookup[["latitude", "longitude"]].add_prefix("destination_"),
-                left_on="destination",
-                right_index=True,
-                how="left",
-            )
-            routes = routes.dropna(
-                subset=[
-                    "origin_latitude",
-                    "origin_longitude",
-                    "destination_latitude",
-                    "destination_longitude",
-                ],
-            )
+            routes = routes.sort_values(effective_metric, ascending=False).head(effective_top_n)
+
+            if not uses_allocated_outputs:
+                airport_lookup = airport_metadata.set_index("airport_code")
+                routes = routes.merge(
+                    airport_lookup[["latitude", "longitude"]].add_prefix("origin_"),
+                    left_on="origin",
+                    right_index=True,
+                    how="left",
+                )
+                routes = routes.merge(
+                    airport_lookup[["latitude", "longitude"]].add_prefix("destination_"),
+                    left_on="destination",
+                    right_index=True,
+                    how="left",
+                )
+                routes = routes.dropna(
+                    subset=[
+                        "origin_latitude",
+                        "origin_longitude",
+                        "destination_latitude",
+                        "destination_longitude",
+                    ],
+                )
             if routes.empty:
                 solara.Markdown(
                     "Routes exist, but their airports were not found in the coordinate metadata.",
                 )
                 return
 
-            origin_demand = routes[["origin", effective_metric]].rename(
-                columns={"origin": "airport_code", effective_metric: "airport_metric"},
-            )
-            if effective_basis == "Origin + destination activity":
-                destination_demand = routes[["destination", effective_metric]].rename(
-                    columns={
-                        "destination": "airport_code",
-                        effective_metric: "airport_metric",
-                    },
+            if uses_allocated_outputs and not allocated_airports.empty:
+                airport_metric = (
+                    effective_metric
+                    if effective_metric in allocated_airports.columns
+                    else (
+                        "fuel_demand"
+                        if "fuel_demand" in allocated_airports.columns
+                        else "energy_demand"
+                    )
                 )
-                airport_demand = pd.concat(
-                    [origin_demand, destination_demand],
-                    ignore_index=True,
+                airport_demand = allocated_airports.copy()
+                if effective_year is not None and "year" in airport_demand.columns:
+                    airport_demand = airport_demand.loc[
+                        airport_demand["year"].astype(int).eq(effective_year)
+                    ].copy()
+                airport_demand[airport_metric] = pd.to_numeric(
+                    airport_demand[airport_metric],
+                    errors="coerce",
+                )
+                airport_demand = airport_demand.dropna(subset=[airport_metric])
+                group_columns = [
+                    column
+                    for column in (
+                        "airport_code",
+                        "airport_name",
+                        "country",
+                        "latitude",
+                        "longitude",
+                    )
+                    if column in airport_demand.columns
+                ]
+                airport_demand = (
+                    airport_demand.groupby(group_columns, dropna=False, as_index=False)[
+                        airport_metric
+                    ]
+                    .sum()
+                    .rename(columns={airport_metric: "airport_metric"})
                 )
             else:
-                airport_demand = origin_demand
-            airport_demand = (
-                airport_demand.groupby("airport_code", as_index=False)["airport_metric"]
-                .sum()
-                .merge(airports, on="airport_code", how="left")
-                .dropna(subset=["latitude", "longitude"])
-            )
+                origin_demand = routes[["origin", effective_metric]].rename(
+                    columns={"origin": "airport_code", effective_metric: "airport_metric"},
+                )
+                if effective_basis == "Origin + destination activity":
+                    destination_demand = routes[["destination", effective_metric]].rename(
+                        columns={
+                            "destination": "airport_code",
+                            effective_metric: "airport_metric",
+                        },
+                    )
+                    airport_demand = pd.concat(
+                        [origin_demand, destination_demand],
+                        ignore_index=True,
+                    )
+                else:
+                    airport_demand = origin_demand
+                airport_demand = (
+                    airport_demand.groupby("airport_code", as_index=False)["airport_metric"]
+                    .sum()
+                    .merge(airport_metadata, on="airport_code", how="left")
+                    .dropna(subset=["latitude", "longitude"])
+                )
 
-            max_airport_metric = float(airport_demand["airport_metric"].max())
+            if airport_demand.empty:
+                solara.Markdown("No airport demand rows are available for this map selection.")
+                return
+
+            max_airport_metric = max(float(airport_demand["airport_metric"].max()), 1.0)
             max_route_metric = float(routes[effective_metric].max())
             fig = Figure(figsize=(10.2, 6.8))
             ax = fig.subplots()
@@ -1685,9 +2104,19 @@ def build_case_dashboard(
             _show_figure(fig)
 
             solara.Markdown("#### Airport Demand Table")
-            table = airport_demand[
-                ["airport_code", "airport_name", "country", "airport_metric"]
-            ].sort_values("airport_metric", ascending=False)
+            table_columns = [
+                column
+                for column in (
+                    "airport_code",
+                    "airport_name",
+                    "country",
+                    "carrier",
+                    "allocation_method",
+                    "airport_metric",
+                )
+                if column in airport_demand.columns
+            ]
+            table = airport_demand[table_columns].sort_values("airport_metric", ascending=False)
             _show_dataframe(table, max_rows=16)
 
     @solara.component
@@ -1697,13 +2126,14 @@ def build_case_dashboard(
             SavedOperatorShares(folder_name)
             SavedTechnologyMix(folder_name)
             SavedEnergyByCarrier(folder_name)
+            SavedEmissionsOverview(folder_name)
             SavedInvestmentsByOperator(folder_name)
             SavedOperatorDrilldown(folder_name)
             SavedReportTables(folder_name)
             if sector_name == "aviation":
                 AviationPreprocessingExplorer()
                 FlightRouteNetwork()
-                FlightFuelDemandMap()
+                FlightFuelDemandMap(result_folder=folder_name)
 
     model_params = {
         "scenario": scenario,
@@ -1725,6 +2155,7 @@ def build_case_dashboard(
         OperatorShares,
         TechnologyMix,
         EnergyByCarrier,
+        EmissionsOverview,
         InvestmentsByOperator,
         OperatorDrilldown,
         ReportTables,

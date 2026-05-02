@@ -273,9 +273,42 @@ The saved-results dropdown only shows folders that contain the expected CSV
 outputs for that application.
 
 The cartographic dashboard reads `simulation_results/<your-run-name>/`
-directly, uses `aircraft.csv` for simulated years and airport demand, and falls
-back to processed aviation route geometry when route-level map outputs are not
-present.
+directly. When postprocessed `airport_fuel_demand.csv` and
+`route_energy_flow.csv` files exist, it uses those map-ready airport and route
+layers. Otherwise, it uses `aircraft.csv` for simulated years and airport
+demand, and falls back to processed aviation route geometry when route-level map
+outputs are not present.
+
+To create dashboard-ready airport fuel-demand and route-flow files after a run:
+
+```powershell
+natm-airport-fuel-allocation --results simulation_results/<your-run-name>
+```
+
+If the new command is not recognized before reinstalling the editable package,
+use:
+
+```powershell
+python -m navaero_transition_model.postprocessing.airport_fuel_allocation_cli --results simulation_results/<your-run-name>
+```
+
+This postprocessor is separate from the investment/adoption simulation. It uses
+flightlist/OpenAP sequences when aircraft identifiers match; otherwise it falls
+back to synthetic allocation from simulated aircraft energy and processed route
+shares.
+
+Dashboard notes:
+
+- the normal dashboards now include an `Emissions` panel that can show all
+  detected pollutant columns, including OpenAP `co2_kg`, `h2o_kg`, `nox_kg`,
+  `co_kg`, `hc_kg`, `soot_kg`, and `sox_kg`
+- pollutant totals are displayed in tonnes
+- the cartographic map tooltips include metric labels and units
+- the cartographic metric buttons use readable names, with a display-unit
+  toggle for convertible metrics such as fuel uplift mass
+- cartographic MWh metrics switch to TWh at `1,000 MWh`
+- cartographic fuel uplift mass and pollutant metrics switch from kg to tonnes
+  for large displayed values
 
 If you already installed the dashboard stack and see a `Starlette.__init__()`
 error mentioning `on_startup`, repair the environment with:

@@ -57,6 +57,7 @@ openap = [
 natm = "navaero_transition_model.cli:main"
 navaero-transition-model = "navaero_transition_model.cli:main"
 natm-aviation-preprocess = "navaero_transition_model.aviation_preprocessing.cli:main"
+natm-airport-fuel-allocation = "navaero_transition_model.postprocessing.airport_fuel_allocation_cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "."}
