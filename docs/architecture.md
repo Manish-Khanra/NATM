@@ -91,7 +91,7 @@ example to a case folder under `data/`, runs the model, and writes outputs to
 
 ### 3.2 Case loading
 
-The case starts with [scenario.yaml](C:/Manish_REPO/NATM/data/baseline-transition/scenario.yaml:1),
+The case starts with [scenario.yaml](C:/Manish_REPO/NATM/data/baseline-passenger-transition/scenario.yaml:1),
 which is loaded by `NATMScenario`.
 
 `NATMScenario` currently stores:
@@ -377,12 +377,13 @@ coordination instead of low-level row mutation.
 Decision logic is intentionally modeled as a plugin-style layer under
 `navaero_transition_model/core/decision_logic/`.
 
-The legacy implementations are:
+The legacy investment-logic name is `legacy_weighted_utility` for every sector
+and application. Older sector-specific legacy names are still accepted as
+aliases for existing cases.
 
-- `legacy_weighted_utility`
-- `legacy_weighted_utility_cargo`
-- `legacy_weighted_utility_maritime_cargo`
-- `legacy_weighted_utility_maritime_passenger`
+All legacy weighted-utility variants are implemented in
+`legacy_weighted_utility.py`; there are no sector-specific legacy weighted
+utility modules.
 
 The ambiguity-aware implementations are:
 
@@ -697,12 +698,9 @@ For someone new to the codebase, this is the best order:
 10. [maritime_cargo_shipline.py](C:/Manish_REPO/NATM/navaero_transition_model/core/agent_types/maritime_cargo_shipline.py:1)
 11. [maritime_passenger_shipline.py](C:/Manish_REPO/NATM/navaero_transition_model/core/agent_types/maritime_passenger_shipline.py:1)
 12. [legacy_weighted_utility.py](C:/Manish_REPO/NATM/navaero_transition_model/core/decision_logic/legacy_weighted_utility.py:1)
-13. [legacy_weighted_utility_cargo.py](C:/Manish_REPO/NATM/navaero_transition_model/core/decision_logic/legacy_weighted_utility_cargo.py:1)
-14. [legacy_weighted_utility_maritime_cargo.py](C:/Manish_REPO/NATM/navaero_transition_model/core/decision_logic/legacy_weighted_utility_maritime_cargo.py:1)
-15. [legacy_weighted_utility_maritime_passenger.py](C:/Manish_REPO/NATM/navaero_transition_model/core/decision_logic/legacy_weighted_utility_maritime_passenger.py:1)
-16. [fleet.py](C:/Manish_REPO/NATM/navaero_transition_model/core/fleet_management/fleet.py:1)
-17. [aviation_exports.py](C:/Manish_REPO/NATM/navaero_transition_model/core/result_exports/aviation_exports.py:1)
-18. [sqlite_store.py](C:/Manish_REPO/NATM/navaero_transition_model/core/database/sqlite_store.py:1)
+13. [fleet.py](C:/Manish_REPO/NATM/navaero_transition_model/core/fleet_management/fleet.py:1)
+14. [aviation_exports.py](C:/Manish_REPO/NATM/navaero_transition_model/core/result_exports/aviation_exports.py:1)
+15. [sqlite_store.py](C:/Manish_REPO/NATM/navaero_transition_model/core/database/sqlite_store.py:1)
 
 That path follows the same order the system itself uses during a run.
 

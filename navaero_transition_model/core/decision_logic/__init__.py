@@ -15,18 +15,15 @@ from navaero_transition_model.core.decision_logic.base import (
     clean_scope_value,
 )
 from navaero_transition_model.core.decision_logic.legacy_weighted_utility import (
-    LegacyWeightedUtilityLogic,
-)
-from navaero_transition_model.core.decision_logic.legacy_weighted_utility_cargo import (
     LegacyWeightedUtilityCargoLogic,
-)
-from navaero_transition_model.core.decision_logic.legacy_weighted_utility_maritime_cargo import (
+    LegacyWeightedUtilityLogic,
     LegacyWeightedUtilityMaritimeCargoLogic,
-)
-
-from .legacy_weighted_utility_maritime_passenger import (
     LegacyWeightedUtilityMaritimePassengerLogic,
 )
+
+LEGACY_WEIGHTED_UTILITY_CARGO_ALIAS = "legacy_weighted_utility_cargo"
+LEGACY_WEIGHTED_UTILITY_MARITIME_CARGO_ALIAS = "legacy_weighted_utility_maritime_cargo"
+LEGACY_WEIGHTED_UTILITY_MARITIME_PASSENGER_ALIAS = "legacy_weighted_utility_maritime_passenger"
 
 
 def build_aviation_passenger_decision_logic(
@@ -49,7 +46,8 @@ def build_aviation_cargo_decision_logic(
     logic_name: str,
 ) -> AviationCargoDecisionLogic:
     available_logics = {
-        LegacyWeightedUtilityCargoLogic.name: LegacyWeightedUtilityCargoLogic,
+        LegacyWeightedUtilityLogic.name: LegacyWeightedUtilityCargoLogic,
+        LEGACY_WEIGHTED_UTILITY_CARGO_ALIAS: LegacyWeightedUtilityCargoLogic,
         AmbiguityAwareCargoLogic.name: AmbiguityAwareCargoLogic,
     }
     try:
@@ -66,7 +64,8 @@ def build_maritime_cargo_decision_logic(
     logic_name: str,
 ) -> MaritimeCargoDecisionLogic:
     available_logics = {
-        LegacyWeightedUtilityMaritimeCargoLogic.name: LegacyWeightedUtilityMaritimeCargoLogic,
+        LegacyWeightedUtilityLogic.name: LegacyWeightedUtilityMaritimeCargoLogic,
+        LEGACY_WEIGHTED_UTILITY_MARITIME_CARGO_ALIAS: LegacyWeightedUtilityMaritimeCargoLogic,
         AmbiguityAwareMaritimeCargoLogic.name: AmbiguityAwareMaritimeCargoLogic,
     }
     try:
@@ -83,7 +82,8 @@ def build_maritime_passenger_decision_logic(
     logic_name: str,
 ) -> MaritimePassengerDecisionLogic:
     available_logics = {
-        LegacyWeightedUtilityMaritimePassengerLogic.name: (
+        LegacyWeightedUtilityLogic.name: LegacyWeightedUtilityMaritimePassengerLogic,
+        LEGACY_WEIGHTED_UTILITY_MARITIME_PASSENGER_ALIAS: (
             LegacyWeightedUtilityMaritimePassengerLogic
         ),
         AmbiguityAwareMaritimePassengerLogic.name: AmbiguityAwareMaritimePassengerLogic,

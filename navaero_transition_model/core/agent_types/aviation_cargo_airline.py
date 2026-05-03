@@ -58,7 +58,7 @@ class AviationCargoAirlineAgent(BaseOperatorAgent):
         self.investment_logic_name = self._fleet_text_value(
             fleet_frame,
             "investment_logic",
-            default="legacy_weighted_utility_cargo",
+            default="legacy_weighted_utility",
         )
         self.decision_attitude = self._fleet_text_value(
             fleet_frame,

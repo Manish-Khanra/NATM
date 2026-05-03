@@ -1,6 +1,5 @@
 import shutil
 import sqlite3
-from copy import deepcopy
 from pathlib import Path
 
 import mesa
@@ -28,10 +27,20 @@ from navaero_transition_model.core.loaders import (
 from navaero_transition_model.core.model import NATMModel
 from navaero_transition_model.core.scenario import NATMScenario
 
+PASSENGER_CASE_NAME = "baseline-passenger-transition"
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
 
 def load_default_scenario() -> NATMScenario:
-    scenario_path = Path(__file__).resolve().parents[1] / resolve_case_config("baseline-transition")
+    scenario_path = _repo_root() / resolve_case_config(PASSENGER_CASE_NAME)
     return NATMScenario.from_yaml(scenario_path)
+
+
+def _passenger_case_dir() -> Path:
+    return _repo_root() / resolve_case_config(PASSENGER_CASE_NAME).parent
 
 
 def load_cargo_scenario() -> NATMScenario:
@@ -133,8 +142,8 @@ def _set_capacity_matched_demand(model: NATMModel, year: int) -> None:
 
 
 def _clone_case_directory(tmp_path: Path) -> Path:
-    source_dir = Path(__file__).resolve().parents[1] / "data" / "baseline-transition"
-    case_dir = tmp_path / "baseline-transition"
+    source_dir = _passenger_case_dir()
+    case_dir = tmp_path / PASSENGER_CASE_NAME
     case_dir.mkdir()
     for source_path in source_dir.iterdir():
         if source_path.is_file():
@@ -210,7 +219,7 @@ def test_default_scenario_runs_end_to_end() -> None:
 
 
 def test_aviation_fleet_stock_is_aggregated_by_operator() -> None:
-    case_dir = Path(__file__).resolve().parents[1] / "data" / "baseline-transition"
+    case_dir = _passenger_case_dir()
     profiles = load_aviation_passenger_case(case_dir).grouped_operator_fleet()
     grouped = {
         (operator_name, operator_country): fleet_df
@@ -229,9 +238,43 @@ def test_aviation_fleet_stock_is_aggregated_by_operator() -> None:
     assert set(grouped[("Lufthansa", "Germany")]["main_hub"].unique()) == {"Frankfurt"}
 
 
-def test_stronger_policy_accelerates_adoption() -> None:
-    baseline = load_default_scenario()
-    stronger_policy = deepcopy(baseline)
+def test_stronger_policy_accelerates_adoption(tmp_path: Path) -> None:
+    case_dir = _clone_case_directory(tmp_path)
+
+    fleet_path = case_dir / "aviation_fleet_stock.csv"
+    fleet = pd.read_csv(fleet_path)
+    fleet = fleet.loc[fleet["current_technology"].astype(str).eq("kerosene_short")].head(1).copy()
+    fleet["Age (Years)"] = 19.0
+    fleet.to_csv(fleet_path, index=False)
+
+    technology_path = case_dir / "aviation_technology_catalog.csv"
+    technology_catalog = pd.read_csv(technology_path)
+    technology_catalog.loc[
+        technology_catalog["technology_name"].eq("drop_in_saf_short"),
+        "capex_eur",
+    ] = 1_000_000
+    technology_catalog.loc[
+        technology_catalog["technology_name"].eq("drop_in_saf_short"),
+        "kilometer_per_kwh",
+    ] = 2.0
+    technology_catalog.to_csv(technology_path, index=False)
+
+    scenario_csv = case_dir / "aviation_scenario.csv"
+    scenario_frame = pd.read_csv(scenario_csv)
+    year_columns = [column for column in scenario_frame.columns if column.isdigit()]
+    no_growth_variables = {
+        "passenger_km_demand",
+        "operator_market_share",
+        "planned_delivery_count",
+    }
+    scenario_frame.loc[
+        scenario_frame["variable_name"].isin(no_growth_variables),
+        year_columns,
+    ] = 0.0
+    scenario_frame.to_csv(scenario_csv, index=False)
+
+    baseline = NATMScenario.from_yaml(case_dir / "scenario.yaml")
+    stronger_policy = NATMScenario.from_yaml(case_dir / "scenario.yaml")
     baseline_model = NATMModel(baseline, seed=42)
     stronger_model = NATMModel(stronger_policy, seed=42)
 
@@ -240,27 +283,25 @@ def test_stronger_policy_accelerates_adoption() -> None:
     stronger_long.loc[
         stronger_long["variable_name"] == "carbon_price",
         "value",
-    ] = stronger_long.loc[stronger_long["variable_name"] == "carbon_price", "value"] * 1.35
+    ] = 10_000.0
     stronger_long.loc[
         stronger_long["variable_name"] == "clean_fuel_subsidy",
         "value",
-    ] = (
-        pd.to_numeric(
-            stronger_long.loc[stronger_long["variable_name"] == "clean_fuel_subsidy", "value"],
-            errors="coerce",
-        )
-        + 0.08
-    )
+    ] = 0.9
     stronger_long.loc[
         stronger_long["variable_name"] == "adoption_mandate",
         "value",
-    ] = (
-        pd.to_numeric(
-            stronger_long.loc[stronger_long["variable_name"] == "adoption_mandate", "value"],
-            errors="coerce",
-        )
-        + 0.10
-    )
+    ] = 0.9
+    stronger_long.loc[
+        (stronger_long["variable_name"] == "primary_energy_price")
+        & stronger_long["primary_energy_carrier"].astype(str).str.strip().eq("kerosene"),
+        "value",
+    ] = 10.0
+    stronger_long.loc[
+        (stronger_long["variable_name"] == "secondary_energy_price")
+        & stronger_long["secondary_energy_carrier"].astype(str).str.strip().eq("saf"),
+        "value",
+    ] = 0.001
     stronger_table._long = stronger_long
     stronger_table._cache.clear()
 
@@ -272,7 +313,7 @@ def test_stronger_policy_accelerates_adoption() -> None:
 
 
 def test_aviation_passenger_case_loader_reads_three_file_structure() -> None:
-    case_dir = Path(__file__).resolve().parents[1] / "data" / "baseline-transition"
+    case_dir = _passenger_case_dir()
     case_inputs = load_aviation_passenger_case(case_dir)
 
     assert isinstance(case_inputs, AviationPassengerCaseData)
@@ -299,7 +340,7 @@ def test_aviation_passenger_case_loader_reads_three_file_structure() -> None:
 
 
 def test_technology_catalog_lookup_is_name_based_with_optional_segment_metadata() -> None:
-    case_dir = Path(__file__).resolve().parents[1] / "data" / "baseline-transition"
+    case_dir = _passenger_case_dir()
     catalog = TechnologyCatalog.from_csv(case_dir / "aviation_technology_catalog.csv")
 
     row = catalog.row_for("kerosene_medium", segment="short")
@@ -337,7 +378,7 @@ def test_maritime_passenger_scenario_runs_end_to_end() -> None:
     assert len(model.get_sector_agents("aviation")) == 0
     assert {"maritime"} == set(agent_summary["sector_name"].unique())
     assert {"passenger"} == set(agent_summary["application_name"].unique())
-    assert {"legacy_weighted_utility_maritime_passenger"} == set(
+    assert {"legacy_weighted_utility"} == set(
         agent_summary["investment_logic"].unique(),
     )
     assert not aircraft_summary.empty

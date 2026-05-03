@@ -79,7 +79,8 @@ Use only the columns that matter for the variable. Leave the others blank.
 
 ## Ambiguity-Aware Decision Inputs
 
-Fleet stock can keep using `investment_logic=legacy_weighted_utility_cargo`.
+Fleet stock can use `investment_logic=legacy_weighted_utility`.
+`legacy_weighted_utility_cargo` remains accepted as an alias for older cases.
 To use the ambiguity-aware cargo rule, set:
 
 ```csv

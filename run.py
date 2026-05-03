@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 
 AVAILABLE_EXAMPLES = {
     "small_with_aviation_passenger": {
-        "case": "baseline-transition",
+        "case": "baseline-passenger-transition",
         "description": "Baseline aviation-passenger Mesa case.",
     },
     "small_with_aviation_cargo": {

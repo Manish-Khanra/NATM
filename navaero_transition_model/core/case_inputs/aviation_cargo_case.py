@@ -122,12 +122,10 @@ def normalize_aviation_cargo_fleet_stock(path: str | Path) -> pd.DataFrame:
     _ensure_columns(normalized, FLEET_REQUIRED_COLUMNS, "aviation fleet stock")
     normalized["is_cargo"] = normalized.get("config_type", "Con").astype(str).str.lower().eq("con")
     if "investment_logic" not in normalized.columns:
-        normalized["investment_logic"] = "legacy_weighted_utility_cargo"
+        normalized["investment_logic"] = "legacy_weighted_utility"
     else:
         normalized["investment_logic"] = (
-            normalized["investment_logic"]
-            .replace("", pd.NA)
-            .fillna("legacy_weighted_utility_cargo")
+            normalized["investment_logic"].replace("", pd.NA).fillna("legacy_weighted_utility")
         )
     if "decision_attitude" not in normalized.columns:
         normalized["decision_attitude"] = "risk_neutral"

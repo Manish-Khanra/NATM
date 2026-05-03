@@ -8,6 +8,10 @@ import pandas as pd
 import pytest
 from navaero_transition_model.core.case_inputs.scenario_table import ScenarioTable
 from navaero_transition_model.core.decision_logic import (
+    LegacyWeightedUtilityCargoLogic,
+    LegacyWeightedUtilityLogic,
+    LegacyWeightedUtilityMaritimeCargoLogic,
+    LegacyWeightedUtilityMaritimePassengerLogic,
     build_aviation_cargo_decision_logic,
     build_aviation_passenger_decision_logic,
     build_maritime_cargo_decision_logic,
@@ -117,8 +121,7 @@ def test_scenario_table_falls_back_to_baseline_when_scenario_scope_is_missing() 
         == 120.0
     )
     assert (
-        table.value("carbon_price", 2025, scenario_id="high_carbon_price", country="France")
-        == 40.0
+        table.value("carbon_price", 2025, scenario_id="high_carbon_price", country="France") == 40.0
     )
 
 
@@ -230,9 +233,49 @@ def test_ambiguity_aware_logic_plugins_are_registered(builder, logic_name, logic
     assert isinstance(builder(logic_name), logic_class)
 
 
+@pytest.mark.parametrize(
+    ("builder", "logic_class"),
+    [
+        (build_aviation_passenger_decision_logic, LegacyWeightedUtilityLogic),
+        (build_aviation_cargo_decision_logic, LegacyWeightedUtilityCargoLogic),
+        (build_maritime_cargo_decision_logic, LegacyWeightedUtilityMaritimeCargoLogic),
+        (build_maritime_passenger_decision_logic, LegacyWeightedUtilityMaritimePassengerLogic),
+    ],
+)
+def test_legacy_weighted_utility_name_works_for_all_sectors(builder, logic_class) -> None:
+    logic = builder("legacy_weighted_utility")
+
+    assert isinstance(logic, logic_class)
+    assert logic.name == "legacy_weighted_utility"
+
+
+@pytest.mark.parametrize(
+    ("builder", "legacy_alias", "logic_class"),
+    [
+        (
+            build_aviation_cargo_decision_logic,
+            "legacy_weighted_utility_cargo",
+            LegacyWeightedUtilityCargoLogic,
+        ),
+        (
+            build_maritime_cargo_decision_logic,
+            "legacy_weighted_utility_maritime_cargo",
+            LegacyWeightedUtilityMaritimeCargoLogic,
+        ),
+        (
+            build_maritime_passenger_decision_logic,
+            "legacy_weighted_utility_maritime_passenger",
+            LegacyWeightedUtilityMaritimePassengerLogic,
+        ),
+    ],
+)
+def test_sector_specific_legacy_names_remain_aliases(builder, legacy_alias, logic_class) -> None:
+    assert isinstance(builder(legacy_alias), logic_class)
+
+
 def test_aviation_passenger_ambiguity_logic_writes_robust_frontier(tmp_path: Path) -> None:
-    source_dir = Path(__file__).resolve().parents[1] / "data" / "baseline-transition"
-    case_dir = tmp_path / "baseline-transition"
+    source_dir = Path(__file__).resolve().parents[1] / "data" / "baseline-passenger-transition"
+    case_dir = tmp_path / "baseline-passenger-transition"
     shutil.copytree(source_dir, case_dir)
 
     fleet_path = case_dir / "aviation_fleet_stock.csv"

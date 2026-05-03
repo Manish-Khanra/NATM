@@ -97,7 +97,7 @@ In this mode, the dashboard:
 The live mode uses the case folder name that is hard-coded in the dashboard
 file, for example:
 
-- `baseline-transition`
+- `baseline-passenger-transition`
 - `baseline-cargo-transition`
 - `baseline-maritime-cargo-transition`
 - `baseline-maritime-passenger-transition`

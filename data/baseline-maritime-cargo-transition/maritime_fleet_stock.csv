@@ -1,5 +1,5 @@
 ID,Vessel Type,Operator,Operator Country,Status,Build Date,Build Country,Delivery Date Operator,Exit Date Operator,Segment,Range (km),Age (Years),Main Hub,current_technology,operator_economic_weight,operator_environmental_weight,free_ets_allocation,peer_influence,investment_logic
-8101,Feeder Container,Hapag-Lloyd,Germany,Active,2012-03-01,South Korea,2013-01-01,,regional,4200,13.0,Hamburg,marine_diesel_regional,0.70,0.30,720000,0.18,legacy_weighted_utility_maritime_cargo
-8102,Panamax Container,Hapag-Lloyd,Germany,Active,2011-09-01,Japan,2012-05-01,,deepsea,14500,29.0,Hamburg,marine_diesel_deepsea,0.70,0.30,720000,0.18,legacy_weighted_utility_maritime_cargo
-8201,Feeder Container,CMA CGM,France,Active,2013-04-01,China,2014-02-01,,regional,4300,12.0,Marseille,marine_diesel_regional,0.66,0.34,680000,0.16,legacy_weighted_utility_maritime_cargo
-8202,Panamax Container,CMA CGM,France,Active,2010-11-01,South Korea,2011-06-01,,deepsea,14800,28.0,Marseille,marine_diesel_deepsea,0.66,0.34,680000,0.16,legacy_weighted_utility_maritime_cargo
+8101,Feeder Container,Hapag-Lloyd,Germany,Active,2012-03-01,South Korea,2013-01-01,,regional,4200,13.0,Hamburg,marine_diesel_regional,0.70,0.30,720000,0.18,legacy_weighted_utility
+8102,Panamax Container,Hapag-Lloyd,Germany,Active,2011-09-01,Japan,2012-05-01,,deepsea,14500,29.0,Hamburg,marine_diesel_deepsea,0.70,0.30,720000,0.18,legacy_weighted_utility
+8201,Feeder Container,CMA CGM,France,Active,2013-04-01,China,2014-02-01,,regional,4300,12.0,Marseille,marine_diesel_regional,0.66,0.34,680000,0.16,legacy_weighted_utility
+8202,Panamax Container,CMA CGM,France,Active,2010-11-01,South Korea,2011-06-01,,deepsea,14800,28.0,Marseille,marine_diesel_deepsea,0.66,0.34,680000,0.16,legacy_weighted_utility

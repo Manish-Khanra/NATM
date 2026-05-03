@@ -77,9 +77,9 @@ Use only the columns that matter for the variable. Leave the others blank.
 
 ## Ambiguity-Aware Decision Inputs
 
-Fleet stock can keep using
-`investment_logic=legacy_weighted_utility_maritime_passenger`. To use the
-ambiguity-aware maritime passenger rule, set:
+Fleet stock can use `investment_logic=legacy_weighted_utility`.
+`legacy_weighted_utility_maritime_passenger` remains accepted as an alias for
+older cases. To use the ambiguity-aware maritime passenger rule, set:
 
 ```csv
 investment_logic,decision_attitude

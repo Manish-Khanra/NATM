@@ -74,12 +74,10 @@ def normalize_maritime_cargo_fleet_stock(path: str | Path) -> pd.DataFrame:
     normalized["vessel_age_years"] = normalized["aircraft_age_years"]
     normalized["is_cargo"] = True
     if "investment_logic" not in normalized.columns:
-        normalized["investment_logic"] = "legacy_weighted_utility_maritime_cargo"
+        normalized["investment_logic"] = "legacy_weighted_utility"
     else:
         normalized["investment_logic"] = (
-            normalized["investment_logic"]
-            .replace("", pd.NA)
-            .fillna("legacy_weighted_utility_maritime_cargo")
+            normalized["investment_logic"].replace("", pd.NA).fillna("legacy_weighted_utility")
         )
     if "decision_attitude" not in normalized.columns:
         normalized["decision_attitude"] = "risk_neutral"

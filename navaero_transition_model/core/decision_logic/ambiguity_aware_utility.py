@@ -14,16 +14,11 @@ from navaero_transition_model.core.decision_logic.base import (
     clean_scope_value,
 )
 from navaero_transition_model.core.decision_logic.legacy_weighted_utility import (
-    LegacyWeightedUtilityLogic,
-)
-from navaero_transition_model.core.decision_logic.legacy_weighted_utility_cargo import (
     LegacyWeightedUtilityCargoLogic,
-)
-from navaero_transition_model.core.decision_logic.legacy_weighted_utility_maritime_cargo import (
+    LegacyWeightedUtilityLogic,
     LegacyWeightedUtilityMaritimeCargoLogic,
+    LegacyWeightedUtilityMaritimePassengerLogic,
 )
-
-from .legacy_weighted_utility_maritime_passenger import LegacyWeightedUtilityMaritimePassengerLogic
 
 if TYPE_CHECKING:
     from navaero_transition_model.core.agent_types.aviation_cargo_airline import (
@@ -131,12 +126,10 @@ class AmbiguityAwareSelectionMixin:
             return {}
         delta = max(float(probability_deviation), 0.0)
         lower_bounds = {
-            outcome.scenario_id: max(0.0, outcome.probability - delta)
-            for outcome in outcome_list
+            outcome.scenario_id: max(0.0, outcome.probability - delta) for outcome in outcome_list
         }
         upper_bounds = {
-            outcome.scenario_id: min(1.0, outcome.probability + delta)
-            for outcome in outcome_list
+            outcome.scenario_id: min(1.0, outcome.probability + delta) for outcome in outcome_list
         }
         q = dict(lower_bounds)
         remaining = max(1.0 - sum(q.values()), 0.0)

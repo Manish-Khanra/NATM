@@ -95,19 +95,19 @@ including `model_summary.csv`, the detailed CSV tables, and `natm_runs.sqlite`.
 If you want to run a case directly through the CLI instead:
 
 ```powershell
-natm --case baseline-transition --output simulation_results/baseline.csv
+natm --case baseline-passenger-transition --output simulation_results/baseline.csv
 ```
 
 To export the richer Mesa result tables as well:
 
 ```powershell
-natm --case baseline-transition --output simulation_results/baseline.csv --details-dir simulation_results/baseline-details
+natm --case baseline-passenger-transition --output simulation_results/baseline.csv --details-dir simulation_results/baseline-details
 ```
 
 To persist both case inputs and run outputs into SQLite:
 
 ```powershell
-natm --case baseline-transition --output simulation_results/baseline.csv --details-dir simulation_results/baseline-details --sqlite-db simulation_results/natm_runs.sqlite
+natm --case baseline-passenger-transition --output simulation_results/baseline.csv --details-dir simulation_results/baseline-details --sqlite-db simulation_results/natm_runs.sqlite
 ```
 
 ### Pre-Commit Setup
@@ -153,11 +153,11 @@ You can run the preprocessing CLI with a synthetic example like this:
 ```powershell
 .venv\Scripts\Activate.ps1
 natm-aviation-preprocess `
-  --stock-input data\baseline-transition\aviation_fleet_stock.csv `
+  --stock-input data\baseline-passenger-transition\aviation_fleet_stock.csv `
   --opensky-raw data\examples\aviation_preprocessing\opensky_aircraft_db_sample.csv `
   --flightlist-folder data\examples\aviation_preprocessing\opensky_flightlists `
   --airport-metadata data\examples\aviation_preprocessing\airports_sample.csv `
-  --technology-catalog data\baseline-transition\aviation_technology_catalog.csv `
+  --technology-catalog data\baseline-passenger-transition\aviation_technology_catalog.csv `
   --calibration-input data\examples\aviation_preprocessing\germany_calibration_input.csv
 ```
 
@@ -173,11 +173,11 @@ Then add the OpenAP flag to the preprocessing command:
 
 ```powershell
 natm-aviation-preprocess `
-  --stock-input data\baseline-transition\aviation_fleet_stock.csv `
+  --stock-input data\baseline-passenger-transition\aviation_fleet_stock.csv `
   --opensky-raw data\examples\aviation_preprocessing\opensky_aircraft_db_sample.csv `
   --flightlist-folder data\examples\aviation_preprocessing\opensky_flightlists `
   --airport-metadata data\examples\aviation_preprocessing\airports_sample.csv `
-  --technology-catalog data\baseline-transition\aviation_technology_catalog.csv `
+  --technology-catalog data\baseline-passenger-transition\aviation_technology_catalog.csv `
   --calibration-input data\examples\aviation_preprocessing\germany_calibration_input.csv `
   --estimate-openap-fuel `
   --openap-mode synthetic
@@ -189,7 +189,7 @@ outputs into `data/processed/aviation/` and enriches
 
 You can also run the scenario-defined preprocessing flow from `run.py`. The
 baseline passenger case stores its preprocessing recipe in
-`data/baseline-transition/scenario.yaml`:
+`data/baseline-passenger-transition/scenario.yaml`:
 
 ```powershell
 python run.py --mode aviation_preprocessing --example small_with_aviation_passenger
@@ -393,7 +393,7 @@ Named example presets currently included in [run.py](C:/Manish_REPO/NATM/run.py:
 - `data/<case-name>/scenario.yaml`: case configuration
 - `data/<case-name>/*.csv`: input data for that case
 
-The `baseline-transition` case includes the passenger-specific 3-file input
+The `baseline-passenger-transition` case includes the passenger-specific 3-file input
 structure:
 
 - `aviation_fleet_stock.csv`
@@ -428,13 +428,9 @@ filenames:
 - `maritime_scenario.csv`
 
 The fleet stock input can also carry an `investment_logic` column so each
-operator agent can select its decision method by name. Legacy behavior remains
-available through:
-
-- `legacy_weighted_utility`
-- `legacy_weighted_utility_cargo`
-- `legacy_weighted_utility_maritime_cargo`
-- `legacy_weighted_utility_maritime_passenger`
+operator agent can select its decision method by name. Legacy behavior is
+available for every sector through `legacy_weighted_utility`. Older
+sector-specific legacy names are still accepted as aliases for existing cases.
 
 The ambiguity-aware extension adds:
 

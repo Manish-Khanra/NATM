@@ -265,11 +265,11 @@ preprocessing:
 
 For the baseline passenger case, this points to:
 
-- `data/baseline-transition/aviation_fleet_stock.csv`
+- `data/baseline-passenger-transition/aviation_fleet_stock.csv`
 - `data/examples/aviation_preprocessing/opensky_aircraft_db_sample.csv`
 - `data/examples/aviation_preprocessing/opensky_flightlists/`
 - `data/examples/aviation_preprocessing/airports_sample.csv`
-- `data/baseline-transition/aviation_technology_catalog.csv`
+- `data/baseline-passenger-transition/aviation_technology_catalog.csv`
 - `data/examples/aviation_preprocessing/germany_calibration_input.csv`
 
 So if you press Run in VS Code with those two lines set, `run.py` does not
@@ -422,11 +422,11 @@ Then run the preprocessing CLI:
 
 ```powershell
 natm-aviation-preprocess `
-  --stock-input data\baseline-transition\aviation_fleet_stock.csv `
+  --stock-input data\baseline-passenger-transition\aviation_fleet_stock.csv `
   --opensky-raw data\examples\aviation_preprocessing\opensky_aircraft_db_sample.csv `
   --flightlist-folder data\examples\aviation_preprocessing\opensky_flightlists `
   --airport-metadata data\examples\aviation_preprocessing\airports_sample.csv `
-  --technology-catalog data\baseline-transition\aviation_technology_catalog.csv `
+  --technology-catalog data\baseline-passenger-transition\aviation_technology_catalog.csv `
   --calibration-input data\examples\aviation_preprocessing\germany_calibration_input.csv
 ```
 
@@ -439,11 +439,11 @@ dependency group and pass `--estimate-openap-fuel`:
 python -m pip install -e .[openap]
 
 natm-aviation-preprocess `
-  --stock-input data\baseline-transition\aviation_fleet_stock.csv `
+  --stock-input data\baseline-passenger-transition\aviation_fleet_stock.csv `
   --opensky-raw data\examples\aviation_preprocessing\opensky_aircraft_db_sample.csv `
   --flightlist-folder data\examples\aviation_preprocessing\opensky_flightlists `
   --airport-metadata data\examples\aviation_preprocessing\airports_sample.csv `
-  --technology-catalog data\baseline-transition\aviation_technology_catalog.csv `
+  --technology-catalog data\baseline-passenger-transition\aviation_technology_catalog.csv `
   --calibration-input data\examples\aviation_preprocessing\germany_calibration_input.csv `
   --estimate-openap-fuel `
   --openap-mode synthetic

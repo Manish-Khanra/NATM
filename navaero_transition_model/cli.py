@@ -20,7 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the NATM starter simulation.")
     parser.add_argument(
         "--case",
-        default="baseline-transition",
+        default="baseline-passenger-transition",
         help="Case folder name under data/ to run.",
     )
     parser.add_argument(

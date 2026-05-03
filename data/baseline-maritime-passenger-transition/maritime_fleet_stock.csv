@@ -1,5 +1,5 @@
 ID,Vessel Type,Operator,Operator Country,Status,Build Date,Build Country,Delivery Date Operator,Exit Date Operator,Segment,Range (km),Age (Years),Main Hub,current_technology,operator_economic_weight,operator_environmental_weight,free_ets_allocation,peer_influence,investment_logic
-9101,Regional Ferry,DFDS,Germany,Active,2011-03-01,Germany,2012-02-01,,regional,1200,18.0,Hamburg,marine_diesel_regional_passenger,0.68,0.32,410000,0.16,legacy_weighted_utility_maritime_passenger
-9102,Overnight Ferry,DFDS,Germany,Active,2010-06-01,Finland,2011-04-01,,overnight,2600,20.0,Hamburg,marine_diesel_overnight_passenger,0.68,0.32,410000,0.16,legacy_weighted_utility_maritime_passenger
-9201,Regional Ferry,Brittany Ferries,France,Active,2012-05-01,France,2013-01-01,,regional,1180,17.0,Marseille,marine_diesel_regional_passenger,0.64,0.36,395000,0.15,legacy_weighted_utility_maritime_passenger
-9202,Overnight Ferry,Brittany Ferries,France,Active,2009-08-01,Italy,2010-03-01,,overnight,2550,21.0,Marseille,marine_diesel_overnight_passenger,0.64,0.36,395000,0.15,legacy_weighted_utility_maritime_passenger
+9101,Regional Ferry,DFDS,Germany,Active,2011-03-01,Germany,2012-02-01,,regional,1200,18.0,Hamburg,marine_diesel_regional_passenger,0.68,0.32,410000,0.16,legacy_weighted_utility
+9102,Overnight Ferry,DFDS,Germany,Active,2010-06-01,Finland,2011-04-01,,overnight,2600,20.0,Hamburg,marine_diesel_overnight_passenger,0.68,0.32,410000,0.16,legacy_weighted_utility
+9201,Regional Ferry,Brittany Ferries,France,Active,2012-05-01,France,2013-01-01,,regional,1180,17.0,Marseille,marine_diesel_regional_passenger,0.64,0.36,395000,0.15,legacy_weighted_utility
+9202,Overnight Ferry,Brittany Ferries,France,Active,2009-08-01,Italy,2010-03-01,,overnight,2550,21.0,Marseille,marine_diesel_overnight_passenger,0.64,0.36,395000,0.15,legacy_weighted_utility

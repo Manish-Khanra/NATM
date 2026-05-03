@@ -48,9 +48,13 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def _passenger_case_dir() -> Path:
+    return _repo_root() / "data" / "baseline-passenger-transition"
+
+
 def test_scenario_loads_optional_aviation_preprocessing_config() -> None:
     scenario = NATMScenario.from_yaml(
-        _repo_root() / "data" / "baseline-transition" / "scenario.yaml",
+        _passenger_case_dir() / "scenario.yaml",
     )
     config = scenario.aviation_preprocessing_config()
 
@@ -180,9 +184,8 @@ def test_openap_trip_outputs_and_activity_profile_aggregation(
         raw_opensky_path,
         output_path=processed_db_path,
     )
-    cleaned_stock = AviationStockCleaner().clean(
-        repo_root / "data" / "baseline-transition" / "aviation_fleet_stock.csv"
-    )
+    baseline_case_dir = _passenger_case_dir()
+    cleaned_stock = AviationStockCleaner().clean(baseline_case_dir / "aviation_fleet_stock.csv")
     match_result = AviationStockMatcher().match(cleaned_stock, processed_db)
     enriched_stock_path = tmp_path / "aviation_fleet_stock_enriched.csv"
     match_result.enriched_stock.to_csv(enriched_stock_path, index=False)
@@ -201,11 +204,8 @@ def test_openap_trip_outputs_and_activity_profile_aggregation(
         airport_metadata_path=airports_path,
         aircraft_db_processed_path=processed_db_path,
         fleet_stock_path=enriched_stock_path,
-        technology_catalog_path=repo_root
-        / "data"
-        / "baseline-transition"
-        / "aviation_technology_catalog.csv",
-        scenario_table_path=repo_root / "data" / "baseline-transition" / "aviation_scenario.csv",
+        technology_catalog_path=baseline_case_dir / "aviation_technology_catalog.csv",
+        scenario_table_path=baseline_case_dir / "aviation_scenario.csv",
         output_dir=tmp_path,
         config=OpenAPFuelConfig(include_non_co2=False),
     )
@@ -227,7 +227,7 @@ def test_openap_trip_outputs_and_activity_profile_aggregation(
 
 def test_stock_matching_enriches_registration_icao24_and_german_flag(tmp_path: Path) -> None:
     repo_root = _repo_root()
-    stock_path = repo_root / "data" / "baseline-transition" / "aviation_fleet_stock.csv"
+    stock_path = _passenger_case_dir() / "aviation_fleet_stock.csv"
     raw_opensky_path = (
         repo_root
         / "data"
@@ -324,7 +324,7 @@ def test_flightlist_ingestion_activity_profiles_and_allocation_pipeline(tmp_path
 def test_enriched_activity_profiles_merge_into_case_and_fleet(tmp_path: Path) -> None:
     repo_root = _repo_root()
     example_root = repo_root / "data" / "examples" / "aviation_preprocessing"
-    baseline_case_dir = repo_root / "data" / "baseline-transition"
+    baseline_case_dir = _passenger_case_dir()
 
     stock_path = baseline_case_dir / "aviation_fleet_stock.csv"
     raw_opensky_path = example_root / "opensky_aircraft_db_sample.csv"
@@ -366,7 +366,7 @@ def test_enriched_activity_profiles_merge_into_case_and_fleet(tmp_path: Path) ->
         output_activity_profiles_path=tmp_path / "aviation_activity_profiles.csv",
     )
 
-    case_dir = tmp_path / "baseline-transition"
+    case_dir = tmp_path / "baseline-passenger-transition"
     case_dir.mkdir()
     for filename in ("scenario.yaml", "aviation_technology_catalog.csv", "aviation_scenario.csv"):
         shutil.copy2(baseline_case_dir / filename, case_dir / filename)
@@ -403,8 +403,7 @@ def test_enriched_activity_profiles_merge_into_case_and_fleet(tmp_path: Path) ->
 
 
 def test_zero_activity_profile_values_fall_back_to_fleet_defaults() -> None:
-    repo_root = _repo_root()
-    case_dir = repo_root / "data" / "baseline-transition"
+    case_dir = _passenger_case_dir()
     case_data = AviationPassengerCaseData.from_directory(case_dir)
     technology_catalog = TechnologyCatalog.from_csv(case_dir / "aviation_technology_catalog.csv")
     fleet = Fleet(
