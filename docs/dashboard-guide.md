@@ -41,29 +41,14 @@ python -m pip install "starlette<1" "solara-server[starlette]>=1.40"
 
 ## 3. Available Dashboard Files
 
-### Aviation passenger
+### Common case dashboard
 
 ```powershell
-solara run dashboard_examples/aviation_passenger_baseline_dashboard.py
+solara run dashboard_examples/common_case_dashboard.py
 ```
 
-### Aviation cargo
-
-```powershell
-solara run dashboard_examples/aviation_cargo_baseline_dashboard.py
-```
-
-### Maritime cargo
-
-```powershell
-solara run dashboard_examples/maritime_cargo_baseline_dashboard.py
-```
-
-### Maritime passenger
-
-```powershell
-solara run dashboard_examples/maritime_passenger_baseline_dashboard.py
-```
+Use the `Live case` selector in the browser to choose aviation passenger,
+aviation cargo, maritime cargo, or maritime passenger cases.
 
 ### Cartographic (deck.gl)
 
@@ -74,10 +59,10 @@ solara run dashboard_examples/cartographic_dashboard.py
 If the `solara` command is not recognized, use:
 
 ```powershell
-python -m solara run dashboard_examples/aviation_passenger_baseline_dashboard.py
+python -m solara run dashboard_examples/common_case_dashboard.py
 ```
 
-and replace the file path with the dashboard you want.
+and use the browser controls to choose the case you want.
 
 ## 4. How To Use Live Case Mode
 
@@ -89,13 +74,13 @@ Choose:
 
 In this mode, the dashboard:
 
-- resolves the case configured in the dashboard file
+- resolves the case selected in the `Case` card
 - instantiates the Mesa model
 - reruns the simulation inside the dashboard
 - shows live model summary and detailed charts
 
-The live mode uses the case folder name that is hard-coded in the dashboard
-file, for example:
+The live case selector lists dashboard-compatible folders under `data/`, for
+example:
 
 - `baseline-passenger-transition`
 - `baseline-cargo-transition`
@@ -115,10 +100,11 @@ then you can visualize them without rerunning the model.
 
 Steps:
 
-1. Launch the dashboard for the application you want.
-2. In the browser, open the `Dashboard Source` card.
-3. Switch from `Live case` to `Saved results`.
-4. Choose your results folder from the `Results folder` dropdown.
+1. Launch the common case dashboard.
+2. Choose the matching case in the `Case` card.
+3. Open the `Dashboard Source` card.
+4. Switch from `Live case` to `Saved results`.
+5. Choose your results folder from the `Results folder` dropdown.
 
 The dashboard will then read the saved CSV files from that folder.
 
@@ -263,10 +249,10 @@ This writes a run folder into:
 simulation_results/<selected_example>/
 ```
 
-### Open the matching dashboard
+### Open the common case dashboard
 
 ```powershell
-solara run dashboard_examples/aviation_passenger_baseline_dashboard.py
+solara run dashboard_examples/common_case_dashboard.py
 ```
 
 For the standalone cartographic map:
@@ -297,12 +283,14 @@ In the browser:
 
 ## 10. Current Design
 
-All four dashboard entrypoints use the shared helper:
+The standard live/saved-results dashboard is maintained as one script:
 
 - `dashboard_examples/common_case_dashboard.py`
 
 This file provides:
 
+- live case selection across aviation passenger, aviation cargo, maritime cargo,
+  and maritime passenger cases
 - common live/saved-results switching
 - shared chart structure
 - shared results-folder loading

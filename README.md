@@ -235,13 +235,10 @@ dashboard dependencies:
 python -m pip install -e .[dashboard]
 ```
 
-Then you can launch any of the standard live/saved-results dashboards:
+Then you can launch the standard live/saved-results dashboard:
 
 ```powershell
-solara run dashboard_examples/aviation_passenger_baseline_dashboard.py
-solara run dashboard_examples/aviation_cargo_baseline_dashboard.py
-solara run dashboard_examples/maritime_cargo_baseline_dashboard.py
-solara run dashboard_examples/maritime_passenger_baseline_dashboard.py
+solara run dashboard_examples/common_case_dashboard.py
 ```
 
 The standalone cartographic dashboard opens a browser-native deck.gl map for

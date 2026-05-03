@@ -564,24 +564,19 @@ This makes the dashboard useful both for:
 
 ### 10.3 Shared dashboard architecture
 
-The dashboard entrypoints for the four current applications are thin wrappers:
-
-- `aviation_passenger_baseline_dashboard.py`
-- `aviation_cargo_baseline_dashboard.py`
-- `maritime_cargo_baseline_dashboard.py`
-- `maritime_passenger_baseline_dashboard.py`
-
-They all use:
+The standard live/saved-results dashboard is one shared entrypoint:
 
 - `dashboard_examples/common_case_dashboard.py`
 
-That shared helper provides:
+That shared dashboard provides:
 
+- live case selection across aviation passenger, aviation cargo, maritime cargo,
+  and maritime passenger cases
 - common live/saved-results switching
 - shared chart layout
 - results-folder loading
 - shared energy conversion for display in `TWh`
-- application-specific chart binding through frame-getter functions
+- automatic application-specific chart binding from `scenario.yaml`
 
 ## 11. SQLite Persistence
 

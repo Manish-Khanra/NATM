@@ -425,20 +425,91 @@ def _build_model(*, scenario: NATMScenario, seed: int = 42) -> NATMModel:
     return NATMModel(scenario=scenario, seed=seed)
 
 
+def _single_dashboard_scope(scenario: NATMScenario) -> tuple[str, str]:
+    sectors = scenario.enabled_sectors
+    if len(sectors) != 1:
+        raise ValueError(
+            "The common case dashboard currently expects one enabled sector per case.",
+        )
+    sector_name = sectors[0]
+    applications = scenario.applications_for_sector(sector_name)
+    if len(applications) != 1:
+        raise ValueError(
+            "The common case dashboard currently expects one application per case.",
+        )
+    return sector_name, applications[0]
+
+
+def _dashboard_title(sector_name: str, application_name: str) -> str:
+    return f"NATM {sector_name.title()} {application_name.title()} Dashboard"
+
+
+def _dashboard_bindings_for_sector(sector_name: str) -> dict[str, object]:
+    if sector_name == "aviation":
+        return {
+            "technology_frame_getter": NATMModel.to_aviation_technology_frame,
+            "energy_frame_getter": NATMModel.to_aviation_energy_emissions_frame,
+            "investment_frame_getter": NATMModel.to_aviation_investment_frame,
+            "stock_count_column": "aircraft_count",
+            "stock_axis_label": "Aircraft count",
+        }
+    if sector_name == "maritime":
+        return {
+            "technology_frame_getter": NATMModel.to_maritime_technology_frame,
+            "energy_frame_getter": NATMModel.to_maritime_energy_emissions_frame,
+            "investment_frame_getter": NATMModel.to_maritime_investment_frame,
+            "stock_count_column": "vessel_count",
+            "stock_axis_label": "Vessel count",
+        }
+    raise ValueError(f"Unsupported dashboard sector: {sector_name}")
+
+
+def _available_live_case_names() -> list[str]:
+    data_root = PROJECT_ROOT / "data"
+    if not data_root.exists():
+        return []
+
+    case_names: list[str] = []
+    for scenario_path in sorted(data_root.glob("*/scenario.yaml")):
+        try:
+            scenario = NATMScenario.from_yaml(scenario_path)
+            _single_dashboard_scope(scenario)
+        except Exception:
+            continue
+        case_names.append(scenario_path.parent.name)
+    return case_names
+
+
 def build_case_dashboard(
     *,
     case_name: str,
-    title: str,
-    sector_name: str,
-    application_name: str,
-    technology_frame_getter,
-    energy_frame_getter,
-    investment_frame_getter,
-    stock_count_column: str,
-    stock_axis_label: str,
+    title: str | None = None,
+    sector_name: str | None = None,
+    application_name: str | None = None,
+    technology_frame_getter=None,
+    energy_frame_getter=None,
+    investment_frame_getter=None,
+    stock_count_column: str | None = None,
+    stock_axis_label: str | None = None,
 ):
     scenario_path = resolve_case_config(case_name)
     scenario = NATMScenario.from_yaml(scenario_path)
+    inferred_sector, inferred_application = _single_dashboard_scope(scenario)
+    sector_name = sector_name or inferred_sector
+    application_name = application_name or inferred_application
+    if not scenario.is_application_enabled(sector_name, application_name):
+        raise ValueError(
+            f"Case '{case_name}' does not enable {sector_name}/{application_name}.",
+        )
+
+    bindings = _dashboard_bindings_for_sector(sector_name)
+    title = title or _dashboard_title(sector_name, application_name)
+    technology_frame_getter = technology_frame_getter or bindings["technology_frame_getter"]
+    energy_frame_getter = energy_frame_getter or bindings["energy_frame_getter"]
+    investment_frame_getter = investment_frame_getter or bindings["investment_frame_getter"]
+    stock_count_column = stock_count_column or str(bindings["stock_count_column"])
+    stock_axis_label = stock_axis_label or str(bindings["stock_axis_label"])
+
     technology_filename = (
         "aviation_technology.csv" if sector_name == "aviation" else "maritime_technology.csv"
     )
@@ -2514,3 +2585,39 @@ def build_case_dashboard(
                 solara.Markdown("No compatible saved results are available yet.")
 
     return Page
+
+
+_DASHBOARD_PAGE_CACHE = {}
+
+
+def _dashboard_page_for_case(case_name: str):
+    if case_name not in _DASHBOARD_PAGE_CACHE:
+        _DASHBOARD_PAGE_CACHE[case_name] = build_case_dashboard(case_name=case_name)
+    return _DASHBOARD_PAGE_CACHE[case_name]
+
+
+@solara.component
+def Page():
+    case_options = _available_live_case_names()
+    selected_case, set_selected_case = solara.use_state(case_options[0] if case_options else "")
+    if not case_options:
+        solara.Warning("No dashboard-compatible case folders found under `data/`.")
+        return
+
+    effective_case = selected_case if selected_case in case_options else case_options[0]
+
+    with solara.Column():
+        with solara.Card("Case", style={"margin-bottom": "20px"}):
+            solara.Select(
+                "Live case",
+                values=case_options,
+                value=effective_case,
+                on_value=set_selected_case,
+            )
+
+        case_page = _dashboard_page_for_case(effective_case)
+        case_page()
+
+
+if __name__ == "__main__":
+    print("Run this dashboard with: solara run dashboard_examples/common_case_dashboard.py")
