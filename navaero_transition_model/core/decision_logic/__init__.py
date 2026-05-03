@@ -24,6 +24,9 @@ from navaero_transition_model.core.decision_logic.legacy_weighted_utility import
 LEGACY_WEIGHTED_UTILITY_CARGO_ALIAS = "legacy_weighted_utility_cargo"
 LEGACY_WEIGHTED_UTILITY_MARITIME_CARGO_ALIAS = "legacy_weighted_utility_maritime_cargo"
 LEGACY_WEIGHTED_UTILITY_MARITIME_PASSENGER_ALIAS = "legacy_weighted_utility_maritime_passenger"
+AMBIGUITY_AWARE_UTILITY_CARGO_ALIAS = "ambiguity_aware_utility_cargo"
+AMBIGUITY_AWARE_UTILITY_MARITIME_CARGO_ALIAS = "ambiguity_aware_utility_maritime_cargo"
+AMBIGUITY_AWARE_UTILITY_MARITIME_PASSENGER_ALIAS = "ambiguity_aware_utility_maritime_passenger"
 
 
 def build_aviation_passenger_decision_logic(
@@ -49,6 +52,7 @@ def build_aviation_cargo_decision_logic(
         LegacyWeightedUtilityLogic.name: LegacyWeightedUtilityCargoLogic,
         LEGACY_WEIGHTED_UTILITY_CARGO_ALIAS: LegacyWeightedUtilityCargoLogic,
         AmbiguityAwareCargoLogic.name: AmbiguityAwareCargoLogic,
+        AMBIGUITY_AWARE_UTILITY_CARGO_ALIAS: AmbiguityAwareCargoLogic,
     }
     try:
         return available_logics[logic_name]()
@@ -67,6 +71,7 @@ def build_maritime_cargo_decision_logic(
         LegacyWeightedUtilityLogic.name: LegacyWeightedUtilityMaritimeCargoLogic,
         LEGACY_WEIGHTED_UTILITY_MARITIME_CARGO_ALIAS: LegacyWeightedUtilityMaritimeCargoLogic,
         AmbiguityAwareMaritimeCargoLogic.name: AmbiguityAwareMaritimeCargoLogic,
+        AMBIGUITY_AWARE_UTILITY_MARITIME_CARGO_ALIAS: AmbiguityAwareMaritimeCargoLogic,
     }
     try:
         return available_logics[logic_name]()
@@ -87,6 +92,7 @@ def build_maritime_passenger_decision_logic(
             LegacyWeightedUtilityMaritimePassengerLogic
         ),
         AmbiguityAwareMaritimePassengerLogic.name: AmbiguityAwareMaritimePassengerLogic,
+        AMBIGUITY_AWARE_UTILITY_MARITIME_PASSENGER_ALIAS: (AmbiguityAwareMaritimePassengerLogic),
     }
     try:
         return available_logics[logic_name]()

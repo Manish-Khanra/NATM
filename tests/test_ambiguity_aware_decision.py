@@ -214,6 +214,33 @@ def test_ambiguity_averse_score_uses_worst_case_probability_bounds() -> None:
         ),
         (
             build_aviation_cargo_decision_logic,
+            "ambiguity_aware_utility",
+            AmbiguityAwareCargoLogic,
+        ),
+        (
+            build_maritime_cargo_decision_logic,
+            "ambiguity_aware_utility",
+            AmbiguityAwareMaritimeCargoLogic,
+        ),
+        (
+            build_maritime_passenger_decision_logic,
+            "ambiguity_aware_utility",
+            AmbiguityAwareMaritimePassengerLogic,
+        ),
+    ],
+)
+def test_ambiguity_aware_logic_plugins_are_registered(builder, logic_name, logic_class) -> None:
+    logic = builder(logic_name)
+
+    assert isinstance(logic, logic_class)
+    assert logic.name == "ambiguity_aware_utility"
+
+
+@pytest.mark.parametrize(
+    ("builder", "logic_alias", "logic_class"),
+    [
+        (
+            build_aviation_cargo_decision_logic,
             "ambiguity_aware_utility_cargo",
             AmbiguityAwareCargoLogic,
         ),
@@ -229,8 +256,12 @@ def test_ambiguity_averse_score_uses_worst_case_probability_bounds() -> None:
         ),
     ],
 )
-def test_ambiguity_aware_logic_plugins_are_registered(builder, logic_name, logic_class) -> None:
-    assert isinstance(builder(logic_name), logic_class)
+def test_sector_specific_ambiguity_names_remain_aliases(
+    builder,
+    logic_alias,
+    logic_class,
+) -> None:
+    assert isinstance(builder(logic_alias), logic_class)
 
 
 @pytest.mark.parametrize(
@@ -338,7 +369,7 @@ def test_aviation_passenger_ambiguity_logic_writes_robust_frontier(tmp_path: Pat
             "baseline-cargo-transition",
             "aviation_fleet_stock.csv",
             "aviation_technology_catalog.csv",
-            "ambiguity_aware_utility_cargo",
+            "ambiguity_aware_utility",
             "aviation",
             "select_technology_for_aircraft",
             "to_aviation_robust_frontier_frame",
@@ -347,7 +378,7 @@ def test_aviation_passenger_ambiguity_logic_writes_robust_frontier(tmp_path: Pat
             "baseline-maritime-cargo-transition",
             "maritime_fleet_stock.csv",
             "maritime_technology_catalog.csv",
-            "ambiguity_aware_utility_maritime_cargo",
+            "ambiguity_aware_utility",
             "maritime",
             "select_technology_for_vessel",
             "to_maritime_robust_frontier_frame",
@@ -356,7 +387,7 @@ def test_aviation_passenger_ambiguity_logic_writes_robust_frontier(tmp_path: Pat
             "baseline-maritime-passenger-transition",
             "maritime_fleet_stock.csv",
             "maritime_technology_catalog.csv",
-            "ambiguity_aware_utility_maritime_passenger",
+            "ambiguity_aware_utility",
             "maritime",
             "select_technology_for_vessel",
             "to_maritime_robust_frontier_frame",

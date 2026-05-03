@@ -432,12 +432,9 @@ operator agent can select its decision method by name. Legacy behavior is
 available for every sector through `legacy_weighted_utility`. Older
 sector-specific legacy names are still accepted as aliases for existing cases.
 
-The ambiguity-aware extension adds:
-
-- `ambiguity_aware_utility`
-- `ambiguity_aware_utility_cargo`
-- `ambiguity_aware_utility_maritime_cargo`
-- `ambiguity_aware_utility_maritime_passenger`
+The ambiguity-aware extension also uses one strategy name for every sector:
+`ambiguity_aware_utility`. Older sector-specific ambiguity-aware names are
+still accepted as aliases for existing cases.
 
 Fleet stock can optionally include `decision_attitude` with
 `risk_neutral`, `risk_averse`, or `ambiguity_averse`. If it is missing, NATM

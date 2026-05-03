@@ -83,7 +83,7 @@ older cases. To use the ambiguity-aware maritime passenger rule, set:
 
 ```csv
 investment_logic,decision_attitude
-ambiguity_aware_utility_maritime_passenger,risk_neutral
+ambiguity_aware_utility,risk_neutral
 ```
 
 Allowed `decision_attitude` values are `risk_neutral`, `risk_averse`, and

@@ -377,7 +377,7 @@ class AmbiguityAwareUtilityLogic(AmbiguityAwareSelectionMixin, LegacyWeightedUti
 
 
 class AmbiguityAwareCargoLogic(AmbiguityAwareSelectionMixin, LegacyWeightedUtilityCargoLogic):
-    name = "ambiguity_aware_utility_cargo"
+    name = AmbiguityAwareUtilityLogic.name
 
     def current_clean_fuel_subsidy(self, agent: AviationCargoAirlineAgent) -> float:
         return self._scenario_clean_fuel_subsidy(
@@ -405,7 +405,7 @@ class AmbiguityAwareMaritimeCargoLogic(
     AmbiguityAwareSelectionMixin,
     LegacyWeightedUtilityMaritimeCargoLogic,
 ):
-    name = "ambiguity_aware_utility_maritime_cargo"
+    name = AmbiguityAwareUtilityLogic.name
 
     def current_clean_fuel_subsidy(self, agent: MaritimeCargoShiplineAgent) -> float:
         return self._scenario_clean_fuel_subsidy(
@@ -433,7 +433,7 @@ class AmbiguityAwareMaritimePassengerLogic(
     AmbiguityAwareSelectionMixin,
     LegacyWeightedUtilityMaritimePassengerLogic,
 ):
-    name = "ambiguity_aware_utility_maritime_passenger"
+    name = AmbiguityAwareUtilityLogic.name
 
     def current_clean_fuel_subsidy(self, agent: MaritimePassengerShiplineAgent) -> float:
         return self._scenario_clean_fuel_subsidy(

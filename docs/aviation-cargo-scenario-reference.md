@@ -85,7 +85,7 @@ To use the ambiguity-aware cargo rule, set:
 
 ```csv
 investment_logic,decision_attitude
-ambiguity_aware_utility_cargo,risk_averse
+ambiguity_aware_utility,risk_averse
 ```
 
 Allowed `decision_attitude` values are `risk_neutral`, `risk_averse`, and

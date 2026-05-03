@@ -83,7 +83,7 @@ cases. To use the ambiguity-aware maritime cargo rule, set:
 
 ```csv
 investment_logic,decision_attitude
-ambiguity_aware_utility_maritime_cargo,ambiguity_averse
+ambiguity_aware_utility,ambiguity_averse
 ```
 
 Allowed `decision_attitude` values are `risk_neutral`, `risk_averse`, and

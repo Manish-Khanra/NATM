@@ -385,12 +385,9 @@ All legacy weighted-utility variants are implemented in
 `legacy_weighted_utility.py`; there are no sector-specific legacy weighted
 utility modules.
 
-The ambiguity-aware implementations are:
-
-- `ambiguity_aware_utility`
-- `ambiguity_aware_utility_cargo`
-- `ambiguity_aware_utility_maritime_cargo`
-- `ambiguity_aware_utility_maritime_passenger`
+The ambiguity-aware investment-logic name is also `ambiguity_aware_utility` for
+every sector and application. Older sector-specific ambiguity-aware names are
+still accepted as aliases for existing cases.
 
 The agent selects the logic by name from the fleet input column:
 
