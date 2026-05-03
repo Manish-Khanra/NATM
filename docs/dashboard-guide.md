@@ -171,11 +171,13 @@ Important note on emissions and mass units:
   least `1,000 MWh`
 
 When `aviation_robust_frontier.csv` or `maritime_robust_frontier.csv` exists,
-the standard dashboards add a `Robust Frontier` panel. It shows candidate
-technologies on the x-axis with expected utility and robust score, highlights
-the selected technology, and lets you filter by year, operator, segment, and
-`decision_attitude`. It also shows selected-technology shares by year and
-attitude so `risk_neutral` and `risk_averse` behavior can be compared directly.
+the standard dashboard adds a `Robust Frontier` panel. It lets you filter by
+year, operator, segment, `decision_attitude`, and aircraft/vessel. The main
+frontier chart compares candidate technologies as labeled points using
+worst-case mean utility on the x-axis and worst-case expected-shortfall utility
+on the y-axis, and highlights the selected technology. The panel also keeps the
+candidate utility summary and selected-technology shares by year and attitude
+so `risk_neutral` and `risk_averse` behavior can be compared directly.
 
 The cartographic dashboard keeps the map as the main view and adds a compact
 robust frontier selection summary below the map when robust frontier outputs are

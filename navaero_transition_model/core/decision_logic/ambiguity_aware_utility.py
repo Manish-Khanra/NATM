@@ -51,6 +51,7 @@ class CandidateAggregate:
     robust_score: float
     worst_case_utility: float
     expected_shortfall_utility: float
+    worst_case_expected_shortfall_utility: float
 
 
 class AmbiguityAwareSelectionMixin:
@@ -177,15 +178,16 @@ class AmbiguityAwareSelectionMixin:
             config.expected_shortfall_alpha,
         )
         worst_case = self._worst_case_expected_score(outcomes, config.probability_deviation)
+        worst_case_expected_shortfall = self._worst_case_expected_shortfall_score(
+            outcomes,
+            config.expected_shortfall_alpha,
+            config.probability_deviation,
+        )
         if agent.decision_attitude == "risk_averse":
             robust_score = expected_shortfall
         elif agent.decision_attitude == "ambiguity_averse":
             robust_score = (
-                self._worst_case_expected_shortfall_score(
-                    outcomes,
-                    config.expected_shortfall_alpha,
-                    config.probability_deviation,
-                )
+                worst_case_expected_shortfall
                 if config.robust_metric == "worst_case_expected_shortfall"
                 else worst_case
             )
@@ -198,6 +200,7 @@ class AmbiguityAwareSelectionMixin:
             robust_score=robust_score,
             worst_case_utility=worst_case,
             expected_shortfall_utility=expected_shortfall,
+            worst_case_expected_shortfall_utility=worst_case_expected_shortfall,
         )
 
     def _evaluation_for_application(
@@ -261,6 +264,9 @@ class AmbiguityAwareSelectionMixin:
                         "robust_score": aggregate.robust_score,
                         "worst_case_utility": aggregate.worst_case_utility,
                         "expected_shortfall_utility": aggregate.expected_shortfall_utility,
+                        "worst_case_expected_shortfall_utility": (
+                            aggregate.worst_case_expected_shortfall_utility
+                        ),
                         "selected_flag": candidate_technology == selected_technology,
                     },
                 )

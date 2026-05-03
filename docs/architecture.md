@@ -528,7 +528,8 @@ rich domain-specific output tables for analysis.
 The robust frontier outputs are optional and are populated only when an
 ambiguity-aware decision logic records candidate evaluations. They include
 scenario-level candidate utilities, expected utility, robust score, selected
-technology, decision attitude, and selected flags.
+technology, decision attitude, selected flags, worst-case mean utility, and
+worst-case expected-shortfall utility.
 
 ## 10. Dashboard Layer
 

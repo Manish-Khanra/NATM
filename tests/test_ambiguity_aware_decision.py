@@ -347,6 +347,8 @@ def test_aviation_passenger_ambiguity_logic_writes_robust_frontier(tmp_path: Pat
         "candidate_economic_utility",
         "expected_utility",
         "robust_score",
+        "worst_case_utility",
+        "worst_case_expected_shortfall_utility",
         "selected_flag",
     }.issubset(frontier.columns)
     assert set(frontier["scenario_id"].unique()) == {"baseline", "high_fuel_price"}

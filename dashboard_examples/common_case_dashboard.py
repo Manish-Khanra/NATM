@@ -1449,6 +1449,9 @@ def build_case_dashboard(
             "year",
             "expected_utility",
             "robust_score",
+            "worst_case_utility",
+            "expected_shortfall_utility",
+            "worst_case_expected_shortfall_utility",
             "candidate_utility",
             "scenario_probability",
         ):
@@ -1466,6 +1469,7 @@ def build_case_dashboard(
         selected_operator, set_selected_operator = solara.use_state("All")
         selected_segment, set_selected_segment = solara.use_state("All")
         selected_attitude, set_selected_attitude = solara.use_state("All")
+        selected_asset, set_selected_asset = solara.use_state("All")
         if not years:
             solara.Markdown("Robust frontier output has no year values.")
             return
@@ -1506,6 +1510,24 @@ def build_case_dashboard(
             filtered = filtered.loc[filtered["segment"].astype(str).eq(selected_segment)]
         if selected_attitude in attitudes:
             filtered = filtered.loc[filtered["decision_attitude"].astype(str).eq(selected_attitude)]
+
+        asset_column = "asset_id" if "asset_id" in filtered.columns else ""
+        asset_label = "Aircraft" if sector_name == "aviation" else "Vessel"
+        asset_options = (
+            sorted(filtered[asset_column].dropna().astype(str).unique().tolist())
+            if asset_column
+            else []
+        )
+        effective_asset = selected_asset if selected_asset in asset_options else "All"
+        solara.Select(
+            asset_label,
+            values=["All", *asset_options],
+            value=effective_asset,
+            on_value=set_selected_asset,
+        )
+        if effective_asset in asset_options:
+            filtered = filtered.loc[filtered[asset_column].astype(str).eq(effective_asset)]
+
         if filtered.empty:
             solara.Markdown("No robust frontier rows match the selected filters.")
             return
@@ -1523,15 +1545,106 @@ def build_case_dashboard(
             if column in filtered.columns
         ]
         candidate_frame = filtered.drop_duplicates(subset=decision_keys)
+        aggregation = {
+            "expected_utility": ("expected_utility", "mean"),
+            "robust_score": ("robust_score", "mean"),
+            "selected_flag": ("selected_flag", "max"),
+        }
+        for optional_column in (
+            "worst_case_utility",
+            "expected_shortfall_utility",
+            "worst_case_expected_shortfall_utility",
+        ):
+            if optional_column in candidate_frame.columns:
+                aggregation[optional_column] = (optional_column, "mean")
         candidate_summary = (
             candidate_frame.groupby("candidate_technology", as_index=False)
-            .agg(
-                expected_utility=("expected_utility", "mean"),
-                robust_score=("robust_score", "mean"),
-                selected_flag=("selected_flag", "max"),
-            )
+            .agg(**aggregation)
             .sort_values("robust_score", ascending=False)
         )
+
+        x_metric = (
+            "worst_case_utility"
+            if "worst_case_utility" in candidate_summary.columns
+            else ("expected_utility")
+        )
+        y_metric = (
+            "worst_case_expected_shortfall_utility"
+            if "worst_case_expected_shortfall_utility" in candidate_summary.columns
+            else "expected_shortfall_utility"
+            if "expected_shortfall_utility" in candidate_summary.columns
+            else "robust_score"
+        )
+        uses_robust_frontier_axes = (
+            x_metric == "worst_case_utility" and y_metric == "worst_case_expected_shortfall_utility"
+        )
+        frontier_points = candidate_summary.dropna(subset=[x_metric, y_metric]).copy()
+        if not frontier_points.empty:
+            solara.Markdown("#### Robust Frontier")
+            fig = Figure(figsize=(8.8, 6.0))
+            ax = fig.subplots()
+            point_palette = ["#2a6f97", "#bc4749", "#386641", "#6a4c93", "#f4a261", "#457b9d"]
+            for point_index, row in enumerate(frontier_points.itertuples(index=False)):
+                selected = bool(row.selected_flag)
+                color = "#bc4749" if selected else point_palette[point_index % len(point_palette)]
+                marker = "*" if selected else "o"
+                size = 170 if selected else 85
+                x_value = float(getattr(row, x_metric))
+                y_value = float(getattr(row, y_metric))
+                technology = str(row.candidate_technology)
+                ax.scatter(
+                    [x_value],
+                    [y_value],
+                    s=size,
+                    marker=marker,
+                    color=color,
+                    edgecolors="#222222",
+                    linewidths=0.7,
+                    zorder=3,
+                )
+                label = f"{technology}\nselected" if selected else technology
+                ax.annotate(
+                    label,
+                    xy=(x_value, y_value),
+                    xytext=(9, 9),
+                    textcoords="offset points",
+                    fontsize=8,
+                    arrowprops={"arrowstyle": "-", "color": color, "linewidth": 0.8},
+                )
+
+            x_values = frontier_points[x_metric].astype(float)
+            y_values = frontier_points[y_metric].astype(float)
+            x_span = float(x_values.max() - x_values.min())
+            y_span = float(y_values.max() - y_values.min())
+            x_padding = max(x_span * 0.12, 0.05)
+            y_padding = max(y_span * 0.12, 0.05)
+            ax.set_xlim(float(x_values.min()) - x_padding, float(x_values.max()) + x_padding)
+            ax.set_ylim(float(y_values.min()) - y_padding, float(y_values.max()) + y_padding)
+            x_label = (
+                "Worst-case mean utility"
+                if x_metric == "worst_case_utility"
+                else ("Expected utility")
+            )
+            y_label = (
+                "Worst-case expected shortfall utility"
+                if y_metric == "worst_case_expected_shortfall_utility"
+                else "Expected shortfall utility"
+                if y_metric == "expected_shortfall_utility"
+                else "Robust score"
+            )
+            ax.set_xlabel(x_label)
+            ax.set_ylabel(y_label)
+            asset_title = f" - {asset_label} {effective_asset}" if effective_asset != "All" else ""
+            title_prefix = (
+                "Robust Frontier: Worst-case ES vs Worst-case Mean"
+                if uses_robust_frontier_axes
+                else "Robust Frontier (higher is better)"
+            )
+            ax.set_title(f"{title_prefix}{asset_title}")
+            ax.grid(alpha=0.25)
+            _show_figure(fig)
+
+        solara.Markdown("#### Candidate Utility Summary")
         positions = list(range(len(candidate_summary)))
         fig = Figure(figsize=(8.8, 5.2))
         ax = fig.subplots()
