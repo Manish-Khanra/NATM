@@ -92,6 +92,7 @@ class NATMModel(mesa.Model):
         self.aviation_cargo_inputs = None
         self.maritime_cargo_inputs = None
         self.maritime_passenger_inputs = None
+        self._robust_frontier_rows: list[dict[str, object]] = []
 
         for sector_name in self.enabled_sectors:
             if sector_name == "aviation":
@@ -195,6 +196,11 @@ class NATMModel(mesa.Model):
                 "mandate_share": "mandate_share",
                 "peer_influence": "peer_influence",
                 "investment_logic": lambda agent: getattr(agent, "investment_logic_name", ""),
+                "decision_attitude": lambda agent: getattr(
+                    agent,
+                    "decision_attitude",
+                    "risk_neutral",
+                ),
             },
         )
 
@@ -442,6 +448,7 @@ class NATMModel(mesa.Model):
         variable_name: str,
         year: int,
         *,
+        scenario_id: str | None = None,
         default: float | None = None,
         **scope: str,
     ) -> float | None:
@@ -451,7 +458,13 @@ class NATMModel(mesa.Model):
         if self.aviation_cargo_inputs is not None:
             scenario_tables.append(self.aviation_cargo_inputs.scenario_table)
         for scenario_table in scenario_tables:
-            value = scenario_table.value(variable_name, year, default=None, **scope)
+            value = scenario_table.value(
+                variable_name,
+                year,
+                scenario_id=scenario_id,
+                default=None,
+                **scope,
+            )
             if value is not None:
                 return value
         return default
@@ -461,6 +474,7 @@ class NATMModel(mesa.Model):
         variable_name: str,
         year: int,
         *,
+        scenario_id: str | None = None,
         default: float | None = None,
         **scope: str,
     ) -> float | None:
@@ -470,7 +484,13 @@ class NATMModel(mesa.Model):
         if self.maritime_cargo_inputs is not None:
             scenario_tables.append(self.maritime_cargo_inputs.scenario_table)
         for scenario_table in scenario_tables:
-            value = scenario_table.value(variable_name, year, default=None, **scope)
+            value = scenario_table.value(
+                variable_name,
+                year,
+                scenario_id=scenario_id,
+                default=None,
+                **scope,
+            )
             if value is not None:
                 return value
         return default
@@ -614,3 +634,21 @@ class NATMModel(mesa.Model):
 
     def to_maritime_investment_frame(self) -> pd.DataFrame:
         return MaritimeInvestmentExporter().export(self)
+
+    def record_robust_frontier(self, rows: list[dict[str, object]]) -> None:
+        self._robust_frontier_rows.extend(rows)
+
+    def to_robust_frontier_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(self._robust_frontier_rows)
+
+    def to_aviation_robust_frontier_frame(self) -> pd.DataFrame:
+        frame = self.to_robust_frontier_frame()
+        if frame.empty or "sector_name" not in frame.columns:
+            return pd.DataFrame()
+        return frame.loc[frame["sector_name"].eq("aviation")].copy()
+
+    def to_maritime_robust_frontier_frame(self) -> pd.DataFrame:
+        frame = self.to_robust_frontier_frame()
+        if frame.empty or "sector_name" not in frame.columns:
+            return pd.DataFrame()
+        return frame.loc[frame["sector_name"].eq("maritime")].copy()

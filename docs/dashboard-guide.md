@@ -140,12 +140,14 @@ For aviation dashboards:
 - `aviation_technology.csv`
 - `aviation_energy_emissions.csv`
 - `aviation_investments.csv`
+- `aviation_robust_frontier.csv` if ambiguity-aware decisions were enabled
 
 For maritime dashboards:
 
 - `maritime_technology.csv`
 - `maritime_energy_emissions.csv`
 - `maritime_investments.csv`
+- `maritime_robust_frontier.csv` if ambiguity-aware decisions were enabled
 
 ## 7. What The Dashboards Show
 
@@ -160,6 +162,7 @@ The current dashboards provide:
 - energy by carrier
 - emissions by pollutant
 - investments by operator
+- robust frontier candidate scores when robust frontier outputs exist
 - operator drill-down cards
 - report-ready summary tables
 - aviation preprocessing and OpenAP output explorer
@@ -180,6 +183,17 @@ Important note on emissions and mass units:
   displayed as a large value
 - cartographic MWh-based metrics switch to `TWh` once the displayed value is at
   least `1,000 MWh`
+
+When `aviation_robust_frontier.csv` or `maritime_robust_frontier.csv` exists,
+the standard dashboards add a `Robust Frontier` panel. It shows candidate
+technologies on the x-axis with expected utility and robust score, highlights
+the selected technology, and lets you filter by year, operator, segment, and
+`decision_attitude`. It also shows selected-technology shares by year and
+attitude so `risk_neutral` and `risk_averse` behavior can be compared directly.
+
+The cartographic dashboard keeps the map as the main view and adds a compact
+robust frontier selection summary below the map when robust frontier outputs are
+present in the selected results folder.
 
 ## 8. Aviation Preprocessing And OpenAP Views
 

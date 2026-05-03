@@ -60,6 +60,11 @@ class MaritimePassengerShiplineAgent(BaseOperatorAgent):
             "investment_logic",
             default="legacy_weighted_utility_maritime_passenger",
         )
+        self.decision_attitude = self._fleet_text_value(
+            fleet_frame,
+            "decision_attitude",
+            default="risk_neutral",
+        )
         self.decision_logic = build_maritime_passenger_decision_logic(self.investment_logic_name)
         self.remaining_ets_allowance = 0.0
         self.technology_investment_cost: dict[tuple[int, str], float] = {}
@@ -122,10 +127,18 @@ class MaritimePassengerShiplineAgent(BaseOperatorAgent):
         variable_name: str,
         year: int,
         *,
+        scenario_id: str | None = None,
         default: float | None = None,
         **scope: str,
     ) -> float | None:
-        return self.scenario_table.value(variable_name, year, default=default, **scope)
+        active_scenario = scenario_id or self._active_decision_scenario_id
+        return self.scenario_table.value(
+            variable_name,
+            year,
+            scenario_id=active_scenario,
+            default=default,
+            **scope,
+        )
 
     def update_existing_fleet(
         self,
@@ -351,9 +364,11 @@ class MaritimePassengerShiplineAgent(BaseOperatorAgent):
             operator_name=self.operator_name,
             operator_country=self.operator_country,
             investment_logic=self.investment_logic_name,
+            decision_attitude=self.decision_attitude,
         )
 
     def get_output_metadata(self) -> dict[str, Any]:
         metadata = super().get_output_metadata()
         metadata["investment_logic"] = self.investment_logic_name
+        metadata["decision_attitude"] = self.decision_attitude
         return metadata

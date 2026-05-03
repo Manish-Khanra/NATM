@@ -1,3 +1,9 @@
+from navaero_transition_model.core.decision_logic.ambiguity_aware_utility import (
+    AmbiguityAwareCargoLogic,
+    AmbiguityAwareMaritimeCargoLogic,
+    AmbiguityAwareMaritimePassengerLogic,
+    AmbiguityAwareUtilityLogic,
+)
 from navaero_transition_model.core.decision_logic.base import (
     AviationCargoDecisionLogic,
     AviationPassengerDecisionLogic,
@@ -28,6 +34,7 @@ def build_aviation_passenger_decision_logic(
 ) -> AviationPassengerDecisionLogic:
     available_logics = {
         LegacyWeightedUtilityLogic.name: LegacyWeightedUtilityLogic,
+        AmbiguityAwareUtilityLogic.name: AmbiguityAwareUtilityLogic,
     }
     try:
         return available_logics[logic_name]()
@@ -43,6 +50,7 @@ def build_aviation_cargo_decision_logic(
 ) -> AviationCargoDecisionLogic:
     available_logics = {
         LegacyWeightedUtilityCargoLogic.name: LegacyWeightedUtilityCargoLogic,
+        AmbiguityAwareCargoLogic.name: AmbiguityAwareCargoLogic,
     }
     try:
         return available_logics[logic_name]()
@@ -59,6 +67,7 @@ def build_maritime_cargo_decision_logic(
 ) -> MaritimeCargoDecisionLogic:
     available_logics = {
         LegacyWeightedUtilityMaritimeCargoLogic.name: LegacyWeightedUtilityMaritimeCargoLogic,
+        AmbiguityAwareMaritimeCargoLogic.name: AmbiguityAwareMaritimeCargoLogic,
     }
     try:
         return available_logics[logic_name]()
@@ -77,6 +86,7 @@ def build_maritime_passenger_decision_logic(
         LegacyWeightedUtilityMaritimePassengerLogic.name: (
             LegacyWeightedUtilityMaritimePassengerLogic
         ),
+        AmbiguityAwareMaritimePassengerLogic.name: AmbiguityAwareMaritimePassengerLogic,
     }
     try:
         return available_logics[logic_name]()
@@ -91,6 +101,10 @@ def build_maritime_passenger_decision_logic(
 __all__ = [
     "AviationCargoDecisionLogic",
     "AviationPassengerDecisionLogic",
+    "AmbiguityAwareCargoLogic",
+    "AmbiguityAwareMaritimeCargoLogic",
+    "AmbiguityAwareMaritimePassengerLogic",
+    "AmbiguityAwareUtilityLogic",
     "CandidateEvaluation",
     "LegacyWeightedUtilityMaritimeCargoLogic",
     "LegacyWeightedUtilityMaritimePassengerLogic",

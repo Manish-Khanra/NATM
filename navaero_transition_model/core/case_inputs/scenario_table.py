@@ -5,6 +5,8 @@ from typing import Any
 
 import pandas as pd
 
+DEFAULT_SCENARIO_ID = "baseline"
+SCENARIO_ID_COLUMN = "scenario_id"
 SCENARIO_SCOPE_COLUMNS = (
     "variable_group",
     "variable_name",
@@ -57,11 +59,16 @@ class ScenarioTable:
     def __init__(self, wide_dataframe: pd.DataFrame) -> None:
         _ensure_columns(wide_dataframe, SCENARIO_SCOPE_COLUMNS, "aviation scenario")
         normalized = wide_dataframe.copy()
+        if SCENARIO_ID_COLUMN not in normalized.columns:
+            normalized[SCENARIO_ID_COLUMN] = DEFAULT_SCENARIO_ID
         for column in normalized.select_dtypes(include=["object", "string"]).columns:
             normalized[column] = normalized[column].fillna("").astype(str).str.strip()
+        normalized[SCENARIO_ID_COLUMN] = normalized[SCENARIO_ID_COLUMN].replace(
+            "", DEFAULT_SCENARIO_ID
+        )
         year_columns = _scenario_year_columns(normalized)
         long_dataframe = normalized.melt(
-            id_vars=list(SCENARIO_SCOPE_COLUMNS),
+            id_vars=[SCENARIO_ID_COLUMN, *SCENARIO_SCOPE_COLUMNS],
             value_vars=year_columns,
             var_name="year",
             value_name="value",
@@ -86,21 +93,24 @@ class ScenarioTable:
         self,
         variable_name: str,
         year: int,
+        *,
+        scenario_id: str | None = None,
         **scope: str,
     ) -> pd.DataFrame:
-        rows = self._long.loc[
-            (self._long["variable_name"] == variable_name) & (self._long["year"] == year),
-        ].copy()
-        if rows.empty:
-            return rows.reset_index(drop=True)
-
-        for column, requested_value in scope.items():
-            requested_text = _clean_scope_value(requested_value)
-            candidate_values = rows[column].map(_clean_scope_value)
-            if requested_text == "":
-                rows = rows.loc[candidate_values == ""]
-            else:
-                rows = rows.loc[(candidate_values == "") | (candidate_values == requested_text)]
+        requested_scenario = _clean_scope_value(scenario_id) or DEFAULT_SCENARIO_ID
+        rows = self._matching_rows_for_scenario(
+            requested_scenario,
+            variable_name,
+            year,
+            scope,
+        )
+        if rows.empty and requested_scenario != DEFAULT_SCENARIO_ID:
+            rows = self._matching_rows_for_scenario(
+                DEFAULT_SCENARIO_ID,
+                variable_name,
+                year,
+                scope,
+            )
 
         if rows.empty:
             return rows.reset_index(drop=True)
@@ -120,6 +130,29 @@ class ScenarioTable:
             ).drop(columns="_specificity")
         return scored.reset_index(drop=True)
 
+    def _matching_rows_for_scenario(
+        self,
+        scenario_id: str,
+        variable_name: str,
+        year: int,
+        scope: dict[str, str],
+    ) -> pd.DataFrame:
+        rows = self._long.loc[
+            (self._long["scenario_id"] == scenario_id)
+            & (self._long["variable_name"] == variable_name)
+            & (self._long["year"] == year),
+        ].copy()
+        if rows.empty:
+            return rows.reset_index(drop=True)
+        for column, requested_value in scope.items():
+            requested_text = _clean_scope_value(requested_value)
+            candidate_values = rows[column].map(_clean_scope_value)
+            if requested_text == "":
+                rows = rows.loc[candidate_values == ""]
+            else:
+                rows = rows.loc[(candidate_values == "") | (candidate_values == requested_text)]
+        return rows.reset_index(drop=True)
+
     def has_rows(self, variable_name: str) -> bool:
         return not self._long.loc[self._long["variable_name"] == variable_name].empty
 
@@ -128,23 +161,51 @@ class ScenarioTable:
         variable_name: str,
         year: int,
         *,
+        scenario_id: str | None = None,
         default: float | None = None,
         **scope: str,
     ) -> float | None:
+        requested_scenario = _clean_scope_value(scenario_id) or DEFAULT_SCENARIO_ID
         normalized_scope = tuple(
             sorted((key, _clean_scope_value(value)) for key, value in scope.items()),
         )
-        cache_key = (variable_name, year, normalized_scope, default)
+        cache_key = (requested_scenario, variable_name, year, normalized_scope, default)
         if cache_key in self._cache:
             return self._cache[cache_key]
 
-        rows = self._long.loc[
-            (self._long["variable_name"] == variable_name) & (self._long["year"] == year),
-        ]
-        if rows.empty:
+        best_row = self._best_value_row_for_scenario(
+            requested_scenario,
+            variable_name,
+            year,
+            scope,
+        )
+        if best_row is None and requested_scenario != DEFAULT_SCENARIO_ID:
+            best_row = self._best_value_row_for_scenario(
+                DEFAULT_SCENARIO_ID,
+                variable_name,
+                year,
+                scope,
+            )
+        if best_row is None:
             self._cache[cache_key] = default
             return default
 
+        resolved = float(best_row["value"])
+        self._cache[cache_key] = resolved
+        return resolved
+
+    def _best_value_row_for_scenario(
+        self,
+        scenario_id: str,
+        variable_name: str,
+        year: int,
+        scope: dict[str, str],
+    ) -> pd.Series | None:
+        rows = self._long.loc[
+            (self._long["scenario_id"] == scenario_id)
+            & (self._long["variable_name"] == variable_name)
+            & (self._long["year"] == year),
+        ]
         best_row: pd.Series | None = None
         best_score = -1
         for _, row in rows.iterrows():
@@ -166,11 +227,4 @@ class ScenarioTable:
             if matched and score > best_score:
                 best_row = row
                 best_score = score
-
-        if best_row is None:
-            self._cache[cache_key] = default
-            return default
-
-        resolved = float(best_row["value"])
-        self._cache[cache_key] = resolved
-        return resolved
+        return best_row

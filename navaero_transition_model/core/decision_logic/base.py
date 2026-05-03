@@ -20,6 +20,9 @@ if TYPE_CHECKING:
     )
 
 
+DECISION_ATTITUDES = ("risk_neutral", "risk_averse", "ambiguity_averse")
+
+
 def clamp(value: float, minimum: float = 0.0, maximum: float = 1.0) -> float:
     return min(maximum, max(minimum, value))
 

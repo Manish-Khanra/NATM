@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -71,6 +72,96 @@ def _optional_text(value: object) -> str | None:
     return text or None
 
 
+@dataclass(frozen=True)
+class AmbiguityAwareDecisionConfig:
+    enabled: bool = False
+    scenario_ids: tuple[str, ...] = ("baseline",)
+    probabilities: dict[str, float] = field(default_factory=lambda: {"baseline": 1.0})
+    ambiguity_enabled: bool = False
+    probability_deviation: float = 0.0
+    expected_shortfall_alpha: float = 0.2
+    robust_metric: str = "worst_case_expected_utility"
+
+    @classmethod
+    def from_dict(cls, payload: dict | None) -> AmbiguityAwareDecisionConfig:
+        if payload is None:
+            return cls()
+        if not isinstance(payload, dict):
+            raise ValueError("ambiguity_aware_decision must be a mapping")
+        enabled = bool(payload.get("enabled", False))
+        if not enabled:
+            return cls(enabled=False)
+
+        scenario_ids = tuple(
+            str(item).strip() for item in payload.get("scenario_ids", ()) if str(item).strip()
+        )
+        if not scenario_ids:
+            raise ValueError("ambiguity_aware_decision.scenario_ids must not be empty")
+
+        raw_probabilities = payload.get("probabilities")
+        if not isinstance(raw_probabilities, dict):
+            raise ValueError("ambiguity_aware_decision.probabilities must be a mapping")
+        missing = [
+            scenario_id for scenario_id in scenario_ids if scenario_id not in raw_probabilities
+        ]
+        if missing:
+            missing_text = ", ".join(missing)
+            raise ValueError(
+                f"ambiguity_aware_decision.probabilities is missing entries for: {missing_text}",
+            )
+        probabilities = {
+            scenario_id: float(raw_probabilities[scenario_id]) for scenario_id in scenario_ids
+        }
+        total_probability = sum(probabilities.values())
+        if total_probability <= 0.0:
+            raise ValueError("ambiguity_aware_decision probabilities must sum to a positive value")
+        if abs(total_probability - 1.0) > 1e-9:
+            warnings.warn(
+                "ambiguity_aware_decision probabilities do not sum to 1.0; normalizing.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            probabilities = {
+                scenario_id: value / total_probability
+                for scenario_id, value in probabilities.items()
+            }
+
+        ambiguity_payload = payload.get("ambiguity") or {}
+        if not isinstance(ambiguity_payload, dict):
+            raise ValueError("ambiguity_aware_decision.ambiguity must be a mapping")
+        probability_deviation = float(ambiguity_payload.get("probability_deviation", 0.0))
+        probability_deviation = float(payload.get("probability_deviation", probability_deviation))
+        if probability_deviation < 0.0:
+            raise ValueError("ambiguity probability_deviation must be non-negative")
+
+        expected_shortfall_alpha = float(payload.get("expected_shortfall_alpha", 0.2))
+        if not 0.0 < expected_shortfall_alpha <= 1.0:
+            raise ValueError("expected_shortfall_alpha must be in (0, 1]")
+
+        robust_metric = str(
+            payload.get("robust_metric", "worst_case_expected_utility"),
+        ).strip()
+        supported_metrics = {
+            "worst_case_expected_utility",
+            "worst_case_expected_shortfall",
+        }
+        if robust_metric not in supported_metrics:
+            supported_text = ", ".join(sorted(supported_metrics))
+            raise ValueError(
+                f"Unsupported robust_metric '{robust_metric}'. Supported values: {supported_text}",
+            )
+
+        return cls(
+            enabled=True,
+            scenario_ids=scenario_ids,
+            probabilities=probabilities,
+            ambiguity_enabled=bool(ambiguity_payload.get("enabled", False)),
+            probability_deviation=probability_deviation,
+            expected_shortfall_alpha=expected_shortfall_alpha,
+            robust_metric=robust_metric,
+        )
+
+
 @dataclass
 class NATMScenario:
     name: str
@@ -78,6 +169,9 @@ class NATMScenario:
     end_year: int
     sectors: dict[str, tuple[str, ...]]
     preprocessing: dict[str, AviationPreprocessingConfig] = field(default_factory=dict)
+    ambiguity_aware_decision: AmbiguityAwareDecisionConfig = field(
+        default_factory=AmbiguityAwareDecisionConfig,
+    )
     base_path: Path = field(default_factory=lambda: Path("."), repr=False)
 
     def __post_init__(self) -> None:
@@ -139,6 +233,9 @@ class NATMScenario:
             normalized_sectors[str(sector_name)] = tuple(str(item).strip() for item in applications)
 
         preprocessing = _parse_preprocessing(payload.get("preprocessing"))
+        ambiguity_aware_decision = AmbiguityAwareDecisionConfig.from_dict(
+            payload.get("ambiguity_aware_decision"),
+        )
 
         return cls(
             name=payload["name"],
@@ -146,6 +243,7 @@ class NATMScenario:
             end_year=payload["end_year"],
             sectors=normalized_sectors,
             preprocessing=preprocessing,
+            ambiguity_aware_decision=ambiguity_aware_decision,
         )
 
     @classmethod

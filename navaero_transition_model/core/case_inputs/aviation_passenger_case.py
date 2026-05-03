@@ -8,6 +8,7 @@ from navaero_transition_model.aviation_preprocessing.common import snake_case_co
 from navaero_transition_model.aviation_preprocessing.stock_cleaner import AviationStockCleaner
 from navaero_transition_model.core.case_inputs.scenario_table import ScenarioTable
 from navaero_transition_model.core.case_inputs.technology_catalog import TechnologyCatalog
+from navaero_transition_model.core.decision_logic.base import DECISION_ATTITUDES
 
 FLEET_COLUMN_ALIASES = {
     "ID": "aircraft_id",
@@ -132,6 +133,25 @@ def normalize_aviation_fleet_stock(path: str | Path) -> pd.DataFrame:
     else:
         normalized["investment_logic"] = (
             normalized["investment_logic"].replace("", pd.NA).fillna("legacy_weighted_utility")
+        )
+    if "decision_attitude" not in normalized.columns:
+        normalized["decision_attitude"] = "risk_neutral"
+    else:
+        normalized["decision_attitude"] = (
+            normalized["decision_attitude"].replace("", pd.NA).fillna("risk_neutral")
+        )
+    normalized["decision_attitude"] = (
+        normalized["decision_attitude"].astype(str).str.strip().str.lower()
+    )
+    unsupported_attitudes = set(normalized["decision_attitude"].astype(str)) - set(
+        DECISION_ATTITUDES,
+    )
+    if unsupported_attitudes:
+        supported = ", ".join(DECISION_ATTITUDES)
+        unsupported = ", ".join(sorted(unsupported_attitudes))
+        raise ValueError(
+            f"Unsupported aviation decision_attitude values: {unsupported}. "
+            f"Supported values: {supported}",
         )
     normalized["operator_key"] = (
         normalized["operator_name"].astype(str).str.strip()

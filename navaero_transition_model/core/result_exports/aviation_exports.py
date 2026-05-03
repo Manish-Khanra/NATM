@@ -254,9 +254,11 @@ class DetailedOutputWriter:
             "aviation_technology.csv": AviationTechnologyExporter().export(model),
             "aviation_energy_emissions.csv": AviationEnergyEmissionsExporter().export(model),
             "aviation_investments.csv": AviationInvestmentExporter().export(model),
+            "aviation_robust_frontier.csv": model.to_aviation_robust_frontier_frame(),
             "maritime_technology.csv": MaritimeTechnologyExporter().export(model),
             "maritime_energy_emissions.csv": MaritimeEnergyEmissionsExporter().export(model),
             "maritime_investments.csv": MaritimeInvestmentExporter().export(model),
+            "maritime_robust_frontier.csv": model.to_maritime_robust_frontier_frame(),
         }
         for filename, dataframe in detail_frames.items():
             if dataframe.empty:

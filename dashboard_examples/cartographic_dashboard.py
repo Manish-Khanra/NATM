@@ -385,6 +385,50 @@ def build_map_ready_layers(results_folder: str) -> tuple[pd.DataFrame, pd.DataFr
     )
 
 
+def robust_frontier_layers(results_folder: str) -> pd.DataFrame:
+    if not results_folder:
+        return pd.DataFrame()
+    base = RESULTS_ROOT / results_folder
+    frames = [
+        _csv(base / "aviation_robust_frontier.csv"),
+        _csv(base / "maritime_robust_frontier.csv"),
+    ]
+    frames = [frame for frame in frames if not frame.empty]
+    if not frames:
+        return pd.DataFrame()
+    frontier = pd.concat(frames, ignore_index=True)
+    for column in ("year", "expected_utility", "robust_score", "candidate_utility"):
+        if column in frontier.columns:
+            frontier[column] = pd.to_numeric(frontier[column], errors="coerce")
+    if "selected_flag" in frontier.columns:
+        frontier["selected_flag"] = (
+            frontier["selected_flag"].astype(str).str.lower().isin({"true", "1", "yes"})
+        )
+    return frontier
+
+
+def _show_table(frame: pd.DataFrame, max_rows: int = 12) -> None:
+    if frame.empty:
+        solara.Markdown("_No rows available._")
+        return
+    display = frame.head(max_rows).copy()
+    for column in display.columns:
+        if pd.api.types.is_numeric_dtype(display[column]):
+            display[column] = display[column].round(4)
+    table_html = display.to_html(index=False, escape=True, classes="natm-table")
+    solara.HTML(
+        tag="div",
+        unsafe_innerHTML=(
+            "<style>"
+            ".natm-table{border-collapse:collapse;width:100%;font-size:0.88rem;}"
+            ".natm-table th,.natm-table td{border:1px solid #ddd;padding:6px 8px;}"
+            ".natm-table th{background:#f5f5f5;text-align:left;}"
+            "</style>"
+            f"{table_html}"
+        ),
+    )
+
+
 def _json_records(frame: pd.DataFrame) -> str:
     payload = json.loads(frame.to_json(orient="records"))
     return json.dumps(payload).replace("</", "<\\/")
@@ -702,3 +746,47 @@ def Page() -> None:
         },
         style={"width": "100%", "height": "720px", "border": "0"},
     )
+
+    robust_frontier = robust_frontier_layers(selected.value)
+    if not robust_frontier.empty:
+        if year_value.value is not None and "year" in robust_frontier.columns:
+            robust_frontier = robust_frontier.loc[robust_frontier["year"].eq(year_value.value)]
+        selected_rows = robust_frontier.loc[
+            robust_frontier.get("selected_flag", pd.Series(False, index=robust_frontier.index))
+        ].copy()
+        if not selected_rows.empty:
+            summary = (
+                selected_rows.drop_duplicates(
+                    subset=[
+                        column
+                        for column in (
+                            "year",
+                            "sector_name",
+                            "application_name",
+                            "operator_name",
+                            "asset_id",
+                            "segment",
+                            "decision_attitude",
+                            "selected_technology",
+                        )
+                        if column in selected_rows.columns
+                    ],
+                )
+                .groupby(
+                    [
+                        "sector_name",
+                        "application_name",
+                        "decision_attitude",
+                        "selected_technology",
+                    ],
+                    as_index=False,
+                )
+                .agg(
+                    selected_count=("selected_technology", "size"),
+                    expected_utility=("expected_utility", "mean"),
+                    robust_score=("robust_score", "mean"),
+                )
+                .sort_values(["sector_name", "application_name", "selected_count"])
+            )
+            solara.Markdown("### Robust Frontier Selection Summary")
+            _show_table(summary, max_rows=16)

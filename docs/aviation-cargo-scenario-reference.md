@@ -27,6 +27,12 @@ Required columns:
 - `unit`
 - one or more year columns such as `2025`, `2026`, `2027`, ...
 
+Optional column:
+
+- `scenario_id`
+
+If `scenario_id` is missing, all rows are treated as `baseline`.
+
 Example shape:
 
 ```csv
@@ -46,6 +52,8 @@ Important rules:
 - More specific rows win over less specific rows.
 - `variable_group` and `unit` are kept for data management and readability.
   They are not currently part of the lookup key.
+- `scenario_id` selects the future scenario for ambiguity-aware decisions. If a
+  requested scenario has no matching rows, NATM falls back to `baseline`.
 
 So if both of these exist:
 
@@ -68,6 +76,46 @@ Available scope columns are:
 - `saf_pathway`
 
 Use only the columns that matter for the variable. Leave the others blank.
+
+## Ambiguity-Aware Decision Inputs
+
+Fleet stock can keep using `investment_logic=legacy_weighted_utility_cargo`.
+To use the ambiguity-aware cargo rule, set:
+
+```csv
+investment_logic,decision_attitude
+ambiguity_aware_utility_cargo,risk_averse
+```
+
+Allowed `decision_attitude` values are `risk_neutral`, `risk_averse`, and
+`ambiguity_averse`. Missing values default to `risk_neutral`; the column does
+not change legacy weighted-utility behavior.
+
+Configure the scenario set in `scenario.yaml`:
+
+```yaml
+ambiguity_aware_decision:
+  enabled: true
+  scenario_ids:
+    - baseline
+    - high_fuel_price
+    - delayed_infrastructure
+  probabilities:
+    baseline: 0.5
+    high_fuel_price: 0.3
+    delayed_infrastructure: 0.2
+  ambiguity:
+    enabled: true
+    probability_deviation: 0.1
+  expected_shortfall_alpha: 0.2
+  robust_metric: worst_case_expected_utility
+```
+
+This is an ambiguity-aware extension of the existing utility-based fleet
+diffusion model. Candidate technologies are evaluated over the configured
+future scenarios. Risk-neutral actors maximise expected utility, risk-averse
+actors use downside-sensitive expected shortfall, and ambiguity-averse actors
+use worst-case probability-weighted criteria over a bounded ambiguity set.
 
 ## Variable Groups
 

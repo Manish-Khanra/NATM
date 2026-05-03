@@ -262,13 +262,10 @@ def _flight_results(config: AirportFuelAllocationConfig) -> pd.DataFrame:
         .astype(str)
         .str.strip()
     )
-    flight_results["type_key"] = (
-        flight_results.get(
-            "raw_aircraft_type",
-            flight_results.get("typecode", pd.Series("", index=flight_results.index)),
-        )
-        .map(_normalize_type)
-    )
+    flight_results["type_key"] = flight_results.get(
+        "raw_aircraft_type",
+        flight_results.get("typecode", pd.Series("", index=flight_results.index)),
+    ).map(_normalize_type)
     return flight_results
 
 

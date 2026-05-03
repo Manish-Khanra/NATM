@@ -30,6 +30,8 @@ class BaseOperatorAgent(mesa.Agent):
         self.conventional_assets = 0.0
         self.alternative_assets = 0.0
         self.peer_influence = 0.0
+        self._active_decision_scenario_id: str | None = None
+        self._active_decision_year: int | None = None
 
     @property
     def current_year(self) -> int:

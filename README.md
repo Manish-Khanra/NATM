@@ -37,6 +37,7 @@ grows.
 - Mesa-based agent-based simulation for aviation and maritime transition pathways
 - Aviation passenger, aviation cargo, maritime cargo, and maritime passenger cases
 - Flexible operator decision logic selected through case input data
+- Optional ambiguity-aware investment logic over multiple future scenarios
 - Demand-driven aviation growth using passenger-km and tonne-km planning inputs
 - Optional OpenSky/OpenAP preprocessing for aviation activity, fuel, and emissions
 - Structured CSV and SQLite outputs for analysis and dashboards
@@ -355,6 +356,8 @@ This folder contains:
 - `maritime_technology.csv`
 - `maritime_energy_emissions.csv`
 - `maritime_investments.csv`
+- `aviation_robust_frontier.csv`
+- `maritime_robust_frontier.csv`
 - `natm_runs.sqlite`
 
 Named example presets currently included in [run.py](C:/Manish_REPO/NATM/run.py:1):
@@ -425,8 +428,58 @@ filenames:
 - `maritime_scenario.csv`
 
 The fleet stock input can also carry an `investment_logic` column so each
-airline agent can select its decision method by name. The current built-in
-logic is `legacy_weighted_utility`.
+operator agent can select its decision method by name. Legacy behavior remains
+available through:
+
+- `legacy_weighted_utility`
+- `legacy_weighted_utility_cargo`
+- `legacy_weighted_utility_maritime_cargo`
+- `legacy_weighted_utility_maritime_passenger`
+
+The ambiguity-aware extension adds:
+
+- `ambiguity_aware_utility`
+- `ambiguity_aware_utility_cargo`
+- `ambiguity_aware_utility_maritime_cargo`
+- `ambiguity_aware_utility_maritime_passenger`
+
+Fleet stock can optionally include `decision_attitude` with
+`risk_neutral`, `risk_averse`, or `ambiguity_averse`. If it is missing, NATM
+defaults to `risk_neutral`. The column only changes behavior for the
+ambiguity-aware logic; legacy weighted-utility decisions are unchanged.
+
+Scenario CSVs can optionally include `scenario_id`. If the column is missing,
+all rows are treated as `baseline`. When present, the ambiguity-aware logic
+evaluates candidate technologies over configured future scenarios while keeping
+the existing blank-scope and specificity matching rules.
+
+Minimal `scenario.yaml` example:
+
+```yaml
+ambiguity_aware_decision:
+  enabled: true
+  scenario_ids:
+    - baseline
+    - high_fuel_price
+    - delayed_infrastructure
+  probabilities:
+    baseline: 0.5
+    high_fuel_price: 0.3
+    delayed_infrastructure: 0.2
+  ambiguity:
+    enabled: true
+    probability_deviation: 0.1
+  expected_shortfall_alpha: 0.2
+  robust_metric: worst_case_expected_utility
+```
+
+This is an ambiguity-aware extension of the existing utility-based fleet
+diffusion model. The model still simulates technology diffusion through fleet
+replacement and growth, but candidate technologies can now be evaluated over a
+set of possible future scenarios. Risk-neutral actors maximise expected
+utility, risk-averse actors use downside-sensitive expected shortfall, and
+ambiguity-averse actors use worst-case probability-weighted criteria over a
+bounded ambiguity set.
 
 For the passenger scenario CSV contract, see
 `docs/aviation-passenger-reference.md`.

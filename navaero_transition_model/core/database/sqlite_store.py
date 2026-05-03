@@ -144,9 +144,11 @@ class SQLiteSimulationStore:
             "output_aviation_technology": model.to_aviation_technology_frame(),
             "output_aviation_energy_emissions": model.to_aviation_energy_emissions_frame(),
             "output_aviation_investments": model.to_aviation_investment_frame(),
+            "output_aviation_robust_frontier": model.to_aviation_robust_frontier_frame(),
             "output_maritime_technology": model.to_maritime_technology_frame(),
             "output_maritime_energy_emissions": model.to_maritime_energy_emissions_frame(),
             "output_maritime_investments": model.to_maritime_investment_frame(),
+            "output_maritime_robust_frontier": model.to_maritime_robust_frontier_frame(),
         }
         for table_name, dataframe in output_tables.items():
             if dataframe.empty:

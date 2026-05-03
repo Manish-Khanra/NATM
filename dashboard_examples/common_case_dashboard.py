@@ -450,6 +450,11 @@ def build_case_dashboard(
     investment_filename = (
         "aviation_investments.csv" if sector_name == "aviation" else "maritime_investments.csv"
     )
+    robust_frontier_filename = (
+        "aviation_robust_frontier.csv"
+        if sector_name == "aviation"
+        else "maritime_robust_frontier.csv"
+    )
 
     def _agent_frame(model: NATMModel):
         agent_frame = model.to_agent_frame()
@@ -478,6 +483,15 @@ def build_case_dashboard(
             return investment_frame
         return investment_frame.loc[investment_frame["application_name"] == application_name].copy()
 
+    def _robust_frontier_frame(model: NATMModel):
+        frontier_frame = model.to_robust_frontier_frame()
+        if frontier_frame.empty:
+            return frontier_frame
+        return frontier_frame.loc[
+            (frontier_frame["sector_name"] == sector_name)
+            & (frontier_frame["application_name"] == application_name)
+        ].copy()
+
     def _live_result_frames(model: NATMModel) -> dict[str, pd.DataFrame]:
         return {
             "summary": model.to_frame(),
@@ -485,6 +499,7 @@ def build_case_dashboard(
             "technology": _technology_frame(model),
             "energy": _energy_frame(model),
             "investments": _investment_frame(model),
+            "robust_frontier": _robust_frontier_frame(model),
         }
 
     def _load_aviation_preprocessing_frames() -> dict[str, pd.DataFrame]:
@@ -563,6 +578,7 @@ def build_case_dashboard(
             "technology": pd.DataFrame(),
             "energy": pd.DataFrame(),
             "investments": pd.DataFrame(),
+            "robust_frontier": pd.DataFrame(),
             "airport_fuel_demand": pd.DataFrame(),
             "route_energy_flow": pd.DataFrame(),
         }
@@ -579,6 +595,10 @@ def build_case_dashboard(
             "technology": pd.read_csv(result_dir / technology_filename),
             "energy": pd.read_csv(result_dir / energy_filename),
             "investments": pd.read_csv(result_dir / investment_filename),
+            "robust_frontier": _filter_application(
+                _read_csv_if_exists(result_dir / robust_frontier_filename),
+                application_name,
+            ),
             "airport_fuel_demand": _read_csv_if_exists(result_dir / "airport_fuel_demand.csv"),
             "route_energy_flow": _read_csv_if_exists(result_dir / "route_energy_flow.csv"),
         }
@@ -1336,6 +1356,241 @@ def build_case_dashboard(
         _ChartContainer("Investments by Operator", _content)
 
     @solara.component
+    def RobustFrontierContent(frames: dict[str, pd.DataFrame], source_label: str):
+        frontier = frames.get("robust_frontier", pd.DataFrame())
+        required_columns = {
+            "year",
+            "operator_name",
+            "segment",
+            "decision_attitude",
+            "candidate_technology",
+            "selected_technology",
+            "expected_utility",
+            "robust_score",
+            "selected_flag",
+        }
+        if frontier.empty or not required_columns.issubset(frontier.columns):
+            solara.Markdown("No robust frontier output is available for this source.")
+            return
+
+        frontier = frontier.copy()
+        for column in (
+            "year",
+            "expected_utility",
+            "robust_score",
+            "candidate_utility",
+            "scenario_probability",
+        ):
+            if column in frontier.columns:
+                frontier[column] = pd.to_numeric(frontier[column], errors="coerce")
+        frontier["selected_flag"] = (
+            frontier["selected_flag"].astype(str).str.lower().isin({"true", "1", "yes"})
+        )
+        years = sorted(frontier["year"].dropna().astype(int).unique().tolist())
+        operators = sorted(frontier["operator_name"].dropna().astype(str).unique().tolist())
+        segments = sorted(frontier["segment"].dropna().astype(str).unique().tolist())
+        attitudes = sorted(frontier["decision_attitude"].dropna().astype(str).unique().tolist())
+
+        selected_year, set_selected_year = solara.use_state(years[-1] if years else None)
+        selected_operator, set_selected_operator = solara.use_state("All")
+        selected_segment, set_selected_segment = solara.use_state("All")
+        selected_attitude, set_selected_attitude = solara.use_state("All")
+        if not years:
+            solara.Markdown("Robust frontier output has no year values.")
+            return
+
+        effective_year = selected_year if selected_year in years else years[-1]
+        solara.Markdown(f"### Robust Frontier ({source_label})")
+        solara.SliderInt(
+            "Decision year",
+            value=effective_year,
+            min=years[0],
+            max=years[-1],
+            step=1,
+            on_value=set_selected_year,
+        )
+        solara.Select(
+            "Operator",
+            values=["All", *operators],
+            value=selected_operator if selected_operator in operators else "All",
+            on_value=set_selected_operator,
+        )
+        solara.Select(
+            "Segment",
+            values=["All", *segments],
+            value=selected_segment if selected_segment in segments else "All",
+            on_value=set_selected_segment,
+        )
+        solara.Select(
+            "Decision attitude",
+            values=["All", *attitudes],
+            value=selected_attitude if selected_attitude in attitudes else "All",
+            on_value=set_selected_attitude,
+        )
+
+        filtered = frontier.loc[frontier["year"].eq(effective_year)].copy()
+        if selected_operator in operators:
+            filtered = filtered.loc[filtered["operator_name"].astype(str).eq(selected_operator)]
+        if selected_segment in segments:
+            filtered = filtered.loc[filtered["segment"].astype(str).eq(selected_segment)]
+        if selected_attitude in attitudes:
+            filtered = filtered.loc[filtered["decision_attitude"].astype(str).eq(selected_attitude)]
+        if filtered.empty:
+            solara.Markdown("No robust frontier rows match the selected filters.")
+            return
+
+        decision_keys = [
+            column
+            for column in (
+                "year",
+                "operator_name",
+                "asset_id",
+                "segment",
+                "decision_attitude",
+                "candidate_technology",
+            )
+            if column in filtered.columns
+        ]
+        candidate_frame = filtered.drop_duplicates(subset=decision_keys)
+        candidate_summary = (
+            candidate_frame.groupby("candidate_technology", as_index=False)
+            .agg(
+                expected_utility=("expected_utility", "mean"),
+                robust_score=("robust_score", "mean"),
+                selected_flag=("selected_flag", "max"),
+            )
+            .sort_values("robust_score", ascending=False)
+        )
+        positions = list(range(len(candidate_summary)))
+        fig = Figure(figsize=(8.8, 5.2))
+        ax = fig.subplots()
+        width = 0.36
+        expected_colors = [
+            "#2a6f97" if not selected else "#1b4332"
+            for selected in candidate_summary["selected_flag"]
+        ]
+        robust_colors = [
+            "#f4a261" if not selected else "#bc4749"
+            for selected in candidate_summary["selected_flag"]
+        ]
+        ax.bar(
+            [position - width / 2 for position in positions],
+            candidate_summary["expected_utility"].astype(float),
+            width=width,
+            label="Expected utility",
+            color=expected_colors,
+        )
+        ax.bar(
+            [position + width / 2 for position in positions],
+            candidate_summary["robust_score"].astype(float),
+            width=width,
+            label="Robust score",
+            color=robust_colors,
+        )
+        ax.set_xticks(positions)
+        ax.set_xticklabels(
+            candidate_summary["candidate_technology"].astype(str).tolist(),
+            rotation=30,
+            ha="right",
+        )
+        ax.set_ylabel("Utility score")
+        ax.set_title(f"{title} Candidate Frontier ({effective_year})")
+        ax.grid(axis="y", alpha=0.25)
+        ax.legend()
+        _show_figure(fig)
+
+        selected_rows = frontier.loc[frontier["selected_flag"]].copy()
+        selected_keys = [
+            column
+            for column in (
+                "year",
+                "operator_name",
+                "asset_id",
+                "segment",
+                "decision_attitude",
+                "selected_technology",
+            )
+            if column in selected_rows.columns
+        ]
+        selected_rows = selected_rows.drop_duplicates(subset=selected_keys)
+        share_frame = (
+            selected_rows.groupby(
+                ["year", "decision_attitude", "selected_technology"],
+                as_index=False,
+            )
+            .size()
+            .rename(columns={"size": "selected_count"})
+        )
+        if not share_frame.empty:
+            totals = share_frame.groupby(["year", "decision_attitude"])["selected_count"].transform(
+                "sum",
+            )
+            share_frame["share"] = share_frame["selected_count"] / totals.clip(lower=1)
+            x_keys = (
+                share_frame[["year", "decision_attitude"]]
+                .drop_duplicates()
+                .sort_values(["year", "decision_attitude"])
+            )
+            x_labels = [
+                f"{int(row.year)}\n{row.decision_attitude}"
+                for row in x_keys.itertuples(index=False)
+            ]
+            technologies = sorted(share_frame["selected_technology"].astype(str).unique())
+            palette = ["#386641", "#2a6f97", "#bc4749", "#9c6644", "#6a4c93", "#457b9d"]
+            fig = Figure(figsize=(9.2, 5.4))
+            ax = fig.subplots()
+            bottoms = [0.0 for _ in x_labels]
+            for tech_index, technology in enumerate(technologies):
+                values = []
+                for row in x_keys.itertuples(index=False):
+                    mask = (
+                        share_frame["year"].eq(row.year)
+                        & share_frame["decision_attitude"].eq(row.decision_attitude)
+                        & share_frame["selected_technology"].astype(str).eq(technology)
+                    )
+                    values.append(float(share_frame.loc[mask, "share"].sum()))
+                ax.bar(
+                    list(range(len(x_labels))),
+                    values,
+                    bottom=bottoms,
+                    label=technology,
+                    color=palette[tech_index % len(palette)],
+                )
+                bottoms = [bottom + value for bottom, value in zip(bottoms, values, strict=False)]
+            ax.set_xticks(list(range(len(x_labels))))
+            ax.set_xticklabels(x_labels, rotation=0)
+            ax.set_ylim(0.0, 1.0)
+            ax.set_ylabel("Selected technology share")
+            ax.set_title(f"{title} Selected Technology Shares by Attitude")
+            ax.grid(axis="y", alpha=0.25)
+            ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0))
+            _show_figure(fig)
+
+        table_columns = [
+            column
+            for column in (
+                "candidate_technology",
+                "expected_utility",
+                "robust_score",
+                "selected_flag",
+            )
+            if column in candidate_summary.columns
+        ]
+        solara.Markdown("#### Candidate Scores")
+        _show_dataframe(candidate_summary[table_columns], max_rows=16)
+
+    @solara.component
+    def RobustFrontier(model: NATMModel):
+        update_counter.get()
+        with solara.Card("Robust Frontier", style={"margin-bottom": "28px"}):
+            RobustFrontierContent(_live_result_frames(model), "live case")
+
+    @solara.component
+    def SavedRobustFrontier(folder_name: str):
+        with solara.Card("Robust Frontier", style={"margin-bottom": "28px"}):
+            RobustFrontierContent(_load_result_frames(folder_name), f"saved: {folder_name}")
+
+    @solara.component
     def OperatorDrilldownContent(frames: dict[str, pd.DataFrame], source_label: str):
         agent_frame = frames.get("agents", pd.DataFrame())
         technology_frame = frames.get("technology", pd.DataFrame())
@@ -1527,11 +1782,13 @@ def build_case_dashboard(
         technology_frame = frames.get("technology", pd.DataFrame())
         energy_frame = frames.get("energy", pd.DataFrame())
         investment_frame = frames.get("investments", pd.DataFrame())
+        robust_frontier = frames.get("robust_frontier", pd.DataFrame())
         latest_year = (
             _latest_year(agent_frame)
             or _latest_year(technology_frame)
             or _latest_year(energy_frame)
             or _latest_year(investment_frame)
+            or _latest_year(robust_frontier)
         )
         solara.Markdown(f"### Report Tables ({source_label})")
         solara.Markdown("Compact tables for checking values and preparing report screenshots.")
@@ -1588,6 +1845,39 @@ def build_case_dashboard(
             )
             solara.Markdown("#### Total Investments by Operator")
             _show_dataframe(investment_table, max_rows=16)
+
+        if not robust_frontier.empty and "robust_score" in robust_frontier.columns:
+            robust_latest = robust_frontier.loc[
+                pd.to_numeric(robust_frontier["year"], errors="coerce").eq(latest_year)
+            ].copy()
+            robust_latest = robust_latest.drop_duplicates(
+                subset=[
+                    column
+                    for column in (
+                        "operator_name",
+                        "asset_id",
+                        "segment",
+                        "candidate_technology",
+                    )
+                    if column in robust_latest.columns
+                ],
+            )
+            robust_columns = [
+                column
+                for column in (
+                    "operator_name",
+                    "segment",
+                    "decision_attitude",
+                    "candidate_technology",
+                    "expected_utility",
+                    "robust_score",
+                    "selected_flag",
+                )
+                if column in robust_latest.columns
+            ]
+            if robust_columns:
+                solara.Markdown("#### Robust Frontier")
+                _show_dataframe(robust_latest[robust_columns], max_rows=16)
 
     @solara.component
     def ReportTables(model: NATMModel):
@@ -2128,6 +2418,7 @@ def build_case_dashboard(
             SavedEnergyByCarrier(folder_name)
             SavedEmissionsOverview(folder_name)
             SavedInvestmentsByOperator(folder_name)
+            SavedRobustFrontier(folder_name)
             SavedOperatorDrilldown(folder_name)
             SavedReportTables(folder_name)
             if sector_name == "aviation":
@@ -2157,6 +2448,7 @@ def build_case_dashboard(
         EnergyByCarrier,
         EmissionsOverview,
         InvestmentsByOperator,
+        RobustFrontier,
         OperatorDrilldown,
         ReportTables,
     ]

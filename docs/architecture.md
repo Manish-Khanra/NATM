@@ -101,6 +101,7 @@ which is loaded by `NATMScenario`.
 - `end_year`
 - `sectors`
 - optional `preprocessing`
+- optional `ambiguity_aware_decision`
 - `base_path`
 
 Simulation behavior is still primarily driven by the CSV inputs in the case
@@ -336,9 +337,15 @@ Responsibilities:
 - resolve single scenario values with specificity matching
 - return matching rows when multi-row logic is needed
 - support generic rows and more specific overrides
+- support optional `scenario_id` rows for ambiguity-aware decision evaluation
 
 This is how policy, demand, prices, availability flags, and planned deliveries
 are parameterized.
+
+If `scenario_id` is absent in `aviation_scenario.csv` or `maritime_scenario.csv`,
+the table behaves exactly as before and assigns every row to `baseline`.
+When `scenario_id` is present, lookups may request a specific scenario while
+still using the existing blank-scope and specificity matching rules.
 
 ## 6. Domain Layer
 
@@ -370,13 +377,28 @@ coordination instead of low-level row mutation.
 Decision logic is intentionally modeled as a plugin-style layer under
 `navaero_transition_model/core/decision_logic/`.
 
-The active implementation is:
+The legacy implementations are:
 
 - `legacy_weighted_utility`
+- `legacy_weighted_utility_cargo`
+- `legacy_weighted_utility_maritime_cargo`
+- `legacy_weighted_utility_maritime_passenger`
+
+The ambiguity-aware implementations are:
+
+- `ambiguity_aware_utility`
+- `ambiguity_aware_utility_cargo`
+- `ambiguity_aware_utility_maritime_cargo`
+- `ambiguity_aware_utility_maritime_passenger`
 
 The agent selects the logic by name from the fleet input column:
 
 - `investment_logic`
+
+Fleet stock may also include `decision_attitude`. Supported values are
+`risk_neutral`, `risk_averse`, and `ambiguity_averse`; missing values default to
+`risk_neutral`. The attitude column is ignored by the legacy logic and only
+affects the ambiguity-aware plugins.
 
 This means future investment/adoption methods can be added without rewriting the
 agent architecture.
@@ -404,6 +426,24 @@ Important behaviors in the current logic:
 - NPV/payback-style evaluation
 - planned deliveries before endogenous additions
 - demand-driven yearly capacity planning for growth
+
+The ambiguity-aware extension preserves those calculations but evaluates each
+candidate technology under multiple configured `scenario_id` futures. In the
+initial implementation, economic utility is the decision score used for robust
+selection; the legacy environmental and policy calculations remain available as
+diagnostics and in the legacy utility calculations.
+
+Behavioural selection is:
+
+- `risk_neutral`: maximise probability-weighted expected utility
+- `risk_averse`: maximise lower-tail expected-shortfall utility
+- `ambiguity_averse`: maximise worst-case probability-weighted utility over a
+  bounded probability set
+
+This is an ambiguity-aware extension of the existing utility-based fleet
+diffusion model. The model still simulates technology diffusion through fleet
+replacement and growth, but candidate technologies can now be evaluated over a
+set of possible future scenarios.
 
 ### 7.3 Current growth architecture
 
@@ -478,12 +518,19 @@ tables such as:
 - `aviation_technology.csv`
 - `aviation_energy_emissions.csv`
 - `aviation_investments.csv`
+- `aviation_robust_frontier.csv`
 - `maritime_technology.csv`
 - `maritime_energy_emissions.csv`
 - `maritime_investments.csv`
+- `maritime_robust_frontier.csv`
 
 This split keeps `DataCollector` focused on summary reporting while allowing
 rich domain-specific output tables for analysis.
+
+The robust frontier outputs are optional and are populated only when an
+ambiguity-aware decision logic records candidate evaluations. They include
+scenario-level candidate utilities, expected utility, robust score, selected
+technology, decision attitude, and selected flags.
 
 ## 10. Dashboard Layer
 
