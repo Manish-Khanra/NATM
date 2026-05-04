@@ -140,7 +140,37 @@ def test_ambiguity_config_normalizes_probability_sum() -> None:
     assert config.probabilities["stress"] == pytest.approx(1.0 / 3.0)
 
 
-def _dummy_agent(decision_attitude: str, *, delta: float = 0.0) -> SimpleNamespace:
+def test_ambiguity_config_defaults_to_worst_case_expected_shortfall() -> None:
+    config = AmbiguityAwareDecisionConfig.from_dict(
+        {
+            "enabled": True,
+            "scenario_ids": ["baseline", "stress"],
+            "probabilities": {"baseline": 0.5, "stress": 0.5},
+        },
+    )
+
+    assert config.robust_metric == "worst_case_expected_shortfall"
+
+
+def test_ambiguity_config_accepts_worst_case_expected_utility() -> None:
+    config = AmbiguityAwareDecisionConfig.from_dict(
+        {
+            "enabled": True,
+            "scenario_ids": ["baseline", "stress"],
+            "probabilities": {"baseline": 0.5, "stress": 0.5},
+            "robust_metric": "worst_case_expected_utility",
+        },
+    )
+
+    assert config.robust_metric == "worst_case_expected_utility"
+
+
+def _dummy_agent(
+    decision_attitude: str,
+    *,
+    delta: float = 0.0,
+    robust_metric: str = "worst_case_expected_shortfall",
+) -> SimpleNamespace:
     config = AmbiguityAwareDecisionConfig(
         enabled=True,
         scenario_ids=("baseline", "stress"),
@@ -148,11 +178,28 @@ def _dummy_agent(decision_attitude: str, *, delta: float = 0.0) -> SimpleNamespa
         ambiguity_enabled=delta > 0.0,
         probability_deviation=delta,
         expected_shortfall_alpha=0.5,
-        robust_metric="worst_case_expected_utility",
+        robust_metric=robust_metric,
     )
     return SimpleNamespace(
         decision_attitude=decision_attitude,
         model=SimpleNamespace(scenario=SimpleNamespace(ambiguity_aware_decision=config)),
+    )
+
+
+def _aggregate(
+    logic: AmbiguityAwareUtilityLogic,
+    agent: SimpleNamespace,
+    technology_name: str,
+    baseline_score: float,
+    stress_score: float,
+):
+    return logic._candidate_aggregate(
+        agent,
+        pd.Series({"technology_name": technology_name}),
+        (
+            ScenarioCandidateOutcome("baseline", 0.5, baseline_score, None),
+            ScenarioCandidateOutcome("stress", 0.5, stress_score, None),
+        ),
     )
 
 
@@ -163,14 +210,7 @@ def _aggregate_score(
     baseline_score: float,
     stress_score: float,
 ) -> float:
-    aggregate = logic._candidate_aggregate(
-        agent,
-        pd.Series({"technology_name": technology_name}),
-        (
-            ScenarioCandidateOutcome("baseline", 0.5, baseline_score, None),
-            ScenarioCandidateOutcome("stress", 0.5, stress_score, None),
-        ),
-    )
+    aggregate = _aggregate(logic, agent, technology_name, baseline_score, stress_score)
     return aggregate.robust_score
 
 
@@ -202,6 +242,64 @@ def test_ambiguity_averse_score_uses_worst_case_probability_bounds() -> None:
     stable = _aggregate_score(logic, agent, "stable", 0.5, 0.5)
 
     assert stable > upside_heavy
+
+
+def test_ambiguity_averse_defaults_to_worst_case_expected_shortfall() -> None:
+    logic = AmbiguityAwareUtilityLogic()
+    agent = _dummy_agent("ambiguity_averse", delta=0.25)
+
+    aggregate = _aggregate(logic, agent, "upside_heavy", 1.0, 0.1)
+
+    assert aggregate.robust_score == pytest.approx(
+        aggregate.worst_case_expected_shortfall_utility,
+    )
+    assert aggregate.robust_score < aggregate.worst_case_utility
+
+
+def test_ambiguity_averse_can_use_explicit_worst_case_expected_utility() -> None:
+    logic = AmbiguityAwareUtilityLogic()
+    agent = _dummy_agent(
+        "ambiguity_averse",
+        delta=0.25,
+        robust_metric="worst_case_expected_utility",
+    )
+
+    aggregate = _aggregate(logic, agent, "upside_heavy", 1.0, 0.1)
+
+    assert aggregate.robust_score == pytest.approx(aggregate.worst_case_utility)
+
+
+def test_unavailable_adverse_scenario_reduces_expected_shortfall_scores() -> None:
+    logic = AmbiguityAwareUtilityLogic()
+    agent = _dummy_agent("ambiguity_averse", delta=0.25)
+    unavailable_stress_outcome = ScenarioCandidateOutcome("stress", 0.5, 0.0, None)
+
+    stable = logic._candidate_aggregate(
+        agent,
+        pd.Series({"technology_name": "stable"}),
+        (
+            ScenarioCandidateOutcome("baseline", 0.5, 0.6, None),
+            ScenarioCandidateOutcome("stress", 0.5, 0.6, None),
+        ),
+    )
+    unavailable_in_stress = logic._candidate_aggregate(
+        agent,
+        pd.Series({"technology_name": "unavailable_in_stress"}),
+        (
+            ScenarioCandidateOutcome("baseline", 0.5, 1.0, None),
+            unavailable_stress_outcome,
+        ),
+    )
+
+    assert unavailable_stress_outcome.score == 0.0
+    assert unavailable_stress_outcome.evaluation is None
+    assert unavailable_in_stress.expected_shortfall_utility == pytest.approx(0.0)
+    assert unavailable_in_stress.worst_case_expected_shortfall_utility == pytest.approx(0.0)
+    assert stable.expected_shortfall_utility > unavailable_in_stress.expected_shortfall_utility
+    assert (
+        stable.worst_case_expected_shortfall_utility
+        > unavailable_in_stress.worst_case_expected_shortfall_utility
+    )
 
 
 @pytest.mark.parametrize(

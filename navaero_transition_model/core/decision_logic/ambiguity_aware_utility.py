@@ -92,6 +92,7 @@ class AmbiguityAwareSelectionMixin:
         outcomes: Iterable[ScenarioCandidateOutcome],
         alpha: float,
     ) -> float:
+        """Probability-weighted mean utility over the worst alpha probability mass."""
         remaining_tail = max(min(float(alpha), 1.0), 1e-9)
         sorted_outcomes = sorted(outcomes, key=lambda outcome: outcome.score)
         weighted_sum = 0.0
@@ -111,6 +112,7 @@ class AmbiguityAwareSelectionMixin:
         outcomes: Iterable[ScenarioCandidateOutcome],
         probability_deviation: float,
     ) -> float:
+        """Worst-case expected utility under bounded probability ambiguity."""
         outcome_list = list(outcomes)
         if not outcome_list:
             return 0.0

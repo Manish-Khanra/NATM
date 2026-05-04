@@ -1571,8 +1571,6 @@ def build_case_dashboard(
         y_metric = (
             "worst_case_expected_shortfall_utility"
             if "worst_case_expected_shortfall_utility" in candidate_summary.columns
-            else "expected_shortfall_utility"
-            if "expected_shortfall_utility" in candidate_summary.columns
             else "robust_score"
         )
         uses_robust_frontier_axes = (

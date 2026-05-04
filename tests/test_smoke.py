@@ -191,7 +191,7 @@ def test_default_scenario_runs_end_to_end() -> None:
     assert {"aviation"} == set(agent_summary["sector_name"].unique())
     assert agent_summary["operator_name"].nunique() == len(model.agents)
     assert "operator_country" in agent_summary.columns
-    assert {"legacy_weighted_utility"} == set(agent_summary["investment_logic"].unique())
+    assert {"ambiguity_aware_utility"} == set(agent_summary["investment_logic"].unique())
     assert not aircraft_summary.empty
     assert not technology_summary.empty
     assert not energy_emissions_summary.empty
@@ -245,6 +245,8 @@ def test_stronger_policy_accelerates_adoption(tmp_path: Path) -> None:
     fleet = pd.read_csv(fleet_path)
     fleet = fleet.loc[fleet["current_technology"].astype(str).eq("kerosene_short")].head(1).copy()
     fleet["Age (Years)"] = 19.0
+    fleet["investment_logic"] = "legacy_weighted_utility"
+    fleet["decision_attitude"] = "risk_neutral"
     fleet.to_csv(fleet_path, index=False)
 
     technology_path = case_dir / "aviation_technology_catalog.csv"
@@ -328,7 +330,7 @@ def test_aviation_passenger_case_loader_reads_three_file_structure() -> None:
     assert {"short", "medium", "long"} <= set(case_inputs.fleet["segment"].unique())
     assert "technology_name" in case_inputs.technology_catalog.to_frame().columns
     assert "service_entry_year" in case_inputs.technology_catalog.to_frame().columns
-    assert {"legacy_weighted_utility"} == set(case_inputs.fleet["investment_logic"].unique())
+    assert {"ambiguity_aware_utility"} == set(case_inputs.fleet["investment_logic"].unique())
     assert case_inputs.scenario_long["year"].min() == 2025
     assert case_inputs.scenario_long["year"].max() == 2035
     assert "primary_energy_price" in set(case_inputs.scenario_long["variable_name"])

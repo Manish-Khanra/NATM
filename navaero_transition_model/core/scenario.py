@@ -80,7 +80,7 @@ class AmbiguityAwareDecisionConfig:
     ambiguity_enabled: bool = False
     probability_deviation: float = 0.0
     expected_shortfall_alpha: float = 0.2
-    robust_metric: str = "worst_case_expected_utility"
+    robust_metric: str = "worst_case_expected_shortfall"
 
     @classmethod
     def from_dict(cls, payload: dict | None) -> AmbiguityAwareDecisionConfig:
@@ -139,7 +139,7 @@ class AmbiguityAwareDecisionConfig:
             raise ValueError("expected_shortfall_alpha must be in (0, 1]")
 
         robust_metric = str(
-            payload.get("robust_metric", "worst_case_expected_utility"),
+            payload.get("robust_metric", "worst_case_expected_shortfall"),
         ).strip()
         supported_metrics = {
             "worst_case_expected_utility",
