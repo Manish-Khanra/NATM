@@ -443,26 +443,6 @@ all rows are treated as `baseline`. When present, the ambiguity-aware logic
 evaluates candidate technologies over configured future scenarios while keeping
 the existing blank-scope and specificity matching rules.
 
-Minimal `scenario.yaml` example:
-
-```yaml
-ambiguity_aware_decision:
-  enabled: true
-  scenario_ids:
-    - baseline
-    - high_fuel_price
-    - delayed_infrastructure
-  probabilities:
-    baseline: 0.5
-    high_fuel_price: 0.3
-    delayed_infrastructure: 0.2
-  ambiguity:
-    enabled: true
-    probability_deviation: 0.1
-  expected_shortfall_alpha: 0.2
-  robust_metric: worst_case_expected_shortfall
-```
-
 This is an ambiguity-aware extension of the existing utility-based fleet
 diffusion model. The model still simulates technology diffusion through fleet
 replacement and growth, but candidate technologies can now be evaluated over a
@@ -470,6 +450,9 @@ set of possible future scenarios. Risk-neutral actors maximise expected
 utility, risk-averse actors use probability-weighted mean utility over the
 worst alpha probability mass, and ambiguity-averse actors use worst-case
 expected shortfall over a bounded probability-ambiguity set.
+
+For copy-paste fleet-stock, `scenario.yaml`, and `scenario_id` examples, see
+the [investment logic guide](docs/investment-logic-guide.md).
 
 For the passenger scenario CSV contract, see
 `docs/aviation-passenger-reference.md`.

@@ -79,43 +79,12 @@ Use only the columns that matter for the variable. Leave the others blank.
 ## Ambiguity-Aware Decision Inputs
 
 Fleet stock can keep using `investment_logic=legacy_weighted_utility`. To use
-the ambiguity-aware passenger rule, set:
+the ambiguity-aware passenger rule, use `investment_logic=ambiguity_aware_utility`
+and set `decision_attitude` to `risk_neutral`, `risk_averse`, or
+`ambiguity_averse`.
 
-```csv
-investment_logic,decision_attitude
-ambiguity_aware_utility,risk_neutral
-```
-
-Allowed `decision_attitude` values are `risk_neutral`, `risk_averse`, and
-`ambiguity_averse`. Missing values default to `risk_neutral`; the column does
-not change legacy weighted-utility behavior.
-
-Configure the scenario set in `scenario.yaml`:
-
-```yaml
-ambiguity_aware_decision:
-  enabled: true
-  scenario_ids:
-    - baseline
-    - high_fuel_price
-    - delayed_infrastructure
-  probabilities:
-    baseline: 0.5
-    high_fuel_price: 0.3
-    delayed_infrastructure: 0.2
-  ambiguity:
-    enabled: true
-    probability_deviation: 0.1
-  expected_shortfall_alpha: 0.2
-  robust_metric: worst_case_expected_shortfall
-```
-
-This is an ambiguity-aware extension of the existing utility-based fleet
-diffusion model. Candidate technologies are evaluated over the configured
-future scenarios. Risk-neutral actors maximise expected utility, risk-averse
-actors use probability-weighted mean utility over the worst alpha probability
-mass, and ambiguity-averse actors use worst-case expected shortfall over a
-bounded probability-ambiguity set.
+For copy-paste fleet-stock, `scenario.yaml`, and `scenario_id` examples, see
+the [investment logic guide](investment-logic-guide.md).
 
 ## Variable Groups
 
