@@ -24,6 +24,7 @@ from navaero_transition_model.core.decision_logic.ambiguity_aware_utility import
     AmbiguityAwareUtilityLogic,
     ScenarioCandidateOutcome,
 )
+from navaero_transition_model.core.loaders import load_aviation_passenger_case
 from navaero_transition_model.core.model import NATMModel
 from navaero_transition_model.core.scenario import (
     AmbiguityAwareDecisionConfig,
@@ -443,6 +444,7 @@ def test_aviation_passenger_ambiguity_logic_writes_robust_frontier(tmp_path: Pat
         "scenario_id",
         "candidate_utility",
         "candidate_economic_utility",
+        "candidate_npv",
         "expected_utility",
         "robust_score",
         "worst_case_utility",
@@ -540,3 +542,46 @@ def test_generalized_ambiguity_logic_writes_robust_frontier(
     assert {"risk_averse"} == set(model.to_agent_frame()["decision_attitude"].unique())
     assert set(frontier["scenario_id"].unique()) == {"baseline", "high_fuel_price"}
     assert frontier["selected_flag"].any()
+
+
+def test_risk_attitudes_comparison_case_shows_distinct_first_choices() -> None:
+    case_dir = Path(__file__).resolve().parents[1] / "data" / "risk-attitudes-comparison"
+    case_inputs = load_aviation_passenger_case(case_dir)
+    scenario = NATMScenario.from_yaml(case_dir / "scenario.yaml")
+
+    assert scenario.end_year == 2040
+    assert len(case_inputs.fleet) == 3
+    assert case_inputs.fleet["operator_name"].nunique() == 3
+    assert set(case_inputs.fleet["decision_attitude"]) == {
+        "risk_neutral",
+        "risk_averse",
+        "ambiguity_averse",
+    }
+    assert set(case_inputs.scenario_long["scenario_id"].dropna().unique()) == {
+        "baseline",
+        "high_fuel_price",
+        "delayed_infrastructure",
+    }
+
+    model = NATMModel(scenario, seed=42)
+    for agent in model.get_sector_agents("aviation"):
+        aircraft = agent.fleet.frame.iloc[0]
+        agent.decision_logic.select_technology_for_aircraft(
+            agent,
+            aircraft,
+            scenario.start_year,
+            initial_ets_balance=agent.remaining_ets_allowance,
+        )
+
+    frontier = model.to_aviation_robust_frontier_frame()
+    assert "candidate_npv" in frontier.columns
+    selected = (
+        frontier.loc[frontier["selected_flag"]]
+        .drop_duplicates(subset=["operator_name", "decision_attitude", "selected_technology"])
+        .sort_values("decision_attitude")
+    )
+    selections = dict(
+        zip(selected["decision_attitude"], selected["selected_technology"], strict=False),
+    )
+    assert selections.keys() == {"risk_neutral", "risk_averse", "ambiguity_averse"}
+    assert len(set(selections.values())) == 3

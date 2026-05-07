@@ -27,6 +27,13 @@ AVAILABLE_EXAMPLES = {
         "case": "baseline-passenger-transition",
         "description": "Baseline aviation-passenger Mesa case.",
     },
+    "risk-attitudes-comparison": {
+        "case": "risk-attitudes-comparison",
+        "description": (
+            "Synthetic aviation-passenger case for comparing risk-neutral, "
+            "risk-averse, and ambiguity-averse airline choices."
+        ),
+    },
     "small_with_aviation_cargo": {
         "case": "baseline-cargo-transition",
         "description": "Baseline aviation-cargo Mesa case.",
@@ -388,7 +395,7 @@ def main() -> int:
 
     # Edit these two values when running from VS Code.
     selected_mode = "simulation"
-    selected_example = "small_with_aviation_passenger"
+    selected_example = "risk-attitudes-comparison"
 
     selected_case = None
     output_name = None

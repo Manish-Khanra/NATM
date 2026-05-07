@@ -403,6 +403,12 @@ The `baseline-cargo-transition` case uses the same aviation CSV filenames:
 - `aviation_technology_catalog.csv`
 - `aviation_scenario.csv`
 
+The `risk-attitudes-comparison` case is a synthetic aviation
+passenger example with three German airlines, one aircraft each, and one
+`decision_attitude` per airline: `risk_neutral`, `risk_averse`, and
+`ambiguity_averse`. It is intended for comparing ambiguity-aware robust
+frontier outputs through 2040.
+
 In technology catalogs, `technology_name` is the unique lookup key. For real
 aviation datasets this can be a specific aircraft model such as `A320neo`,
 `A321XLR`, or `B787-9`. `segment` is still used for demand, market-share,

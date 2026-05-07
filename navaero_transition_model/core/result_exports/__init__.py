@@ -8,6 +8,9 @@ from navaero_transition_model.core.result_exports.aviation_exports import (
     MaritimeInvestmentExporter,
     MaritimeTechnologyExporter,
 )
+from navaero_transition_model.core.result_exports.robust_loss import (
+    robust_frontier_loss_summary,
+)
 
 __all__ = [
     "AircraftStockExporter",
@@ -18,4 +21,5 @@ __all__ = [
     "MaritimeEnergyEmissionsExporter",
     "MaritimeInvestmentExporter",
     "MaritimeTechnologyExporter",
+    "robust_frontier_loss_summary",
 ]

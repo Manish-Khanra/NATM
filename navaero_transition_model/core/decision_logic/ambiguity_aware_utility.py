@@ -255,6 +255,7 @@ class AmbiguityAwareSelectionMixin:
                         "candidate_operating_cost": (
                             evaluation.current_year_operating_cost if evaluation else None
                         ),
+                        "candidate_npv": evaluation.net_present_value if evaluation else None,
                         "candidate_primary_energy": (
                             evaluation.primary_energy_quantity if evaluation else None
                         ),
@@ -268,6 +269,9 @@ class AmbiguityAwareSelectionMixin:
                         "expected_shortfall_utility": aggregate.expected_shortfall_utility,
                         "worst_case_expected_shortfall_utility": (
                             aggregate.worst_case_expected_shortfall_utility
+                        ),
+                        "expected_shortfall_alpha": (
+                            agent.model.scenario.ambiguity_aware_decision.expected_shortfall_alpha
                         ),
                         "selected_flag": candidate_technology == selected_technology,
                     },

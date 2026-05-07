@@ -24,6 +24,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - optional dashboard depe
 
 from navaero_transition_model.cli import resolve_case_config
 from navaero_transition_model.core.model import NATMModel
+from navaero_transition_model.core.result_exports.robust_loss import robust_frontier_loss_summary
 from navaero_transition_model.core.scenario import NATMScenario
 
 KWH_PER_TWH = 1_000_000_000.0
@@ -1454,6 +1455,9 @@ def build_case_dashboard(
             "worst_case_expected_shortfall_utility",
             "candidate_utility",
             "scenario_probability",
+            "candidate_operating_cost",
+            "candidate_npv",
+            "expected_shortfall_alpha",
         ):
             if column in frontier.columns:
                 frontier[column] = pd.to_numeric(frontier[column], errors="coerce")
@@ -1640,6 +1644,79 @@ def build_case_dashboard(
             )
             ax.set_title(f"{title_prefix}{asset_title}")
             ax.grid(alpha=0.25)
+            _show_figure(fig)
+
+        loss_summary = robust_frontier_loss_summary(filtered, tail_alpha=0.25)
+        if not loss_summary.empty:
+            solara.Markdown("#### Monetary Loss Diagnostics")
+            if "candidate_npv" not in filtered.columns or filtered["candidate_npv"].isna().all():
+                solara.Markdown(
+                    "NPV loss is unavailable for this result folder; showing operating-cost "
+                    "regret only.",
+                )
+            loss_summary = loss_summary.sort_values(
+                "tail_operating_cost_regret_eur",
+                ascending=False,
+            )
+            metric_specs = [
+                (
+                    "expected_operating_cost_regret_eur",
+                    "Expected operating-cost regret",
+                    "#2a6f97",
+                ),
+                (
+                    "tail_operating_cost_regret_eur",
+                    "Tail operating-cost regret",
+                    "#bc4749",
+                ),
+            ]
+            if (
+                "expected_npv_loss_eur" in loss_summary.columns
+                and loss_summary["expected_npv_loss_eur"].notna().any()
+            ):
+                metric_specs.extend(
+                    [
+                        ("expected_npv_loss_eur", "Expected NPV loss", "#386641"),
+                        ("tail_npv_loss_eur", "Tail NPV loss", "#6a4c93"),
+                    ],
+                )
+
+            positions = list(range(len(loss_summary)))
+            width = min(0.80 / max(len(metric_specs), 1), 0.22)
+            fig = Figure(figsize=(9.2, 5.6))
+            ax = fig.subplots()
+            for metric_index, (metric_column, metric_label, metric_color) in enumerate(
+                metric_specs,
+            ):
+                offset = (metric_index - (len(metric_specs) - 1) / 2) * width
+                bars = ax.bar(
+                    [position + offset for position in positions],
+                    loss_summary[metric_column].fillna(0.0).astype(float),
+                    width=width,
+                    label=metric_label,
+                    color=metric_color,
+                    alpha=0.88,
+                )
+                for bar, selected in zip(
+                    bars,
+                    loss_summary["selected_flag"].astype(bool),
+                    strict=False,
+                ):
+                    if selected:
+                        bar.set_edgecolor("#111111")
+                        bar.set_linewidth(1.2)
+
+            ax.set_xticks(positions)
+            ax.set_xticklabels(
+                loss_summary["candidate_technology"].astype(str).tolist(),
+                rotation=30,
+                ha="right",
+            )
+            ax.set_ylabel("Monetary loss or regret (EUR)")
+            ax.yaxis.set_major_formatter(_compact_number_formatter(" EUR"))
+            ax.set_title(f"{title} Monetary Downside Diagnostics ({effective_year})")
+            ax.grid(axis="y", alpha=0.25)
+            ax.legend()
             _show_figure(fig)
 
         solara.Markdown("#### Candidate Utility Summary")

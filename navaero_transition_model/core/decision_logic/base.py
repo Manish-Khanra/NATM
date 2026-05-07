@@ -48,6 +48,7 @@ class CandidateEvaluation:
     current_year_operating_cost: float
     effective_conventional_cost: float
     effective_alternative_cost: float
+    net_present_value: float
 
 
 @dataclass(frozen=True)

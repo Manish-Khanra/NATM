@@ -1,0 +1,23 @@
+name: risk-attitudes-comparison
+start_year: 2025
+end_year: 2040
+
+sectors:
+  aviation:
+    - passenger
+
+ambiguity_aware_decision:
+  enabled: true
+  scenario_ids:
+    - baseline
+    - high_fuel_price
+    - delayed_infrastructure
+  probabilities:
+    baseline: 0.40
+    high_fuel_price: 0.35
+    delayed_infrastructure: 0.25
+  ambiguity:
+    enabled: true
+    probability_deviation: 0.15
+  expected_shortfall_alpha: 0.50
+  robust_metric: worst_case_expected_shortfall

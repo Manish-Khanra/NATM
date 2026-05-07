@@ -309,7 +309,7 @@ class LegacyWeightedUtilityLogic(AviationPassengerDecisionLogic):
         )
         aircraft_price = float(technology_row["capex_eur"]) * (1.0 + float(dynamic_price_index))
         depreciation_cost = float(technology_row["depreciation_cost_share"]) * aircraft_price
-        salvage_value = (aircraft_price - (aircraft_price * depreciation_cost)) / life_time
+        salvage_value = max(aircraft_price - (depreciation_cost * life_time), 0.0)
         interest_rate = float(technology_row["payback_interest_rate"])
 
         total_costs: list[float] = []
@@ -396,6 +396,7 @@ class LegacyWeightedUtilityLogic(AviationPassengerDecisionLogic):
             current_year_operating_cost=first_year_metrics.total_cost,
             effective_conventional_cost=mean_total_cost,
             effective_alternative_cost=mean_operation_cost,
+            net_present_value=npv,
         )
 
     def partial_environmental_utility(self, value: float, thresholds: tuple[float, ...]) -> float:
@@ -913,7 +914,7 @@ class LegacyWeightedUtilityCargoLogic(AviationCargoDecisionLogic):
         )
         aircraft_price = float(technology_row["capex_eur"]) * (1.0 + float(dynamic_price_index))
         depreciation_cost = float(technology_row["depreciation_cost_share"]) * aircraft_price
-        salvage_value = (aircraft_price - (aircraft_price * depreciation_cost)) / life_time
+        salvage_value = max(aircraft_price - (depreciation_cost * life_time), 0.0)
         interest_rate = float(technology_row["payback_interest_rate"])
 
         total_costs: list[float] = []
@@ -1000,6 +1001,7 @@ class LegacyWeightedUtilityCargoLogic(AviationCargoDecisionLogic):
             current_year_operating_cost=first_year_metrics.total_cost,
             effective_conventional_cost=mean_total_cost,
             effective_alternative_cost=mean_operation_cost,
+            net_present_value=npv,
         )
 
     def partial_environmental_utility(self, value: float, thresholds: tuple[float, ...]) -> float:
@@ -1602,7 +1604,7 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
         )
         vessel_price = float(technology_row["capex_eur"]) * (1.0 + float(dynamic_price_index))
         depreciation_cost = float(technology_row["depreciation_cost_share"]) * vessel_price
-        salvage_value = (vessel_price - (vessel_price * depreciation_cost)) / life_time
+        salvage_value = max(vessel_price - (depreciation_cost * life_time), 0.0)
         interest_rate = float(technology_row["payback_interest_rate"])
 
         total_costs: list[float] = []
@@ -1685,6 +1687,7 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
             current_year_operating_cost=first_year_metrics.total_cost,
             effective_conventional_cost=mean_total_cost,
             effective_alternative_cost=mean_operation_cost,
+            net_present_value=npv,
         )
 
     def partial_environmental_utility(self, value: float, thresholds: tuple[float, ...]) -> float:
@@ -2368,7 +2371,7 @@ class LegacyWeightedUtilityMaritimePassengerLogic(MaritimePassengerDecisionLogic
         )
         vessel_price = float(technology_row["capex_eur"]) * (1.0 + float(dynamic_price_index))
         depreciation_cost = float(technology_row["depreciation_cost_share"]) * vessel_price
-        salvage_value = (vessel_price - (vessel_price * depreciation_cost)) / life_time
+        salvage_value = max(vessel_price - (depreciation_cost * life_time), 0.0)
         interest_rate = float(technology_row["payback_interest_rate"])
 
         total_costs: list[float] = []
@@ -2474,6 +2477,7 @@ class LegacyWeightedUtilityMaritimePassengerLogic(MaritimePassengerDecisionLogic
             current_year_operating_cost=first_year_metrics.total_cost,
             effective_conventional_cost=mean_total_cost,
             effective_alternative_cost=mean_operation_cost,
+            net_present_value=npv,
         )
 
     def environmental_utility(self, technology_row: pd.Series) -> float:

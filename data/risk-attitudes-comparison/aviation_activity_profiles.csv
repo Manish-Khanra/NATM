@@ -1,0 +1,4 @@
+aircraft_id,registration,icao24,operator_name,aircraft_type,segment,annual_flights_base,annual_distance_km_base,domestic_activity_share_base,international_activity_share_base,mean_stage_length_km_base,airport_allocation_group,main_hub_base,activity_assignment_method,baseline_energy_demand,fuel_burn_per_year_base
+1001,D-RNTA,3d1001,German Risk Neutral Air,Airbus A320-200,short,900,720000,0.70,0.30,800,short,Frankfurt,aircraft_id,2117647.0588235296,2117647.0588235296
+1002,D-RAVA,3d1002,German Risk Averse Air,Airbus A320-200,short,900,720000,0.70,0.30,800,short,Munich,aircraft_id,2117647.0588235296,2117647.0588235296
+1003,D-AMBA,3d1003,German Ambiguity Air,Airbus A320-200,short,900,720000,0.70,0.30,800,short,Berlin Brandenburg,aircraft_id,2117647.0588235296,2117647.0588235296
