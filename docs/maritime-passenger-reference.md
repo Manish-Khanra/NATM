@@ -81,7 +81,7 @@ Fleet stock can use `investment_logic=legacy_weighted_utility`.
 `legacy_weighted_utility_maritime_passenger` remains accepted as an alias for
 older cases. To use the ambiguity-aware maritime passenger rule, use
 `investment_logic=ambiguity_aware_utility` and set `decision_attitude` to
-`risk_neutral`, `risk_averse`, or `ambiguity_averse`.
+`risk_neutral`, `risk_averse_mean`, or `risk_averse_expected_shortfall`.
 
 For copy-paste fleet-stock, `scenario.yaml`, and `scenario_id` examples, see
 the [investment logic guide](investment-logic-guide.md).

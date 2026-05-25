@@ -405,9 +405,9 @@ The `baseline-cargo-transition` case uses the same aviation CSV filenames:
 
 The `risk-attitudes-comparison` case is a synthetic aviation
 passenger example with three German airlines, one aircraft each, and one
-`decision_attitude` per airline: `risk_neutral`, `risk_averse`, and
-`ambiguity_averse`. It is intended for comparing ambiguity-aware robust
-frontier outputs through 2040.
+`decision_attitude` per airline: `risk_neutral`, `risk_averse_mean`, and
+`risk_averse_expected_shortfall`. It is intended for comparing NPV-based
+ambiguity-aware robust frontier outputs through 2040.
 
 In technology catalogs, `technology_name` is the unique lookup key. For real
 aviation datasets this can be a specific aircraft model such as `A320neo`,
@@ -440,7 +440,9 @@ The ambiguity-aware extension also uses one strategy name for every sector:
 still accepted as aliases for existing cases.
 
 Fleet stock can optionally include `decision_attitude` with
-`risk_neutral`, `risk_averse`, or `ambiguity_averse`. If it is missing, NATM
+`risk_neutral`, `risk_averse_mean`, or `risk_averse_expected_shortfall`. Older
+`risk_averse` and `ambiguity_averse` values remain accepted as deprecated
+aliases for `risk_averse_expected_shortfall`. If the column is missing, NATM
 defaults to `risk_neutral`. The column only changes behavior for the
 ambiguity-aware logic; legacy weighted-utility decisions are unchanged.
 
@@ -449,13 +451,14 @@ all rows are treated as `baseline`. When present, the ambiguity-aware logic
 evaluates candidate technologies over configured future scenarios while keeping
 the existing blank-scope and specificity matching rules.
 
-This is an ambiguity-aware extension of the existing utility-based fleet
-diffusion model. The model still simulates technology diffusion through fleet
-replacement and growth, but candidate technologies can now be evaluated over a
-set of possible future scenarios. Risk-neutral actors maximise expected
-utility, risk-averse actors use probability-weighted mean utility over the
-worst alpha probability mass, and ambiguity-averse actors use worst-case
-expected shortfall over a bounded probability-ambiguity set.
+This is an ambiguity-aware extension of the existing fleet diffusion model. The
+model still simulates technology diffusion through fleet replacement and
+growth, but candidate technologies can now be evaluated over a set of possible
+future scenarios and belief-set probability bounds. Risk-neutral actors
+maximise expected NPV, risk-averse mean actors maximise robust worst-case mean
+NPV, and risk-averse expected-shortfall actors maximise robust
+expected-shortfall NPV. The robust modes first convert NPV to loss with
+`loss = -NPV` and then convert the robust loss score back to the NPV scale.
 
 For copy-paste fleet-stock, `scenario.yaml`, and `scenario_id` examples, see
 the [investment logic guide](docs/investment-logic-guide.md).

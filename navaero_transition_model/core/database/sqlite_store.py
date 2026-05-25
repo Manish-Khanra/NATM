@@ -149,6 +149,17 @@ class SQLiteSimulationStore:
             "output_maritime_energy_emissions": model.to_maritime_energy_emissions_frame(),
             "output_maritime_investments": model.to_maritime_investment_frame(),
             "output_maritime_robust_frontier": model.to_maritime_robust_frontier_frame(),
+            "output_ambiguity_probability_bounds": (model.to_ambiguity_probability_bounds_frame()),
+            "output_ambiguity_decision_scores": model.to_ambiguity_decision_scores_frame(),
+            "output_ambiguity_worst_case_probabilities": (
+                model.to_ambiguity_worst_case_probabilities_frame()
+            ),
+            "output_selected_ambiguity_aware_decisions": (
+                model.to_selected_ambiguity_decisions_frame()
+            ),
+            "output_ambiguity_excluded_candidates": (
+                model.to_ambiguity_excluded_candidates_frame()
+            ),
         }
         for table_name, dataframe in output_tables.items():
             if dataframe.empty:

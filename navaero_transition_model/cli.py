@@ -4,6 +4,9 @@ import argparse
 from pathlib import Path
 
 from navaero_transition_model.core.database import SQLiteSimulationStore
+from navaero_transition_model.core.decision_logic.loss_law_robust import (
+    AmbiguityRobustNoValidCandidatesError,
+)
 from navaero_transition_model.core.model import NATMModel
 from navaero_transition_model.core.result_exports import DetailedOutputWriter
 from navaero_transition_model.core.scenario import NATMScenario
@@ -59,7 +62,15 @@ def main() -> int:
     config_path = args.config or resolve_case_config(args.case)
     scenario = NATMScenario.from_yaml(config_path)
     model = NATMModel(scenario)
-    history = model.run()
+    try:
+        history = model.run()
+    except AmbiguityRobustNoValidCandidatesError as exc:
+        if args.details_dir is not None:
+            DetailedOutputWriter().export_ambiguity_excluded_candidates(
+                exc.excluded_candidates,
+                args.details_dir,
+            )
+        raise
     summary = model.to_frame()
     sqlite_store = None
 

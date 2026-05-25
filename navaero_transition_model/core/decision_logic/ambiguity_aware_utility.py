@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from collections.abc import Iterable
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -10,6 +11,7 @@ import pandas as pd
 from navaero_transition_model.core.case_inputs.scenario_table import DEFAULT_SCENARIO_ID
 from navaero_transition_model.core.decision_logic.base import (
     DECISION_ATTITUDES,
+    DEPRECATED_DECISION_ATTITUDE_ALIASES,
     CandidateEvaluation,
     clean_scope_value,
 )
@@ -18,6 +20,16 @@ from navaero_transition_model.core.decision_logic.legacy_weighted_utility import
     LegacyWeightedUtilityLogic,
     LegacyWeightedUtilityMaritimeCargoLogic,
     LegacyWeightedUtilityMaritimePassengerLogic,
+)
+from navaero_transition_model.core.decision_logic.loss_law_robust import (
+    AmbiguityRobustNoValidCandidatesError,
+    ProbabilityBounds,
+    belief_set_probability_vector,
+    construct_probability_bounds,
+    load_belief_set_probabilities,
+    mean_probability_vector,
+    score_ambiguity_aware_decisions,
+    select_ambiguity_aware_decision,
 )
 
 if TYPE_CHECKING:
@@ -56,6 +68,60 @@ class CandidateAggregate:
 
 class AmbiguityAwareSelectionMixin:
     """Scenario-set scoring shared by ambiguity-aware decision logic classes."""
+
+    def _uses_loss_law_robust_selection(self, agent) -> bool:
+        del agent
+        return True
+
+    def _loss_law_probability_inputs(self, agent) -> tuple[pd.DataFrame, ProbabilityBounds]:
+        model = agent.model
+        cached_bounds = getattr(model, "_ambiguity_loss_law_probability_bounds", None)
+        cached_probabilities = getattr(model, "_ambiguity_loss_law_probabilities", None)
+        if cached_bounds is not None and cached_probabilities is not None:
+            return cached_probabilities, cached_bounds
+
+        config = model.scenario.ambiguity_aware_decision
+        probability_table_path = config.probability_table_path(model.scenario.base_path)
+        if probability_table_path is None:
+            raise ValueError(
+                "ambiguity_aware_decision.probability_table is required for "
+                "investment_logic=ambiguity_aware_utility",
+            )
+        probabilities = load_belief_set_probabilities(
+            probability_table_path,
+            belief_sets=config.belief_sets,
+            input_format=config.probability_input_format,
+            tolerance=config.probability_tolerance,
+        )
+        bounds = construct_probability_bounds(
+            probabilities,
+            tolerance=config.probability_tolerance,
+        )
+        model._ambiguity_loss_law_probabilities = probabilities
+        model._ambiguity_loss_law_probability_bounds = bounds
+        if config.write_debug_outputs:
+            model.record_ambiguity_probability_bounds(bounds.to_frame().to_dict("records"))
+        return probabilities, bounds
+
+    def _loss_law_probability_bounds(self, agent) -> ProbabilityBounds:
+        return self._loss_law_probability_inputs(agent)[1]
+
+    def _decision_mode(self, agent) -> str:
+        mode = str(getattr(agent, "decision_attitude", "risk_neutral")).strip().lower()
+        if mode in DEPRECATED_DECISION_ATTITUDE_ALIASES:
+            replacement = DEPRECATED_DECISION_ATTITUDE_ALIASES[mode]
+            warnings.warn(
+                f"decision_attitude='{mode}' is deprecated for ambiguity_aware_utility; "
+                f"use '{replacement}' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            mode = replacement
+            agent.decision_attitude = replacement
+        if mode not in {"risk_neutral", "risk_averse_mean", "risk_averse_expected_shortfall"}:
+            mode = "risk_neutral"
+            agent.decision_attitude = mode
+        return mode
 
     def _scenario_probabilities(self, agent) -> dict[str, float]:
         config = agent.model.scenario.ambiguity_aware_decision
@@ -294,26 +360,83 @@ class AmbiguityAwareSelectionMixin:
             return float(policy_signal.clean_fuel_subsidy)
         return float(scenario_value)
 
-    def _select_ambiguity_aware_asset(
+    def _nominal_probabilities_for_bounds(
+        self,
+        agent,
+        bounds: ProbabilityBounds,
+    ) -> dict[str, float] | None:
+        probabilities, _ = self._loss_law_probability_inputs(agent)
+        belief_set = agent.model.scenario.ambiguity_aware_decision.risk_neutral_belief_set
+        if belief_set is not None:
+            return belief_set_probability_vector(probabilities, belief_set)
+        return mean_probability_vector(probabilities)
+
+    def _asset_identifier(self, agent, asset: pd.Series) -> object:
+        return asset.get("aircraft_id", asset.get("vessel_id", ""))
+
+    def _loss_law_decision_row(
+        self,
+        agent,
+        asset: pd.Series,
+        year: int,
+        technology_name: str,
+        scenario_id: str,
+        evaluation: CandidateEvaluation | None,
+        reason: str = "",
+    ) -> dict[str, object]:
+        asset_id = self._asset_identifier(agent, asset)
+        return {
+            "operator_id": getattr(agent, "unique_id", agent.operator_name),
+            "operator_name": agent.operator_name,
+            "asset_id": asset_id,
+            "aircraft_id": asset_id if agent.sector_name == "aviation" else "",
+            "vessel_id": asset_id if agent.sector_name == "maritime" else "",
+            "decision_year": year,
+            "decision_id": technology_name,
+            "technology_id": technology_name,
+            "scenario_id": scenario_id,
+            "npv": evaluation.net_present_value if evaluation is not None else pd.NA,
+            "infeasible_reason": reason,
+        }
+
+    def _select_loss_law_robust_asset(
         self,
         agent,
         asset: pd.Series,
         year: int,
         initial_ets_balance: float | None,
-        fallback_selection,
     ) -> tuple[pd.Series, CandidateEvaluation]:
-        if agent.decision_attitude not in DECISION_ATTITUDES:
-            agent.decision_attitude = "risk_neutral"
-        probabilities = self._scenario_probabilities(agent)
-        aggregates: list[CandidateAggregate] = []
+        config = agent.model.scenario.ambiguity_aware_decision
+        decision_mode = self._decision_mode(agent)
+        bounds = self._loss_law_probability_bounds(agent)
+        nominal_probabilities = self._nominal_probabilities_for_bounds(agent, bounds)
+        midpoint_probabilities = {
+            scenario_id: (bounds.lower[scenario_id] + bounds.upper[scenario_id]) / 2.0
+            for scenario_id in bounds.scenarios
+        }
+        midpoint_total = sum(midpoint_probabilities.values()) or 1.0
+        midpoint_probabilities = {
+            scenario_id: value / midpoint_total
+            for scenario_id, value in midpoint_probabilities.items()
+        }
+        outcomes_by_technology: dict[str, tuple[ScenarioCandidateOutcome, ...]] = {}
+        technology_rows: dict[str, pd.Series] = {}
+        decision_rows: list[dict[str, object]] = []
+
         for _, technology_row in agent.candidate_technology_rows(asset).iterrows():
+            technology_name = str(technology_row["technology_name"])
+            technology_rows[technology_name] = technology_row
             outcomes: list[ScenarioCandidateOutcome] = []
-            for scenario_id, probability in probabilities.items():
+            for scenario_id in bounds.scenarios:
+                probability = (
+                    nominal_probabilities[scenario_id]
+                    if nominal_probabilities is not None
+                    else midpoint_probabilities[scenario_id]
+                )
                 with self._scenario_context(agent, scenario_id, year):
                     evaluation = None
                     score = 0.0
-                    # Scenario-specific availability and price/policy lookups are
-                    # reached through agent.scenario_value while this context is active.
+                    reason = ""
                     if self.is_candidate_available(
                         agent,
                         technology_row,
@@ -328,39 +451,96 @@ class AmbiguityAwareSelectionMixin:
                             initial_ets_balance,
                         )
                         score = self._decision_score(evaluation)
+                    else:
+                        reason = "candidate unavailable in scenario"
+                decision_rows.append(
+                    self._loss_law_decision_row(
+                        agent,
+                        asset,
+                        year,
+                        technology_name,
+                        scenario_id,
+                        evaluation,
+                        reason,
+                    ),
+                )
                 outcomes.append(
                     ScenarioCandidateOutcome(
                         scenario_id=scenario_id,
-                        probability=probability,
+                        probability=float(probability),
                         score=score,
                         evaluation=evaluation,
                     ),
                 )
-            if any(outcome.evaluation is not None for outcome in outcomes):
-                aggregates.append(
-                    self._candidate_aggregate(agent, technology_row, tuple(outcomes)),
+            outcomes_by_technology[technology_name] = tuple(outcomes)
+
+        decision_frame = pd.DataFrame(decision_rows)
+        try:
+            score_result = score_ambiguity_aware_decisions(
+                decision_frame,
+                bounds,
+                decision_mode=decision_mode,
+                tail_alpha=config.tail_alpha,
+                representative_probabilities=nominal_probabilities,
+                tolerance=config.probability_tolerance,
+            )
+        except AmbiguityRobustNoValidCandidatesError as exc:
+            if not exc.excluded_candidates.empty:
+                agent.model.record_ambiguity_excluded_candidates(
+                    exc.excluded_candidates.to_dict("records"),
                 )
+            raise
 
-        if not aggregates:
-            return fallback_selection(agent, asset, year, initial_ets_balance)
-
-        aggregates.sort(
-            key=lambda aggregate: (
-                aggregate.robust_score,
-                aggregate.expected_utility,
-                str(aggregate.technology_row["technology_name"]),
-            ),
-            reverse=True,
+        if not score_result.excluded_candidates.empty:
+            agent.model.record_ambiguity_excluded_candidates(
+                score_result.excluded_candidates.to_dict("records"),
+            )
+        agent.model.record_ambiguity_decision_scores(score_result.scores.to_dict("records"))
+        agent.model.record_ambiguity_worst_case_probabilities(
+            score_result.worst_case_probabilities.to_dict("records"),
         )
-        selected = aggregates[0]
-        selected_technology = str(selected.technology_row["technology_name"])
-        selected_evaluation = self._evaluation_for_application(selected)
+        agent.model.record_selected_ambiguity_decisions(score_result.selected.to_dict("records"))
+
+        selected_decision = select_ambiguity_aware_decision(score_result)
+        selected_technology = str(selected_decision["technology_id"])
+        selected_row = technology_rows[selected_technology]
+        selected_aggregate = self._candidate_aggregate(
+            agent,
+            selected_row,
+            outcomes_by_technology[selected_technology],
+        )
+        selected_evaluation = self._evaluation_for_application(selected_aggregate)
         if selected_evaluation is None:
-            return fallback_selection(agent, asset, year, initial_ets_balance)
+            raise ValueError(
+                "Selected ambiguity-aware robust decision has no complete candidate evaluation",
+            )
+
+        aggregates = [
+            self._candidate_aggregate(agent, technology_row, outcomes_by_technology[name])
+            for name, technology_row in technology_rows.items()
+        ]
         agent.model.record_robust_frontier(
             self._frontier_rows(agent, asset, year, aggregates, selected_technology),
         )
-        return selected.technology_row, selected_evaluation
+        return selected_row, selected_evaluation
+
+    def _select_ambiguity_aware_asset(
+        self,
+        agent,
+        asset: pd.Series,
+        year: int,
+        initial_ets_balance: float | None,
+        fallback_selection,
+    ) -> tuple[pd.Series, CandidateEvaluation]:
+        del fallback_selection
+        if agent.decision_attitude not in DECISION_ATTITUDES:
+            agent.decision_attitude = "risk_neutral"
+        return self._select_loss_law_robust_asset(
+            agent,
+            asset,
+            year,
+            initial_ets_balance,
+        )
 
 
 class AmbiguityAwareUtilityLogic(AmbiguityAwareSelectionMixin, LegacyWeightedUtilityLogic):

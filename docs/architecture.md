@@ -394,9 +394,11 @@ The agent selects the logic by name from the fleet input column:
 - `investment_logic`
 
 Fleet stock may also include `decision_attitude`. Supported values are
-`risk_neutral`, `risk_averse`, and `ambiguity_averse`; missing values default to
-`risk_neutral`. The attitude column is ignored by the legacy logic and only
-affects the ambiguity-aware plugins.
+`risk_neutral`, `risk_averse_mean`, and `risk_averse_expected_shortfall`;
+missing values default to `risk_neutral`. The old `risk_averse` and
+`ambiguity_averse` values are accepted as deprecated aliases for
+`risk_averse_expected_shortfall`. The attitude column is ignored by the legacy
+logic and only affects the ambiguity-aware plugins.
 
 This means future investment/adoption methods can be added without rewriting the
 agent architecture.
@@ -426,22 +428,24 @@ Important behaviors in the current logic:
 - demand-driven yearly capacity planning for growth
 
 The ambiguity-aware extension preserves those calculations but evaluates each
-candidate technology under multiple configured `scenario_id` futures. In the
-initial implementation, economic utility is the decision score used for robust
-selection; the legacy environmental and policy calculations remain available as
-diagnostics and in the legacy utility calculations.
+candidate technology under multiple configured `scenario_id` futures and
+belief-set probabilities. Active ambiguity-aware selection is NPV-based:
+scenario-specific candidate NPVs are passed to a shared loss-law robust
+selection layer, while legacy utility calculations remain available for the
+legacy logic and diagnostics.
 
 Behavioural selection is:
 
-- `risk_neutral`: maximise probability-weighted expected utility
-- `risk_averse`: maximise lower-tail expected-shortfall utility
-- `ambiguity_averse`: maximise worst-case probability-weighted utility over a
-  bounded probability set
+- `risk_neutral`: maximise expected NPV using the mean probability across
+  belief sets, unless a named risk-neutral belief set is configured
+- `risk_averse_mean`: maximise robust worst-case mean NPV over the bounded
+  probability set
+- `risk_averse_expected_shortfall`: maximise robust expected-shortfall NPV over
+  the bounded probability set
 
-This is an ambiguity-aware extension of the existing utility-based fleet
-diffusion model. The model still simulates technology diffusion through fleet
-replacement and growth, but candidate technologies can now be evaluated over a
-set of possible future scenarios.
+For the robust modes, NATM first converts NPV to loss with `loss = -NPV`, finds
+the most adverse admissible probability vector, and converts the robust loss
+score back to the NPV scale. Higher NPV remains better.
 
 ### 7.3 Current growth architecture
 
@@ -529,7 +533,10 @@ The robust frontier outputs are optional and are populated only when an
 ambiguity-aware decision logic records candidate evaluations. They include
 scenario-level candidate utilities, expected utility, robust score, selected
 technology, decision attitude, selected flags, worst-case mean utility, and
-worst-case expected-shortfall utility.
+worst-case expected-shortfall utility. The detailed NPV-based ambiguity-aware
+selection tables are exported separately as `ambiguity_decision_scores.csv`,
+`ambiguity_worst_case_probabilities.csv`, and
+`selected_ambiguity_aware_decisions.csv`.
 
 ## 10. Dashboard Layer
 

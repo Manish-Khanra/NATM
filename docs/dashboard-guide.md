@@ -177,7 +177,10 @@ frontier chart compares candidate technologies as labeled points using
 worst-case mean utility on the x-axis and worst-case expected-shortfall utility
 on the y-axis, and highlights the selected technology. The panel also keeps the
 candidate utility summary and selected-technology shares by year and attitude
-so `risk_neutral` and `risk_averse` behavior can be compared directly.
+so the configured decision attitudes can be compared directly. For
+`investment_logic=ambiguity_aware_utility`, the detailed NPV-based selection
+metrics are written separately in `ambiguity_decision_scores.csv` and
+`selected_ambiguity_aware_decisions.csv`.
 
 The cartographic dashboard keeps the map as the main view and adds a compact
 robust frontier selection summary below the map when robust frontier outputs are

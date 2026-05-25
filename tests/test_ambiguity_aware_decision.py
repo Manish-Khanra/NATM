@@ -48,6 +48,13 @@ def _scenario_frame(rows: list[dict[str, object]]) -> pd.DataFrame:
 
 
 def _append_ambiguity_config(scenario_yaml: Path) -> None:
+    (scenario_yaml.parent / "ambiguity_probabilities.csv").write_text(
+        """scenario,Base,Stress
+baseline,0.6,0.4
+high_fuel_price,0.4,0.6
+""",
+        encoding="utf-8",
+    )
     scenario_yaml.write_text(
         scenario_yaml.read_text(encoding="utf-8")
         + """
@@ -57,14 +64,8 @@ ambiguity_aware_decision:
   scenario_ids:
     - baseline
     - high_fuel_price
-  probabilities:
-    baseline: 0.6
-    high_fuel_price: 0.4
-  ambiguity:
-    enabled: false
-    probability_deviation: 0.0
-  expected_shortfall_alpha: 0.5
-  robust_metric: worst_case_expected_utility
+  probability_table: ambiguity_probabilities.csv
+  tail_alpha: 0.8
 """,
         encoding="utf-8",
     )
@@ -454,6 +455,51 @@ def test_aviation_passenger_ambiguity_logic_writes_robust_frontier(tmp_path: Pat
     assert set(frontier["scenario_id"].unique()) == {"baseline", "high_fuel_price"}
     assert frontier["selected_flag"].any()
     assert {"risk_neutral"} == set(model.to_agent_frame()["decision_attitude"].unique())
+    scores = model.to_ambiguity_decision_scores_frame()
+    assert {
+        "decision_mode",
+        "expected_npv",
+        "robust_worst_case_mean_npv",
+        "robust_expected_shortfall_npv",
+    }.issubset(scores.columns)
+
+
+def test_deprecated_ambiguity_attitudes_alias_to_expected_shortfall(tmp_path: Path) -> None:
+    source_dir = Path(__file__).resolve().parents[1] / "data" / "baseline-passenger-transition"
+    case_dir = tmp_path / "baseline-passenger-transition"
+    shutil.copytree(source_dir, case_dir)
+
+    fleet_path = case_dir / "aviation_fleet_stock.csv"
+    fleet = pd.read_csv(fleet_path).head(1).copy()
+    fleet["investment_logic"] = "ambiguity_aware_utility"
+    fleet["decision_attitude"] = "ambiguity_averse"
+    fleet["Age (Years)"] = 35.0
+    fleet.to_csv(fleet_path, index=False)
+
+    scenario = NATMScenario.from_yaml(case_dir / "scenario.yaml")
+    model = NATMModel(scenario, seed=42)
+    agent = model.get_sector_agents("aviation")[0]
+    aircraft = agent.fleet.frame.iloc[0]
+
+    with pytest.warns(DeprecationWarning, match="decision_attitude='ambiguity_averse'"):
+        agent.decision_logic.select_technology_for_aircraft(
+            agent,
+            aircraft,
+            scenario.start_year,
+            initial_ets_balance=agent.remaining_ets_allowance,
+        )
+
+    assert agent.decision_attitude == "risk_averse_expected_shortfall"
+
+
+def test_ambiguity_aware_utility_requires_probability_table(tmp_path: Path) -> None:
+    source_dir = Path(__file__).resolve().parents[1] / "data" / "baseline-passenger-transition"
+    case_dir = tmp_path / "baseline-passenger-transition"
+    shutil.copytree(source_dir, case_dir)
+    (case_dir / "ambiguity_probabilities.csv").unlink()
+
+    with pytest.raises(ValueError, match="Ambiguity probability table not found"):
+        NATMScenario.from_yaml(case_dir / "scenario.yaml")
 
 
 @pytest.mark.parametrize(
@@ -513,7 +559,7 @@ def test_generalized_ambiguity_logic_writes_robust_frontier(
     fleet_path = case_dir / fleet_filename
     fleet = pd.read_csv(fleet_path).head(1).copy()
     fleet["investment_logic"] = logic_name
-    fleet["decision_attitude"] = "risk_averse"
+    fleet["decision_attitude"] = "risk_averse_expected_shortfall"
     fleet["Age (Years)"] = 35.0
     fleet.to_csv(fleet_path, index=False)
 
@@ -539,12 +585,14 @@ def test_generalized_ambiguity_logic_writes_robust_frontier(
     frontier = getattr(model, frontier_method)()
     assert not frontier.empty
     assert {logic_name} == set(model.to_agent_frame()["investment_logic"].unique())
-    assert {"risk_averse"} == set(model.to_agent_frame()["decision_attitude"].unique())
+    assert {"risk_averse_expected_shortfall"} == set(
+        model.to_agent_frame()["decision_attitude"].unique(),
+    )
     assert set(frontier["scenario_id"].unique()) == {"baseline", "high_fuel_price"}
     assert frontier["selected_flag"].any()
 
 
-def test_risk_attitudes_comparison_case_shows_distinct_first_choices() -> None:
+def test_risk_attitudes_comparison_case_uses_three_npv_modes() -> None:
     case_dir = Path(__file__).resolve().parents[1] / "data" / "risk-attitudes-comparison"
     case_inputs = load_aviation_passenger_case(case_dir)
     scenario = NATMScenario.from_yaml(case_dir / "scenario.yaml")
@@ -554,8 +602,8 @@ def test_risk_attitudes_comparison_case_shows_distinct_first_choices() -> None:
     assert case_inputs.fleet["operator_name"].nunique() == 3
     assert set(case_inputs.fleet["decision_attitude"]) == {
         "risk_neutral",
-        "risk_averse",
-        "ambiguity_averse",
+        "risk_averse_mean",
+        "risk_averse_expected_shortfall",
     }
     assert set(case_inputs.scenario_long["scenario_id"].dropna().unique()) == {
         "baseline",
@@ -583,5 +631,19 @@ def test_risk_attitudes_comparison_case_shows_distinct_first_choices() -> None:
     selections = dict(
         zip(selected["decision_attitude"], selected["selected_technology"], strict=False),
     )
-    assert selections.keys() == {"risk_neutral", "risk_averse", "ambiguity_averse"}
-    assert len(set(selections.values())) == 3
+    assert selections.keys() == {
+        "risk_neutral",
+        "risk_averse_mean",
+        "risk_averse_expected_shortfall",
+    }
+    scores = model.to_ambiguity_decision_scores_frame()
+    assert set(scores["decision_mode"]) == {
+        "risk_neutral",
+        "risk_averse_mean",
+        "risk_averse_expected_shortfall",
+    }
+    assert {
+        "expected_npv",
+        "robust_worst_case_mean_npv",
+        "robust_expected_shortfall_npv",
+    }.issubset(scores.columns)

@@ -191,6 +191,10 @@ def run_named_example(
 ) -> int:
     try:
         from navaero_transition_model.core.model import NATMModel
+        from navaero_transition_model.core.decision_logic.loss_law_robust import (
+            AmbiguityRobustNoValidCandidatesError,
+        )
+        from navaero_transition_model.core.result_exports import DetailedOutputWriter
     except ModuleNotFoundError as exc:
         if exc.name == "mesa":
             raise SystemExit(
@@ -202,8 +206,15 @@ def run_named_example(
     selected_case = selected_case_name(example_name, case_name)
     scenario = load_scenario_for_case(selected_case)
     model = NATMModel(scenario)
-    history = model.run()
     output_dir = create_output_folder(output_name or example_name)
+    try:
+        history = model.run()
+    except AmbiguityRobustNoValidCandidatesError as exc:
+        DetailedOutputWriter().export_ambiguity_excluded_candidates(
+            exc.excluded_candidates,
+            output_dir,
+        )
+        raise
     sqlite_path = export_run_outputs(
         model=model,
         scenario=scenario,

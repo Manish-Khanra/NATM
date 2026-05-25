@@ -81,6 +81,14 @@ class AmbiguityAwareDecisionConfig:
     probability_deviation: float = 0.0
     expected_shortfall_alpha: float = 0.2
     robust_metric: str = "worst_case_expected_shortfall"
+    risk_metric: str | None = None
+    probability_table: str | None = None
+    belief_sets: tuple[str, ...] = ()
+    probability_input_format: str = "auto"
+    tail_alpha: float = 0.95
+    probability_tolerance: float = 1e-8
+    write_debug_outputs: bool = True
+    risk_neutral_belief_set: str | None = None
 
     @classmethod
     def from_dict(cls, payload: dict | None) -> AmbiguityAwareDecisionConfig:
@@ -95,36 +103,45 @@ class AmbiguityAwareDecisionConfig:
         scenario_ids = tuple(
             str(item).strip() for item in payload.get("scenario_ids", ()) if str(item).strip()
         )
-        if not scenario_ids:
-            raise ValueError("ambiguity_aware_decision.scenario_ids must not be empty")
-
         raw_probabilities = payload.get("probabilities")
-        if not isinstance(raw_probabilities, dict):
-            raise ValueError("ambiguity_aware_decision.probabilities must be a mapping")
-        missing = [
-            scenario_id for scenario_id in scenario_ids if scenario_id not in raw_probabilities
-        ]
-        if missing:
-            missing_text = ", ".join(missing)
-            raise ValueError(
-                f"ambiguity_aware_decision.probabilities is missing entries for: {missing_text}",
-            )
-        probabilities = {
-            scenario_id: float(raw_probabilities[scenario_id]) for scenario_id in scenario_ids
-        }
-        total_probability = sum(probabilities.values())
-        if total_probability <= 0.0:
-            raise ValueError("ambiguity_aware_decision probabilities must sum to a positive value")
-        if abs(total_probability - 1.0) > 1e-9:
-            warnings.warn(
-                "ambiguity_aware_decision probabilities do not sum to 1.0; normalizing.",
-                RuntimeWarning,
-                stacklevel=2,
-            )
+        if raw_probabilities is None:
+            probabilities = {scenario_id: 1.0 / len(scenario_ids) for scenario_id in scenario_ids}
+        else:
+            if not isinstance(raw_probabilities, dict):
+                raise ValueError("ambiguity_aware_decision.probabilities must be a mapping")
+            if not scenario_ids:
+                scenario_ids = tuple(
+                    str(scenario_id).strip()
+                    for scenario_id in raw_probabilities
+                    if str(scenario_id).strip()
+                )
+            missing = [
+                scenario_id for scenario_id in scenario_ids if scenario_id not in raw_probabilities
+            ]
+            if missing:
+                missing_text = ", ".join(missing)
+                raise ValueError(
+                    "ambiguity_aware_decision.probabilities is missing entries for: "
+                    f"{missing_text}",
+                )
             probabilities = {
-                scenario_id: value / total_probability
-                for scenario_id, value in probabilities.items()
+                scenario_id: float(raw_probabilities[scenario_id]) for scenario_id in scenario_ids
             }
+            total_probability = sum(probabilities.values())
+            if total_probability <= 0.0:
+                raise ValueError(
+                    "ambiguity_aware_decision probabilities must sum to a positive value",
+                )
+            if abs(total_probability - 1.0) > 1e-9:
+                warnings.warn(
+                    "ambiguity_aware_decision probabilities do not sum to 1.0; normalizing.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+                probabilities = {
+                    scenario_id: value / total_probability
+                    for scenario_id, value in probabilities.items()
+                }
 
         ambiguity_payload = payload.get("ambiguity") or {}
         if not isinstance(ambiguity_payload, dict):
@@ -151,6 +168,39 @@ class AmbiguityAwareDecisionConfig:
                 f"Unsupported robust_metric '{robust_metric}'. Supported values: {supported_text}",
             )
 
+        raw_risk_metric = payload.get("risk_metric")
+        risk_metric = str(raw_risk_metric).strip() if raw_risk_metric is not None else None
+        supported_risk_metrics = {"worst_case_mean", "expected_shortfall"}
+        if risk_metric is not None and risk_metric not in supported_risk_metrics:
+            supported_text = ", ".join(sorted(supported_risk_metrics))
+            raise ValueError(
+                f"Unsupported ambiguity_aware_decision.risk_metric '{risk_metric}'. "
+                f"Supported values: {supported_text}",
+            )
+        if risk_metric is not None:
+            warnings.warn(
+                "ambiguity_aware_decision.risk_metric is deprecated; "
+                "use fleet decision_attitude values risk_neutral, risk_averse_mean, "
+                "or risk_averse_expected_shortfall to select the NPV-based mode.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+        probability_table = _optional_text(payload.get("probability_table"))
+        if not scenario_ids:
+            scenario_ids = ("baseline",)
+            probabilities = {"baseline": 1.0}
+
+        raw_belief_sets = payload.get("belief_sets") or ()
+        belief_sets = tuple(str(item).strip() for item in raw_belief_sets if str(item).strip())
+        probability_input_format = str(payload.get("probability_input_format", "auto")).strip()
+        tail_alpha = float(payload.get("tail_alpha", 0.95))
+        if not 0.0 < tail_alpha < 1.0:
+            raise ValueError("ambiguity_aware_decision.tail_alpha must be in (0, 1)")
+        probability_tolerance = float(payload.get("probability_tolerance", 1e-8))
+        if probability_tolerance <= 0.0:
+            raise ValueError("ambiguity_aware_decision.probability_tolerance must be positive")
+
         return cls(
             enabled=True,
             scenario_ids=scenario_ids,
@@ -159,7 +209,23 @@ class AmbiguityAwareDecisionConfig:
             probability_deviation=probability_deviation,
             expected_shortfall_alpha=expected_shortfall_alpha,
             robust_metric=robust_metric,
+            risk_metric=risk_metric,
+            probability_table=probability_table,
+            belief_sets=belief_sets,
+            probability_input_format=probability_input_format,
+            tail_alpha=tail_alpha,
+            probability_tolerance=probability_tolerance,
+            write_debug_outputs=bool(payload.get("write_debug_outputs", True)),
+            risk_neutral_belief_set=_optional_text(payload.get("risk_neutral_belief_set")),
         )
+
+    def probability_table_path(self, base_path: Path) -> Path | None:
+        if self.probability_table is None:
+            return None
+        table_path = Path(self.probability_table)
+        if not table_path.is_absolute():
+            table_path = base_path / table_path
+        return table_path.resolve()
 
 
 @dataclass
@@ -252,6 +318,11 @@ class NATMScenario:
         payload = yaml.safe_load(scenario_path.read_text(encoding="utf-8"))
         scenario = cls.from_dict(payload)
         scenario.base_path = scenario_path.parent.resolve()
+        probability_table_path = scenario.ambiguity_aware_decision.probability_table_path(
+            scenario.base_path,
+        )
+        if probability_table_path is not None and not probability_table_path.exists():
+            raise ValueError(f"Ambiguity probability table not found: {probability_table_path}")
         return scenario
 
 

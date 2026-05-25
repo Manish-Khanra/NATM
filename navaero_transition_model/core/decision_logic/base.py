@@ -20,7 +20,19 @@ if TYPE_CHECKING:
     )
 
 
-DECISION_ATTITUDES = ("risk_neutral", "risk_averse", "ambiguity_averse")
+ACTIVE_DECISION_ATTITUDES = (
+    "risk_neutral",
+    "risk_averse_mean",
+    "risk_averse_expected_shortfall",
+)
+DEPRECATED_DECISION_ATTITUDE_ALIASES = {
+    "risk_averse": "risk_averse_expected_shortfall",
+    "ambiguity_averse": "risk_averse_expected_shortfall",
+}
+DECISION_ATTITUDES = (
+    *ACTIVE_DECISION_ATTITUDES,
+    *DEPRECATED_DECISION_ATTITUDE_ALIASES,
+)
 
 
 def clamp(value: float, minimum: float = 0.0, maximum: float = 1.0) -> float:

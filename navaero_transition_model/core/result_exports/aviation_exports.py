@@ -259,8 +259,27 @@ class DetailedOutputWriter:
             "maritime_energy_emissions.csv": MaritimeEnergyEmissionsExporter().export(model),
             "maritime_investments.csv": MaritimeInvestmentExporter().export(model),
             "maritime_robust_frontier.csv": model.to_maritime_robust_frontier_frame(),
+            "ambiguity_probability_bounds.csv": model.to_ambiguity_probability_bounds_frame(),
+            "ambiguity_decision_scores.csv": model.to_ambiguity_decision_scores_frame(),
+            "ambiguity_worst_case_probabilities.csv": (
+                model.to_ambiguity_worst_case_probabilities_frame()
+            ),
+            "selected_ambiguity_aware_decisions.csv": (
+                model.to_selected_ambiguity_decisions_frame()
+            ),
+            "ambiguity_excluded_candidates.csv": model.to_ambiguity_excluded_candidates_frame(),
         }
         for filename, dataframe in detail_frames.items():
             if dataframe.empty:
                 continue
             dataframe.to_csv(output_dir / filename, index=False)
+
+    def export_ambiguity_excluded_candidates(
+        self,
+        excluded_candidates: pd.DataFrame,
+        output_dir: Path,
+    ) -> None:
+        if excluded_candidates.empty:
+            return
+        output_dir.mkdir(parents=True, exist_ok=True)
+        excluded_candidates.to_csv(output_dir / "ambiguity_excluded_candidates.csv", index=False)

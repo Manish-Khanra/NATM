@@ -60,10 +60,13 @@ def robust_frontier_loss_summary(
 
     has_npv = "candidate_npv" in frame.columns and frame["candidate_npv"].notna().any()
     if has_npv:
-        frame["npv_loss_eur"] = frame.groupby(
-            scenario_group,
-            dropna=False,
-        )["candidate_npv"].transform("max") - frame["candidate_npv"]
+        frame["npv_loss_eur"] = (
+            frame.groupby(
+                scenario_group,
+                dropna=False,
+            )["candidate_npv"].transform("max")
+            - frame["candidate_npv"]
+        )
 
     decision_candidate_columns = [*decision_columns, "candidate_technology"]
     rows: list[dict[str, object]] = []

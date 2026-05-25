@@ -1,0 +1,4 @@
+scenario,Base,Electricity_based,Hydrogen_based,Conservative
+baseline,0.40,0.25,0.35,0.55
+high_fuel_price,0.35,0.50,0.25,0.25
+delayed_infrastructure,0.25,0.25,0.40,0.20

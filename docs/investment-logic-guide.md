@@ -1,8 +1,8 @@
 # Investment Logic Guide
 
-This guide shows how to configure `investment_logic` and `decision_attitude`
-for legacy, risk-neutral, risk-averse, and ambiguity-averse simulations. The
-same public strategy names apply to all four model types:
+This guide shows the canonical `investment_logic` and `decision_attitude`
+settings for NATM. The same public strategy names apply to all four model
+types:
 
 - aviation passenger
 - aviation cargo
@@ -11,8 +11,8 @@ same public strategy names apply to all four model types:
 
 ## Fleet Stock Columns
 
-Use `legacy_weighted_utility` when you want the existing weighted-utility
-behavior:
+Use `legacy_weighted_utility` when you want the existing deterministic
+weighted-utility behaviour:
 
 ```csv
 investment_logic,decision_attitude
@@ -20,25 +20,34 @@ legacy_weighted_utility,risk_neutral
 ```
 
 Use `ambiguity_aware_utility` when candidate technologies should be evaluated
-over a configured set of future scenarios:
+across scenario-specific NPVs and belief-set probabilities:
 
 ```csv
 investment_logic,decision_attitude
 ambiguity_aware_utility,risk_neutral
-ambiguity_aware_utility,risk_averse
-ambiguity_aware_utility,ambiguity_averse
+ambiguity_aware_utility,risk_averse_mean
+ambiguity_aware_utility,risk_averse_expected_shortfall
 ```
 
-The allowed `decision_attitude` values are:
+The active `decision_attitude` values for `ambiguity_aware_utility` are:
 
-- `risk_neutral`: selects the technology with the highest expected utility
-- `risk_averse`: selects the technology with the best probability-weighted
-  mean utility over the worst alpha probability mass
-- `ambiguity_averse`: selects the technology with the best worst-case expected
-  shortfall utility under the configured probability ambiguity set
+- `risk_neutral`: selects the highest expected NPV using a representative
+  probability vector. By default this is the mean probability across all belief
+  sets.
+- `risk_averse_mean`: selects the highest robust worst-case mean NPV. NATM
+  converts NPV to loss with `loss = -NPV`, finds the admissible probability
+  vector that maximises expected loss, and converts the result back to NPV.
+- `risk_averse_expected_shortfall`: selects the highest robust
+  expected-shortfall NPV. NATM again works on the loss scale and evaluates the
+  worst tail under the most adverse admissible probability vector.
+
+Older `decision_attitude` values remain accepted as deprecated aliases:
+
+- `risk_averse` -> `risk_averse_expected_shortfall`
+- `ambiguity_averse` -> `risk_averse_expected_shortfall`
 
 If `decision_attitude` is missing, NATM defaults to `risk_neutral`. The column
-only changes behavior for `ambiguity_aware_utility`; legacy weighted-utility
+only changes behaviour for `ambiguity_aware_utility`; legacy weighted-utility
 decisions are unchanged.
 
 Older sector-specific investment-logic names remain accepted as aliases for
@@ -49,7 +58,9 @@ existing cases, but new input files should use only:
 
 ## Scenario YAML
 
-Add the ambiguity-aware scenario ensemble to `scenario.yaml`:
+For `ambiguity_aware_utility`, add an `ambiguity_aware_decision` block with a
+belief-set probability table. The table is mandatory for the NPV-based
+ambiguity-aware strategy.
 
 ```yaml
 ambiguity_aware_decision:
@@ -58,25 +69,106 @@ ambiguity_aware_decision:
     - baseline
     - high_fuel_price
     - delayed_infrastructure
-  probabilities:
-    baseline: 0.5
-    high_fuel_price: 0.3
-    delayed_infrastructure: 0.2
-  ambiguity:
-    enabled: true
-    probability_deviation: 0.1
-  expected_shortfall_alpha: 0.2
-  robust_metric: worst_case_expected_shortfall
+  probability_table: ambiguity_probabilities.csv
+  tail_alpha: 0.95
 ```
 
-`expected_shortfall_alpha: 0.2` means the downside-sensitive criterion uses the
-worst 20 percent probability mass. The default ambiguity-averse metric is
-`worst_case_expected_shortfall`. To make ambiguity-averse actors use worst-case
-mean utility instead, set:
+`tail_alpha` is the confidence level for
+`risk_averse_expected_shortfall`. For example, `tail_alpha: 0.95` means the
+worst 5 percent tail.
+
+By default, risk-neutral actors use the mean scenario probability across all
+belief sets:
+
+```text
+p_mean[s] = mean_b p[s,b]
+```
+
+To make risk-neutral actors use one named belief set instead, add:
 
 ```yaml
-robust_metric: worst_case_expected_utility
+risk_neutral_belief_set: Base
 ```
+
+`ambiguity_aware_decision.risk_metric` is deprecated as an active selector.
+Selection is controlled by the fleet-stock `decision_attitude` value.
+
+## Belief-Set Probability Table
+
+The probability table contains several plausible belief sets over the same
+scenario space. NATM validates every belief set and constructs probability
+bounds:
+
+```text
+p_lower[s] = min_b p[s,b]
+p_upper[s] = max_b p[s,b]
+Q = {q: p_lower[s] <= q[s] <= p_upper[s], sum_s q[s] = 1}
+```
+
+Wide probability table example:
+
+```csv
+scenario,Base,Electricity_based,Hydrogen_based,Conservative
+baseline,0.40,0.25,0.35,0.55
+high_fuel_price,0.35,0.50,0.25,0.25
+delayed_infrastructure,0.25,0.25,0.40,0.20
+```
+
+Long probability table example:
+
+```csv
+scenario,belief_set,probability
+baseline,Base,0.40
+high_fuel_price,Base,0.35
+delayed_infrastructure,Base,0.25
+baseline,Electricity_based,0.25
+high_fuel_price,Electricity_based,0.50
+delayed_infrastructure,Electricity_based,0.25
+```
+
+Every belief set must cover the same scenarios, each belief-set probability
+must be numeric and between 0 and 1, and each belief set must sum to 1.
+
+## Decision Metrics
+
+For every candidate technology `d` and scenario `s`, NATM evaluates scenario
+NPV:
+
+```text
+NPV[d,s]
+```
+
+Risk-neutral mode uses expected NPV directly:
+
+```text
+expected_npv[d] = sum_s p_mean[s] * NPV[d,s]
+selected = argmax_d expected_npv[d]
+```
+
+Risk-averse mean mode converts NPV to loss and evaluates the worst admissible
+mean loss:
+
+```text
+loss[d,s] = -NPV[d,s]
+robust_mean_loss[d] = max_q sum_s q[s] * loss[d,s]
+robust_worst_case_mean_npv[d] = -robust_mean_loss[d]
+selected = argmax_d robust_worst_case_mean_npv[d]
+```
+
+Risk-averse expected-shortfall mode also works on the loss scale:
+
+```text
+robust_es_loss[d] = max_q ES_alpha(loss[d,.], q)
+robust_expected_shortfall_npv[d] = -robust_es_loss[d]
+selected = argmax_d robust_expected_shortfall_npv[d]
+```
+
+On the NPV scale, higher is better. On the loss scale, lower is better. NATM
+does not select the highest single-scenario NPV.
+
+If a candidate has missing or infeasible NPV in any required scenario, it is
+excluded from robust selection for that decision context and recorded in
+`ambiguity_excluded_candidates.csv`. Missing NPV is never filled with zero.
 
 ## Scenario CSV
 
@@ -98,29 +190,53 @@ Good scenario-specific variables include fuel prices, carbon prices,
 technology price indices, clean-fuel availability, infrastructure availability,
 mandates, and subsidies.
 
+## Outputs
+
+When `ambiguity_aware_utility` runs, NATM writes:
+
+- `ambiguity_probability_bounds.csv`
+- `ambiguity_decision_scores.csv`
+- `ambiguity_worst_case_probabilities.csv`
+- `selected_ambiguity_aware_decisions.csv`
+- `ambiguity_excluded_candidates.csv` when candidates are excluded
+- `aviation_robust_frontier.csv` or `maritime_robust_frontier.csv`
+
+The NPV score outputs include:
+
+- `decision_mode`
+- `expected_npv`
+- `robust_mean_loss`
+- `robust_worst_case_mean_npv`
+- `robust_es_loss`
+- `robust_expected_shortfall_npv`
+- `selected`
+- `rank`
+
+The probability-vector output records the representative risk-neutral vector,
+the worst-case vector for `risk_averse_mean`, and the worst-case vector plus
+tail weights for `risk_averse_expected_shortfall`.
+
 ## Workflow
 
 1. Choose or copy a case folder under `data/`.
 2. In `aviation_fleet_stock.csv` or `maritime_fleet_stock.csv`, set
    `investment_logic=ambiguity_aware_utility`.
-3. Set `decision_attitude` to `risk_neutral`, `risk_averse`, or
-   `ambiguity_averse`.
-4. Add `ambiguity_aware_decision` to `scenario.yaml`.
-5. Add optional `scenario_id` rows to `aviation_scenario.csv` or
-   `maritime_scenario.csv`.
+3. Set `decision_attitude` to `risk_neutral`, `risk_averse_mean`, or
+   `risk_averse_expected_shortfall`.
+4. Add `ambiguity_aware_decision.probability_table` to `scenario.yaml`.
+5. Add `scenario_id` rows to `aviation_scenario.csv` or `maritime_scenario.csv`
+   when scenario values differ.
 6. Run the model:
 
 ```powershell
 natm --case <case-name> --details-dir simulation_results/<run-name>
 ```
 
-7. Inspect `aviation_robust_frontier.csv` or `maritime_robust_frontier.csv`.
-8. Open the common dashboard to view the robust frontier chart:
+7. Inspect `ambiguity_decision_scores.csv`,
+   `selected_ambiguity_aware_decisions.csv`, and the sector robust frontier
+   output.
+8. Open the common dashboard to view robust frontier and loss diagnostics:
 
 ```powershell
 solara run dashboard_examples/common_case_dashboard.py
 ```
-
-The robust frontier outputs include `expected_utility`,
-`expected_shortfall_utility`, `worst_case_utility`,
-`worst_case_expected_shortfall_utility`, `robust_score`, and `selected_flag`.

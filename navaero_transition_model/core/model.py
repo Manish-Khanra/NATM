@@ -93,6 +93,11 @@ class NATMModel(mesa.Model):
         self.maritime_cargo_inputs = None
         self.maritime_passenger_inputs = None
         self._robust_frontier_rows: list[dict[str, object]] = []
+        self._ambiguity_probability_bounds_rows: list[dict[str, object]] = []
+        self._ambiguity_decision_score_rows: list[dict[str, object]] = []
+        self._ambiguity_worst_case_probability_rows: list[dict[str, object]] = []
+        self._selected_ambiguity_decision_rows: list[dict[str, object]] = []
+        self._ambiguity_excluded_candidate_rows: list[dict[str, object]] = []
 
         for sector_name in self.enabled_sectors:
             if sector_name == "aviation":
@@ -652,3 +657,34 @@ class NATMModel(mesa.Model):
         if frame.empty or "sector_name" not in frame.columns:
             return pd.DataFrame()
         return frame.loc[frame["sector_name"].eq("maritime")].copy()
+
+    def record_ambiguity_probability_bounds(self, rows: list[dict[str, object]]) -> None:
+        if not self._ambiguity_probability_bounds_rows:
+            self._ambiguity_probability_bounds_rows.extend(rows)
+
+    def record_ambiguity_decision_scores(self, rows: list[dict[str, object]]) -> None:
+        self._ambiguity_decision_score_rows.extend(rows)
+
+    def record_ambiguity_worst_case_probabilities(self, rows: list[dict[str, object]]) -> None:
+        self._ambiguity_worst_case_probability_rows.extend(rows)
+
+    def record_selected_ambiguity_decisions(self, rows: list[dict[str, object]]) -> None:
+        self._selected_ambiguity_decision_rows.extend(rows)
+
+    def record_ambiguity_excluded_candidates(self, rows: list[dict[str, object]]) -> None:
+        self._ambiguity_excluded_candidate_rows.extend(rows)
+
+    def to_ambiguity_probability_bounds_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(self._ambiguity_probability_bounds_rows)
+
+    def to_ambiguity_decision_scores_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(self._ambiguity_decision_score_rows)
+
+    def to_ambiguity_worst_case_probabilities_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(self._ambiguity_worst_case_probability_rows)
+
+    def to_selected_ambiguity_decisions_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(self._selected_ambiguity_decision_rows)
+
+    def to_ambiguity_excluded_candidates_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(self._ambiguity_excluded_candidate_rows)

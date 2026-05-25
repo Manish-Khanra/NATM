@@ -6,6 +6,12 @@ sectors:
   aviation:
     - passenger
 
+ambiguity_aware_decision:
+  enabled: true
+  scenario_ids:
+    - baseline
+  probability_table: ambiguity_probabilities.csv
+
 preprocessing:
   aviation:
     enabled: true
