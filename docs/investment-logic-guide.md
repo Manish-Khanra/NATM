@@ -166,6 +166,23 @@ selected = argmax_d robust_expected_shortfall_npv[d]
 On the NPV scale, higher is better. On the loss scale, lower is better. NATM
 does not select the highest single-scenario NPV.
 
+`robust_es_loss` is solved as a single joint linear program over both the
+adverse probability vector `q` and the CVaR tail-weight vector `w` (via
+`scipy.optimize.linprog`), rather than reusing the probability vector that
+maximizes worst-case mean loss:
+
+```text
+maximize   w . loss
+subject to q in [p_lower, p_upper], sum(q) = 1
+           w >= 0, sum(w) = 1
+           beta * w <= q   (elementwise, beta = 1 - tail_alpha)
+```
+
+`robust_mean_loss` keeps its own simpler closed-form solver: for interval
+probability bounds, the adverse mean-loss vector is the extreme point that
+greedily assigns as much probability as bounds allow to the highest-loss
+scenarios in order.
+
 If a candidate has missing or infeasible NPV in any required scenario, it is
 excluded from robust selection for that decision context and recorded in
 `ambiguity_excluded_candidates.csv`. Missing NPV is never filled with zero.

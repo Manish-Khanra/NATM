@@ -4,7 +4,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
+from scipy.optimize import linprog
 
 KNOWN_WIDE_METADATA_COLUMNS = {
     "scenario",
@@ -319,14 +321,13 @@ def solve_worst_case_expected_shortfall_loss(
     if not 0.0 < tail_alpha < 1.0:
         raise ValueError("ambiguity_aware_decision.tail_alpha must be in (0, 1)")
     beta = 1.0 - float(tail_alpha)
-    q = _adverse_probability_vector(losses, bounds, tolerance=tolerance)
-    _validate_admissible_probabilities(q, bounds, tolerance=tolerance)
-    tail_loss, tail_weights = _expected_shortfall_for_probabilities(
+    q, tail_weights, tail_loss = _solve_worst_case_expected_shortfall_lp(
         losses,
-        q,
+        bounds,
         beta=beta,
         tolerance=tolerance,
     )
+    _validate_admissible_probabilities(q, bounds, tolerance=tolerance)
     _validate_tail_weights(tail_weights, q, beta=beta, tolerance=tolerance)
     return RobustMetricResult(
         robust_mean_loss=None,
@@ -575,29 +576,80 @@ def _adverse_probability_vector(
     return _clean_probability_vector(q)
 
 
-def _expected_shortfall_for_probabilities(
+def _solve_worst_case_expected_shortfall_lp(
     losses: dict[str, float],
-    probabilities: dict[str, float],
+    bounds: ProbabilityBounds,
     *,
     beta: float,
     tolerance: float,
-) -> tuple[float, dict[str, float]]:
-    remaining = beta
-    tail_loss_sum = 0.0
-    weights = {scenario: 0.0 for scenario in probabilities}
-    for scenario in sorted(probabilities, key=lambda item: losses[item], reverse=True):
-        take = min(probabilities[scenario], remaining)
-        if take <= tolerance:
-            continue
-        weights[scenario] = take / beta
-        tail_loss_sum += take * losses[scenario]
-        remaining -= take
-        if remaining <= tolerance:
-            break
-    if remaining > max(tolerance, 1e-12):
-        raise ValueError("Could not fill expected-shortfall tail mass")
-    weights = _clean_probability_vector(weights)
-    return tail_loss_sum / beta, weights
+) -> tuple[dict[str, float], dict[str, float], float]:
+    """Jointly solve for the adverse probability vector and CVaR tail-weights.
+
+    Worst-case expected shortfall (CVaR_beta) is itself defined as a max over
+    tail-weight vectors w for a *fixed* probability vector q. Optimizing over
+    q as well turns this into one linear program in (q, w) rather than reusing
+    the probability vector that maximizes worst-case *mean* loss and hoping it
+    is also ES-optimal:
+
+        maximize   w . loss
+        subject to q in [lower, upper], sum(q) = 1
+                   w >= 0, sum(w) = 1
+                   beta * w <= q   (elementwise)
+
+    The last constraint is CVaR's dual feasibility condition: a scenario can
+    only receive tail weight in proportion to how much probability mass q
+    actually places on it.
+    """
+    scenarios = list(bounds.scenarios)
+    scenario_count = len(scenarios)
+    loss_values = np.array([losses[scenario] for scenario in scenarios], dtype=float)
+    lower_bounds = np.array([bounds.lower[scenario] for scenario in scenarios], dtype=float)
+    upper_bounds = np.array([bounds.upper[scenario] for scenario in scenarios], dtype=float)
+
+    # linprog minimizes, so minimize -(w . loss) to maximize w . loss. q carries no cost.
+    objective = np.concatenate([np.zeros(scenario_count), -loss_values])
+
+    equality_matrix = np.zeros((2, 2 * scenario_count))
+    equality_matrix[0, :scenario_count] = 1.0  # sum(q) == 1
+    equality_matrix[1, scenario_count:] = 1.0  # sum(w) == 1
+    equality_rhs = np.array([1.0, 1.0])
+
+    # beta * w_i - q_i <= 0  <=>  beta * w_i <= q_i
+    inequality_matrix = np.zeros((scenario_count, 2 * scenario_count))
+    for index in range(scenario_count):
+        inequality_matrix[index, index] = -1.0
+        inequality_matrix[index, scenario_count + index] = beta
+    inequality_rhs = np.zeros(scenario_count)
+
+    variable_bounds = [
+        (float(lower_bounds[index]), float(upper_bounds[index]))
+        for index in range(scenario_count)
+    ]
+    variable_bounds.extend((0.0, 1.0) for _ in range(scenario_count))
+
+    result = linprog(
+        c=objective,
+        A_ub=inequality_matrix,
+        b_ub=inequality_rhs,
+        A_eq=equality_matrix,
+        b_eq=equality_rhs,
+        bounds=variable_bounds,
+        method="highs",
+    )
+    if not result.success:
+        raise ValueError(f"Robust expected-shortfall optimization failed: {result.message}")
+
+    q_values = result.x[:scenario_count]
+    tail_weight_values = result.x[scenario_count:]
+    tail_loss = float(np.dot(tail_weight_values, loss_values))
+    q = _clean_probability_vector(
+        {scenario: float(q_values[index]) for index, scenario in enumerate(scenarios)},
+    )
+    tail_weights = _clean_probability_vector(
+        {scenario: float(tail_weight_values[index]) for index, scenario in enumerate(scenarios)},
+    )
+    del tolerance
+    return q, tail_weights, tail_loss
 
 
 def _validate_loss_scenarios(losses: dict[str, float], bounds: ProbabilityBounds) -> None:
