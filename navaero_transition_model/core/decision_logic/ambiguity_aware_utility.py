@@ -64,6 +64,8 @@ class CandidateAggregate:
     worst_case_utility: float
     expected_shortfall_utility: float
     worst_case_expected_shortfall_utility: float
+    decision_key: str = ""
+    action: str = "invest"
 
 
 class AmbiguityAwareSelectionMixin:
@@ -238,6 +240,9 @@ class AmbiguityAwareSelectionMixin:
         agent,
         technology_row: pd.Series,
         outcomes: tuple[ScenarioCandidateOutcome, ...],
+        *,
+        decision_key: str | None = None,
+        action: str = "invest",
     ) -> CandidateAggregate:
         config = agent.model.scenario.ambiguity_aware_decision
         expected = self._weighted_expected_score(outcomes)
@@ -269,6 +274,8 @@ class AmbiguityAwareSelectionMixin:
             worst_case_utility=worst_case,
             expected_shortfall_utility=expected_shortfall,
             worst_case_expected_shortfall_utility=worst_case_expected_shortfall,
+            decision_key=decision_key or str(technology_row["technology_name"]),
+            action=action,
         )
 
     def _evaluation_for_application(
@@ -289,9 +296,12 @@ class AmbiguityAwareSelectionMixin:
         asset: pd.Series,
         year: int,
         aggregates: list[CandidateAggregate],
-        selected_technology: str,
+        selected_key: str,
+        selected_technology: str | None = None,
     ) -> list[dict[str, object]]:
         asset_id = asset.get("aircraft_id", asset.get("vessel_id", ""))
+        if selected_technology is None:
+            selected_technology = selected_key
         rows: list[dict[str, object]] = []
         for aggregate in aggregates:
             candidate_technology = str(aggregate.technology_row["technology_name"])
@@ -309,6 +319,7 @@ class AmbiguityAwareSelectionMixin:
                         "vessel_id": asset_id if agent.sector_name == "maritime" else "",
                         "segment": clean_scope_value(asset.get("segment", "")),
                         "decision_attitude": agent.decision_attitude,
+                        "action": aggregate.action,
                         "selected_technology": selected_technology,
                         "candidate_technology": candidate_technology,
                         "scenario_id": outcome.scenario_id,
@@ -339,7 +350,7 @@ class AmbiguityAwareSelectionMixin:
                         "expected_shortfall_alpha": (
                             agent.model.scenario.ambiguity_aware_decision.expected_shortfall_alpha
                         ),
-                        "selected_flag": candidate_technology == selected_technology,
+                        "selected_flag": aggregate.decision_key == selected_key,
                     },
                 )
         return rows
@@ -405,7 +416,9 @@ class AmbiguityAwareSelectionMixin:
         asset: pd.Series,
         year: int,
         initial_ets_balance: float | None,
-    ) -> tuple[pd.Series, CandidateEvaluation]:
+        *,
+        row_index: int | None = None,
+    ) -> tuple[pd.Series, CandidateEvaluation, str]:
         config = agent.model.scenario.ambiguity_aware_decision
         decision_mode = self._decision_mode(agent)
         bounds = self._loss_law_probability_bounds(agent)
@@ -421,11 +434,17 @@ class AmbiguityAwareSelectionMixin:
         }
         outcomes_by_technology: dict[str, tuple[ScenarioCandidateOutcome, ...]] = {}
         technology_rows: dict[str, pd.Series] = {}
+        actions_by_technology: dict[str, str] = {}
         decision_rows: list[dict[str, object]] = []
 
-        for _, technology_row in agent.candidate_technology_rows(asset).iterrows():
-            technology_name = str(technology_row["technology_name"])
-            technology_rows[technology_name] = technology_row
+        def _evaluate_candidate(
+            decision_key: str,
+            technology_row: pd.Series,
+            action: str,
+            evaluate_fn,
+        ) -> None:
+            technology_rows[decision_key] = technology_row
+            actions_by_technology[decision_key] = action
             outcomes: list[ScenarioCandidateOutcome] = []
             for scenario_id in bounds.scenarios:
                 probability = (
@@ -443,13 +462,7 @@ class AmbiguityAwareSelectionMixin:
                         year,
                         str(asset["segment"]),
                     ):
-                        evaluation = self.calc_payback_year(
-                            agent,
-                            asset,
-                            technology_row,
-                            year,
-                            initial_ets_balance,
-                        )
+                        evaluation = evaluate_fn()
                         score = self._decision_score(evaluation)
                     else:
                         reason = "candidate unavailable in scenario"
@@ -458,7 +471,7 @@ class AmbiguityAwareSelectionMixin:
                         agent,
                         asset,
                         year,
-                        technology_name,
+                        decision_key,
                         scenario_id,
                         evaluation,
                         reason,
@@ -472,7 +485,52 @@ class AmbiguityAwareSelectionMixin:
                         evaluation=evaluation,
                     ),
                 )
-            outcomes_by_technology[technology_name] = tuple(outcomes)
+            outcomes_by_technology[decision_key] = tuple(outcomes)
+
+        is_planned = row_index is not None and not agent.fleet.planned_technology_choices(
+            row_index,
+            year,
+        ).empty
+        candidates = (
+            agent.fleet.planned_technology_choices(row_index, year)
+            if is_planned
+            else agent.candidate_technology_rows(asset)
+        )
+        for _, technology_row in candidates.iterrows():
+            technology_name = str(technology_row["technology_name"])
+            _evaluate_candidate(
+                technology_name,
+                technology_row,
+                "invest",
+                lambda technology_row=technology_row: self.calc_payback_year(
+                    agent,
+                    asset,
+                    technology_row,
+                    year,
+                    initial_ets_balance,
+                ),
+            )
+
+        remaining_lifetime = int(asset["replacement_year"]) - year
+        if (
+            not is_planned
+            and row_index is not None
+            and agent.model.scenario.investment_timing.include_continue_option
+            and remaining_lifetime > 0
+        ):
+            current_technology_row = agent.technology_row(str(asset["current_technology"]))
+            continue_key = f"{current_technology_row['technology_name']}::continue"
+            _evaluate_candidate(
+                continue_key,
+                current_technology_row,
+                "continue_current",
+                lambda: self.evaluate_continue_current(
+                    agent,
+                    asset,
+                    year,
+                    initial_ets_balance,
+                ),
+            )
 
         decision_frame = pd.DataFrame(decision_rows)
         try:
@@ -502,12 +560,15 @@ class AmbiguityAwareSelectionMixin:
         agent.model.record_selected_ambiguity_decisions(score_result.selected.to_dict("records"))
 
         selected_decision = select_ambiguity_aware_decision(score_result)
-        selected_technology = str(selected_decision["technology_id"])
-        selected_row = technology_rows[selected_technology]
+        selected_key = str(selected_decision["technology_id"])
+        selected_row = technology_rows[selected_key]
+        selected_action = actions_by_technology[selected_key]
         selected_aggregate = self._candidate_aggregate(
             agent,
             selected_row,
-            outcomes_by_technology[selected_technology],
+            outcomes_by_technology[selected_key],
+            decision_key=selected_key,
+            action=selected_action,
         )
         selected_evaluation = self._evaluation_for_application(selected_aggregate)
         if selected_evaluation is None:
@@ -516,13 +577,26 @@ class AmbiguityAwareSelectionMixin:
             )
 
         aggregates = [
-            self._candidate_aggregate(agent, technology_row, outcomes_by_technology[name])
-            for name, technology_row in technology_rows.items()
+            self._candidate_aggregate(
+                agent,
+                technology_row,
+                outcomes_by_technology[key],
+                decision_key=key,
+                action=actions_by_technology[key],
+            )
+            for key, technology_row in technology_rows.items()
         ]
         agent.model.record_robust_frontier(
-            self._frontier_rows(agent, asset, year, aggregates, selected_technology),
+            self._frontier_rows(
+                agent,
+                asset,
+                year,
+                aggregates,
+                selected_key,
+                str(selected_row["technology_name"]),
+            ),
         )
-        return selected_row, selected_evaluation
+        return selected_row, selected_evaluation, selected_action
 
     def _select_ambiguity_aware_asset(
         self,
@@ -531,7 +605,9 @@ class AmbiguityAwareSelectionMixin:
         year: int,
         initial_ets_balance: float | None,
         fallback_selection,
-    ) -> tuple[pd.Series, CandidateEvaluation]:
+        *,
+        row_index: int | None = None,
+    ) -> tuple[pd.Series, CandidateEvaluation, str]:
         del fallback_selection
         if agent.decision_attitude not in DECISION_ATTITUDES:
             agent.decision_attitude = "risk_neutral"
@@ -540,6 +616,7 @@ class AmbiguityAwareSelectionMixin:
             asset,
             year,
             initial_ets_balance,
+            row_index=row_index,
         )
 
 
@@ -558,13 +635,16 @@ class AmbiguityAwareUtilityLogic(AmbiguityAwareSelectionMixin, LegacyWeightedUti
         aircraft: pd.Series,
         year: int,
         initial_ets_balance: float | None = None,
-    ) -> tuple[pd.Series, CandidateEvaluation]:
+        *,
+        row_index: int | None = None,
+    ) -> tuple[pd.Series, CandidateEvaluation, str]:
         return self._select_ambiguity_aware_asset(
             agent,
             aircraft,
             year,
             initial_ets_balance,
             super().select_technology_for_aircraft,
+            row_index=row_index,
         )
 
 
@@ -583,7 +663,9 @@ class AmbiguityAwareCargoLogic(AmbiguityAwareSelectionMixin, LegacyWeightedUtili
         aircraft: pd.Series,
         year: int,
         initial_ets_balance: float | None = None,
-    ) -> tuple[pd.Series, CandidateEvaluation]:
+    ) -> tuple[pd.Series, CandidateEvaluation, str]:
+        # continue_current / planned-investment support is aviation-passenger only
+        # for now; row_index is intentionally not threaded through here yet.
         return self._select_ambiguity_aware_asset(
             agent,
             aircraft,
@@ -611,7 +693,9 @@ class AmbiguityAwareMaritimeCargoLogic(
         vessel: pd.Series,
         year: int,
         initial_ets_balance: float | None = None,
-    ) -> tuple[pd.Series, CandidateEvaluation]:
+    ) -> tuple[pd.Series, CandidateEvaluation, str]:
+        # continue_current / planned-investment support is aviation-passenger only
+        # for now; row_index is intentionally not threaded through here yet.
         return self._select_ambiguity_aware_asset(
             agent,
             vessel,
@@ -639,7 +723,9 @@ class AmbiguityAwareMaritimePassengerLogic(
         vessel: pd.Series,
         year: int,
         initial_ets_balance: float | None = None,
-    ) -> tuple[pd.Series, CandidateEvaluation]:
+    ) -> tuple[pd.Series, CandidateEvaluation, str]:
+        # continue_current / planned-investment support is aviation-passenger only
+        # for now; row_index is intentionally not threaded through here yet.
         return self._select_ambiguity_aware_asset(
             agent,
             vessel,

@@ -228,6 +228,35 @@ class AmbiguityAwareDecisionConfig:
         return table_path.resolve()
 
 
+SUPPORTED_RESIDUAL_VALUE_METHODS = ("none", "straight_line_remaining_life")
+
+
+@dataclass(frozen=True)
+class InvestmentTimingConfig:
+    include_continue_option: bool = False
+    residual_value_method: str = "none"
+
+    def __post_init__(self) -> None:
+        if self.residual_value_method not in SUPPORTED_RESIDUAL_VALUE_METHODS:
+            supported = ", ".join(SUPPORTED_RESIDUAL_VALUE_METHODS)
+            raise ValueError(
+                f"Unsupported investment_timing.residual_value_method "
+                f"'{self.residual_value_method}'. Supported values: {supported}",
+            )
+
+    @classmethod
+    def from_dict(cls, payload: dict | None) -> InvestmentTimingConfig:
+        if payload is None:
+            return cls()
+        if not isinstance(payload, dict):
+            raise ValueError("investment_timing must be a mapping")
+        return cls(
+            include_continue_option=bool(payload.get("include_continue_option", False)),
+            residual_value_method=str(payload.get("residual_value_method", "none")).strip()
+            or "none",
+        )
+
+
 @dataclass
 class NATMScenario:
     name: str
@@ -238,6 +267,7 @@ class NATMScenario:
     ambiguity_aware_decision: AmbiguityAwareDecisionConfig = field(
         default_factory=AmbiguityAwareDecisionConfig,
     )
+    investment_timing: InvestmentTimingConfig = field(default_factory=InvestmentTimingConfig)
     base_path: Path = field(default_factory=lambda: Path("."), repr=False)
 
     def __post_init__(self) -> None:
@@ -302,6 +332,7 @@ class NATMScenario:
         ambiguity_aware_decision = AmbiguityAwareDecisionConfig.from_dict(
             payload.get("ambiguity_aware_decision"),
         )
+        investment_timing = InvestmentTimingConfig.from_dict(payload.get("investment_timing"))
 
         return cls(
             name=payload["name"],
@@ -310,6 +341,7 @@ class NATMScenario:
             sectors=normalized_sectors,
             preprocessing=preprocessing,
             ambiguity_aware_decision=ambiguity_aware_decision,
+            investment_timing=investment_timing,
         )
 
     @classmethod

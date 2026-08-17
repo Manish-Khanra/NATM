@@ -37,6 +37,7 @@ class LegacyWeightedUtilityLogic(AviationPassengerDecisionLogic):
     name = "legacy_weighted_utility"
 
     def step(self, agent: AviationPassengerAirlineAgent, year: int) -> None:
+        agent.fleet.reset_actions()
         replacement_rows = self.replacement_row_indices(agent, year)
         agent.update_existing_fleet(year, excluded_indices=set(replacement_rows))
         self._replace_due_aircraft(agent, year, replacement_rows=replacement_rows)
@@ -309,8 +310,21 @@ class LegacyWeightedUtilityLogic(AviationPassengerDecisionLogic):
         )
         aircraft_price = float(technology_row["capex_eur"]) * (1.0 + float(dynamic_price_index))
         depreciation_cost = float(technology_row["depreciation_cost_share"]) * aircraft_price
-        salvage_value = max(aircraft_price - (depreciation_cost * life_time), 0.0)
         interest_rate = float(technology_row["payback_interest_rate"])
+
+        # By default (residual_value_method="none"), cash flows are projected over the
+        # technology's full nominal lifetime regardless of the model horizon, matching
+        # today's behavior exactly. Opting into straight_line_remaining_life truncates
+        # the projection at the horizon and credits back the unused CAPEX life instead of
+        # the full-lifetime salvage value.
+        residual_value_method = agent.model.scenario.investment_timing.residual_value_method
+        horizon_periods = max(agent.model.scenario.end_year - year + 1, 0)
+        if residual_value_method == "straight_line_remaining_life" and horizon_periods < life_time:
+            evaluated_periods = horizon_periods
+            residual_value = aircraft_price * (life_time - evaluated_periods) / life_time
+        else:
+            evaluated_periods = life_time
+            residual_value = max(aircraft_price - (depreciation_cost * life_time), 0.0)
 
         total_costs: list[float] = []
         revenues: list[float] = []
@@ -318,7 +332,7 @@ class LegacyWeightedUtilityLogic(AviationPassengerDecisionLogic):
         primary_energy_quantities: list[float] = []
         secondary_energy_quantities: list[float] = []
         first_year_metrics: OperationMetrics | None = None
-        for offset in range(life_time):
+        for offset in range(evaluated_periods):
             future_year = min(year + offset, agent.model.scenario.end_year)
             operation_metrics = self.annual_operation_metrics(
                 agent,
@@ -352,7 +366,7 @@ class LegacyWeightedUtilityLogic(AviationPassengerDecisionLogic):
             if npv > 0:
                 payback_year = offset - 1
                 break
-        npv += salvage_value / ((1.0 + interest_rate) ** life_time)
+        npv += residual_value / ((1.0 + interest_rate) ** evaluated_periods)
 
         economic_utility = clamp(((life_time + 1) - payback_year) / max(life_time, 1), 0.0, 1.0)
         environmental_utility = self.environmental_utility(technology_row)
@@ -388,6 +402,104 @@ class LegacyWeightedUtilityLogic(AviationPassengerDecisionLogic):
             economic_utility=economic_utility,
             environmental_utility=environmental_utility,
             payback_year=payback_year,
+            total_emission=first_year_metrics.total_emission,
+            primary_energy_quantity=first_year_metrics.primary_energy_quantity,
+            secondary_energy_quantity=first_year_metrics.secondary_energy_quantity,
+            chargeable_emission=first_year_metrics.chargeable_emission,
+            remaining_ets_allowance=first_year_metrics.remaining_ets_allowance,
+            current_year_operating_cost=first_year_metrics.total_cost,
+            effective_conventional_cost=mean_total_cost,
+            effective_alternative_cost=mean_operation_cost,
+            net_present_value=npv,
+        )
+
+    def evaluate_continue_current(
+        self,
+        agent: AviationPassengerAirlineAgent,
+        aircraft: pd.Series,
+        year: int,
+        initial_ets_balance: float | None = None,
+    ) -> CandidateEvaluation:
+        """Evaluate keeping the aircraft on its current technology, at zero capex.
+
+        Mirrors `calc_payback_year` but with no fresh investment: the aircraft is
+        assumed sunk, so there is no depreciation/salvage schedule to restart, and
+        the projection only covers the aircraft's already-scheduled remaining
+        lifetime (`replacement_year - year`) rather than a fresh full lifetime.
+        """
+        technology_row = agent.technology_row(str(aircraft["current_technology"]))
+        remaining_lifetime = max(int(aircraft["replacement_year"]) - year, 0)
+        residual_value_method = agent.model.scenario.investment_timing.residual_value_method
+        if residual_value_method == "straight_line_remaining_life":
+            horizon_periods = max(agent.model.scenario.end_year - year + 1, 0)
+            evaluated_periods = min(remaining_lifetime, horizon_periods)
+        else:
+            evaluated_periods = remaining_lifetime
+
+        total_costs: list[float] = []
+        revenues: list[float] = []
+        first_year_metrics: OperationMetrics | None = None
+        for offset in range(evaluated_periods):
+            future_year = min(year + offset, agent.model.scenario.end_year)
+            operation_metrics = self.annual_operation_metrics(
+                agent,
+                aircraft,
+                technology_row,
+                future_year,
+                initial_ets_balance if offset == 0 else None,
+            )
+            if offset == 0:
+                first_year_metrics = operation_metrics
+            revenue = self.annual_revenue(agent, aircraft, technology_row, future_year)
+            maintenance_cost = revenue * float(technology_row["maintenance_cost_share"])
+            wages = revenue * 0.24
+            landing_fees = revenue * 0.10
+            total_costs.append(
+                operation_metrics.total_cost + maintenance_cost + wages + landing_fees,
+            )
+            revenues.append(revenue)
+
+        interest_rate = float(technology_row["payback_interest_rate"])
+        npv = 0.0
+        for offset, (revenue, cost) in enumerate(zip(revenues, total_costs, strict=False), start=1):
+            npv += (revenue - cost) / ((1.0 + interest_rate) ** offset)
+
+        # No capex was spent, so there is no capital to pay back: continuing is
+        # always scored as maximally payback-efficient on the economic axis. Whether
+        # continuing is actually cash-flow positive still shows up in `net_present_value`,
+        # which the ambiguity-aware NPV-based selection uses directly.
+        economic_utility = 1.0
+        environmental_utility = self.environmental_utility(technology_row)
+        technology_name = str(technology_row["technology_name"])
+        if first_year_metrics is None:
+            first_year_metrics = self.annual_operation_metrics(
+                agent,
+                aircraft,
+                technology_row,
+                year,
+                initial_ets_balance,
+            )
+        policy_bonus = 0.0
+        if not agent.technology_catalog.is_conventional(technology_name):
+            policy_bonus = (
+                0.08 * self.current_clean_fuel_subsidy(agent)
+                + 0.06 * agent.model.current_policy_signal.aviation.adoption_mandate
+            )
+        total_utility = (
+            economic_utility * agent.operator_economic_weight
+            + environmental_utility * agent.operator_environmental_weight
+            + policy_bonus
+        )
+        mean_total_cost = sum(total_costs) / max(len(total_costs), 1)
+        mean_operation_cost = sum(
+            revenue - (revenue - cost) for revenue, cost in zip(revenues, total_costs, strict=False)
+        ) / max(len(total_costs), 1)
+        return CandidateEvaluation(
+            technology_name=technology_name,
+            total_utility=total_utility,
+            economic_utility=economic_utility,
+            environmental_utility=environmental_utility,
+            payback_year=0,
             total_emission=first_year_metrics.total_emission,
             primary_energy_quantity=first_year_metrics.primary_energy_quantity,
             secondary_energy_quantity=first_year_metrics.secondary_energy_quantity,
@@ -487,9 +599,20 @@ class LegacyWeightedUtilityLogic(AviationPassengerDecisionLogic):
         aircraft: pd.Series,
         year: int,
         initial_ets_balance: float | None = None,
-    ) -> tuple[pd.Series, CandidateEvaluation]:
-        candidates = agent.candidate_technology_rows(aircraft)
-        evaluations: list[tuple[pd.Series, CandidateEvaluation]] = []
+        *,
+        row_index: int | None = None,
+    ) -> tuple[pd.Series, CandidateEvaluation, str]:
+        is_planned = row_index is not None and not agent.fleet.planned_technology_choices(
+            row_index,
+            year,
+        ).empty
+        candidates = (
+            agent.fleet.planned_technology_choices(row_index, year)
+            if is_planned
+            else agent.candidate_technology_rows(aircraft)
+        )
+
+        evaluations: list[tuple[pd.Series, CandidateEvaluation, str]] = []
         for _, technology_row in candidates.iterrows():
             if not self.is_candidate_available(
                 agent,
@@ -505,18 +628,39 @@ class LegacyWeightedUtilityLogic(AviationPassengerDecisionLogic):
                 year,
                 initial_ets_balance,
             )
-            evaluations.append((technology_row, evaluation))
+            evaluations.append((technology_row, evaluation, "invest"))
+
+        if (
+            not is_planned
+            and row_index is not None
+            and agent.model.scenario.investment_timing.include_continue_option
+            and int(aircraft["replacement_year"]) - year > 0
+        ):
+            current_row = agent.technology_row(
+                technology_name=str(aircraft["current_technology"]),
+            )
+            continue_evaluation = self.evaluate_continue_current(
+                agent,
+                aircraft,
+                year,
+                initial_ets_balance,
+            )
+            evaluations.append((current_row, continue_evaluation, "continue_current"))
 
         if not evaluations:
             current_row = agent.technology_row(
                 technology_name=str(aircraft["current_technology"]),
             )
-            return current_row, self.calc_payback_year(
-                agent,
-                aircraft,
+            return (
                 current_row,
-                year,
-                initial_ets_balance,
+                self.calc_payback_year(
+                    agent,
+                    aircraft,
+                    current_row,
+                    year,
+                    initial_ets_balance,
+                ),
+                "invest",
             )
 
         evaluations.sort(key=lambda item: item[1].total_utility, reverse=True)
@@ -527,10 +671,18 @@ class LegacyWeightedUtilityLogic(AviationPassengerDecisionLogic):
         acceleration_window = int(
             (agent.model.current_policy_signal.aviation.adoption_mandate + clean_fuel_subsidy) * 5,
         )
-        return agent.fleet.due_replacement_indices(
+        due_rows = agent.fleet.due_replacement_indices(
             year,
             acceleration_window=acceleration_window,
         )
+        planned_rows = agent.fleet.planned_investment_row_indices(year)
+        if not planned_rows:
+            return due_rows
+        combined_rows = list(due_rows)
+        for row_index in planned_rows:
+            if row_index not in combined_rows:
+                combined_rows.append(row_index)
+        return combined_rows
 
     def replace_due_aircraft(
         self,
@@ -544,15 +696,28 @@ class LegacyWeightedUtilityLogic(AviationPassengerDecisionLogic):
             if replacement_rows is None
             else replacement_rows
         )
+        planned_rows = set(agent.fleet.planned_investment_row_indices(year))
         for row_index in rows_to_replace:
             aircraft = agent.fleet.frame.loc[row_index]
-            technology_row, evaluation = self.select_technology_for_aircraft(
+            technology_row, evaluation, action = self.select_technology_for_aircraft(
                 agent,
                 aircraft,
                 year,
                 initial_ets_balance=agent.remaining_ets_allowance,
+                row_index=row_index,
             )
-            agent.apply_technology_to_aircraft(row_index, technology_row, evaluation, year)
+            if action == "continue_current":
+                agent.continue_aircraft_operation(row_index, evaluation, year)
+                continue
+            if row_index in planned_rows:
+                action = "planned_investment"
+            agent.apply_technology_to_aircraft(
+                row_index,
+                technology_row,
+                evaluation,
+                year,
+                action=action,
+            )
 
     def add_growth_aircraft(self, agent: AviationPassengerAirlineAgent, year: int) -> None:
         next_aircraft_id = agent.fleet.next_aircraft_id()
@@ -674,12 +839,13 @@ class LegacyWeightedUtilityLogic(AviationPassengerDecisionLogic):
             )
             return technology_row, evaluation
 
-        return self.select_technology_for_aircraft(
+        technology_row, evaluation, _action = self.select_technology_for_aircraft(
             agent,
             template,
             year,
             initial_ets_balance=agent.remaining_ets_allowance,
         )
+        return technology_row, evaluation
 
     def _replace_due_aircraft(
         self,
@@ -698,6 +864,7 @@ class LegacyWeightedUtilityCargoLogic(AviationCargoDecisionLogic):
     name = LegacyWeightedUtilityLogic.name
 
     def step(self, agent: AviationCargoAirlineAgent, year: int) -> None:
+        agent.fleet.reset_actions()
         replacement_rows = self.replacement_row_indices(agent, year)
         agent.update_existing_fleet(year, excluded_indices=set(replacement_rows))
         self._replace_due_aircraft(agent, year, replacement_rows=replacement_rows)
@@ -1151,12 +1318,16 @@ class LegacyWeightedUtilityCargoLogic(AviationCargoDecisionLogic):
         )
         for row_index in rows_to_replace:
             aircraft = agent.fleet.frame.loc[row_index]
-            technology_row, evaluation = self.select_technology_for_aircraft(
+            # select_technology_for_aircraft may resolve (via MRO) to either this
+            # class's 2-tuple legacy implementation or the shared ambiguity-aware
+            # mixin's 3-tuple (technology_row, evaluation, action) implementation.
+            selection = self.select_technology_for_aircraft(
                 agent,
                 aircraft,
                 year,
                 initial_ets_balance=agent.remaining_ets_allowance,
             )
+            technology_row, evaluation = selection[0], selection[1]
             agent.apply_technology_to_aircraft(row_index, technology_row, evaluation, year)
 
     def add_growth_aircraft(self, agent: AviationCargoAirlineAgent, year: int) -> None:
@@ -1279,12 +1450,13 @@ class LegacyWeightedUtilityCargoLogic(AviationCargoDecisionLogic):
             )
             return technology_row, evaluation
 
-        return self.select_technology_for_aircraft(
+        selection = self.select_technology_for_aircraft(
             agent,
             template,
             year,
             initial_ets_balance=agent.remaining_ets_allowance,
         )
+        return selection[0], selection[1]
 
     def _replace_due_aircraft(
         self,
@@ -1303,6 +1475,7 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
     name = LegacyWeightedUtilityLogic.name
 
     def step(self, agent: MaritimeCargoShiplineAgent, year: int) -> None:
+        agent.fleet.reset_actions()
         replacement_rows = self.replacement_row_indices(agent, year)
         agent.update_existing_fleet(year, excluded_indices=set(replacement_rows))
         self._replace_due_vessels(agent, year, replacement_rows=replacement_rows)
@@ -1894,12 +2067,16 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
         )
         for row_index in rows_to_replace:
             vessel = agent.fleet.frame.loc[row_index]
-            technology_row, evaluation = self.select_technology_for_vessel(
+            # select_technology_for_vessel may resolve (via MRO) to either this
+            # class's 2-tuple legacy implementation or the shared ambiguity-aware
+            # mixin's 3-tuple (technology_row, evaluation, action) implementation.
+            selection = self.select_technology_for_vessel(
                 agent,
                 vessel,
                 year,
                 initial_ets_balance=agent.remaining_ets_allowance,
             )
+            technology_row, evaluation = selection[0], selection[1]
             agent.apply_technology_to_vessel(row_index, technology_row, evaluation, year)
 
     def add_growth_vessels(self, agent: MaritimeCargoShiplineAgent, year: int) -> None:
@@ -2022,12 +2199,13 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
             )
             return technology_row, evaluation
 
-        return self.select_technology_for_vessel(
+        selection = self.select_technology_for_vessel(
             agent,
             template,
             year,
             initial_ets_balance=agent.remaining_ets_allowance,
         )
+        return selection[0], selection[1]
 
     def _replace_due_vessels(
         self,
@@ -2054,6 +2232,7 @@ class LegacyWeightedUtilityMaritimePassengerLogic(MaritimePassengerDecisionLogic
     )
 
     def step(self, agent: MaritimePassengerShiplineAgent, year: int) -> None:
+        agent.fleet.reset_actions()
         replacement_rows = self.replacement_row_indices(agent, year)
         agent.update_existing_fleet(year, excluded_indices=set(replacement_rows))
         self._replace_due_vessels(agent, year, replacement_rows=replacement_rows)
@@ -2673,12 +2852,16 @@ class LegacyWeightedUtilityMaritimePassengerLogic(MaritimePassengerDecisionLogic
         )
         for row_index in rows_to_replace:
             vessel = agent.fleet.frame.loc[row_index]
-            technology_row, evaluation = self.select_technology_for_vessel(
+            # select_technology_for_vessel may resolve (via MRO) to either this
+            # class's 2-tuple legacy implementation or the shared ambiguity-aware
+            # mixin's 3-tuple (technology_row, evaluation, action) implementation.
+            selection = self.select_technology_for_vessel(
                 agent,
                 vessel,
                 year,
                 initial_ets_balance=agent.remaining_ets_allowance,
             )
+            technology_row, evaluation = selection[0], selection[1]
             agent.apply_technology_to_vessel(row_index, technology_row, evaluation, year)
 
     def add_growth_vessels(self, agent: MaritimePassengerShiplineAgent, year: int) -> None:
@@ -2807,12 +2990,13 @@ class LegacyWeightedUtilityMaritimePassengerLogic(MaritimePassengerDecisionLogic
             )
             return technology_row, evaluation
 
-        return self.select_technology_for_vessel(
+        selection = self.select_technology_for_vessel(
             agent,
             template,
             year,
             initial_ets_balance=agent.remaining_ets_allowance,
         )
+        return selection[0], selection[1]
 
     def _replace_due_vessels(
         self,

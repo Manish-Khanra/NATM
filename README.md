@@ -494,6 +494,7 @@ For the dashboard workflow, see `docs/dashboard-guide.md`.
 - Object-oriented case data, technology catalog, scenario table, fleet, and output exporters
 - A shared environment layer with country states and route/corridor effects
 - Detailed aviation passenger, aviation cargo, maritime cargo, and maritime passenger outputs for stock, technology diffusion, energy/emissions, and investment activity
+- Opt-in dynamic investment timing for aviation passenger: continue-vs-invest evaluation, per-aircraft planned investments, and horizon residual value (see [investment logic guide](docs/investment-logic-guide.md))
 
 ## Citing NATM
 

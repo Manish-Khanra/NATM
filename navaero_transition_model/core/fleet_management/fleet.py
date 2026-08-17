@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+from fnmatch import fnmatchcase
+
 import pandas as pd
 
 from navaero_transition_model.core.case_inputs import TechnologyCatalog
 from navaero_transition_model.core.decision_logic.base import CandidateEvaluation
+from navaero_transition_model.core.fleet_management.planned_investments import (
+    planned_investments_from_fleet,
+)
 
 
 class Fleet:
@@ -17,6 +22,8 @@ class Fleet:
         self.technology_catalog = technology_catalog
         self._frame = dataframe.reset_index(drop=True).copy()
         self._prepare(start_year)
+        self.planned_investments = planned_investments_from_fleet(self._frame)
+        self._validate_planned_investments()
 
     @property
     def frame(self) -> pd.DataFrame:
@@ -54,6 +61,7 @@ class Fleet:
         self._frame["total_utility"] = 0.0
         self._frame["investment_cost_eur"] = 0.0
         self._frame["investment_year"] = pd.NA
+        self._frame["action"] = ""
         self._frame["effective_operating_cost"] = 0.0
         self._frame["chargeable_emission"] = 0.0
         self._frame["remaining_ets_allocation"] = 0.0
@@ -240,6 +248,26 @@ class Fleet:
             if self._needs_positive_activity_fallback(row_index, "fuel_burn_per_year_base"):
                 self._frame.loc[row_index, "fuel_burn_per_year_base"] = baseline_energy
 
+    def _validate_planned_investments(self) -> None:
+        if self.planned_investments.empty:
+            return
+        available_names = set(self.technology_catalog.candidates()["technology_name"])
+        for row in self.planned_investments.itertuples(index=False):
+            if row.technology_name:
+                if row.technology_name not in available_names:
+                    raise ValueError(
+                        f"Planned investment for aircraft_id={row.aircraft_id}, "
+                        f"year={row.investment_year} references unknown technology_name "
+                        f"'{row.technology_name}'.",
+                    )
+                continue
+            if not any(fnmatchcase(name, row.technology_pattern) for name in available_names):
+                raise ValueError(
+                    f"Planned investment for aircraft_id={row.aircraft_id}, "
+                    f"year={row.investment_year} technology_pattern "
+                    f"'{row.technology_pattern}' matches no technology in the catalog.",
+                )
+
     def annual_flights_for(self, aircraft: pd.Series, technology_row: pd.Series) -> float:
         annual_flights = pd.to_numeric(
             pd.Series([aircraft.get("annual_flights_base", pd.NA)]),
@@ -364,7 +392,9 @@ class Fleet:
         evaluation: CandidateEvaluation,
         *,
         year: int,
+        action: str = "invest",
     ) -> None:
+        self._frame.loc[row_index, "action"] = action
         self._frame.loc[row_index, "current_technology"] = technology_row["technology_name"]
         self._frame.loc[row_index, "primary_energy_carrier"] = technology_row[
             "primary_energy_carrier"
@@ -396,6 +426,94 @@ class Fleet:
         self._frame.loc[row_index, "effective_operating_cost"] = (
             evaluation.current_year_operating_cost
         )
+
+    def reset_actions(self) -> None:
+        """Clear the per-year `action` tag before a new year's decisions are made.
+
+        Without this, an aircraft's `action` from the year it was last touched
+        would otherwise persist into every later snapshot until it is touched
+        again, since fleet rows are mutated in place rather than recreated.
+        """
+        self._frame["action"] = ""
+
+    def continue_operation(
+        self,
+        row_index: int,
+        evaluation: CandidateEvaluation,
+        *,
+        year: int,
+    ) -> None:
+        """Record a year of continued operation on the current technology.
+
+        Unlike `apply_technology`, this does not reset `replacement_year`,
+        `aircraft_age_years`, or the investment-cost columns: no capex was
+        spent and the aircraft's existing replacement schedule still governs
+        when it is next evaluated.
+        """
+        del year
+        self._frame.loc[row_index, "action"] = "continue_current"
+        self._frame.loc[row_index, "total_emission"] = evaluation.total_emission
+        self._frame.loc[row_index, "primary_energy_consumption"] = (
+            evaluation.primary_energy_quantity
+        )
+        self._frame.loc[row_index, "secondary_energy_consumption"] = (
+            evaluation.secondary_energy_quantity
+        )
+        self._frame.loc[row_index, "chargeable_emission"] = evaluation.chargeable_emission
+        self._frame.loc[row_index, "remaining_ets_allocation"] = (
+            evaluation.remaining_ets_allowance
+        )
+        self._frame.loc[row_index, "economic_utility"] = evaluation.economic_utility
+        self._frame.loc[row_index, "environmental_utility"] = evaluation.environmental_utility
+        self._frame.loc[row_index, "total_utility"] = evaluation.total_utility
+        self._frame.loc[row_index, "effective_operating_cost"] = (
+            evaluation.current_year_operating_cost
+        )
+
+    def remaining_lifetime(self, row_index: int, year: int) -> int:
+        return int(self._frame.loc[row_index, "replacement_year"]) - int(year)
+
+    def planned_investment_row_indices(self, year: int) -> list[int]:
+        if self.planned_investments.empty:
+            return []
+        planned_ids = self.planned_investments.loc[
+            self.planned_investments["investment_year"] == int(year),
+            "aircraft_id",
+        ]
+        if planned_ids.empty:
+            return []
+        matches = self._frame.index[self._frame["aircraft_id"].isin(planned_ids)]
+        return [int(index) for index in matches]
+
+    def planned_technology_choices(self, row_index: int, year: int) -> pd.DataFrame:
+        aircraft_id = int(self._frame.loc[row_index, "aircraft_id"])
+        rows = self.planned_investments.loc[
+            (self.planned_investments["aircraft_id"] == aircraft_id)
+            & (self.planned_investments["investment_year"] == int(year))
+        ]
+        catalog = self.technology_catalog.candidates()
+        if rows.empty:
+            return catalog.iloc[0:0]
+
+        available_names = set(catalog["technology_name"])
+        selected_names: set[str] = set()
+        for row in rows.itertuples(index=False):
+            technology_name = str(row.technology_name).strip()
+            technology_pattern = str(row.technology_pattern).strip()
+            if technology_name:
+                if technology_name in available_names:
+                    selected_names.add(technology_name)
+                continue
+            selected_names.update(
+                name for name in available_names if fnmatchcase(str(name), technology_pattern)
+            )
+        if not selected_names:
+            targets = rows[["technology_name", "technology_pattern"]].to_dict(orient="records")
+            raise ValueError(
+                f"Planned investment for aircraft_id={aircraft_id}, year={year} does not "
+                f"match an available technology in the technology catalog: {targets}",
+            )
+        return catalog.loc[catalog["technology_name"].isin(selected_names)].copy()
 
     def next_aircraft_id(self) -> int:
         return int(self._frame["aircraft_id"].max()) + 1 if not self._frame.empty else 1000
