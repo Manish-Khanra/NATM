@@ -50,6 +50,7 @@ class NATMDecisionScorer:
         due_rows = agent.fleet.due_replacement_indices(
             year,
             acceleration_window=acceleration_window,
+            minimum_holding_period=agent.model.scenario.investment_timing.minimum_holding_period,
         )
         planned_rows = agent.fleet.planned_investment_row_indices(year)
         if not planned_rows:
@@ -299,7 +300,24 @@ class NATMDecisionScorer:
             technology_name=clean_scope_value(technology_row["technology_name"]),
             default=0.0,
         )
-        asset_price = float(technology_row["capex_eur"]) * (1.0 + float(dynamic_price_index))
+        # `capex_multiplier` composes with `technology_dynamic_price_index` rather than
+        # replacing it: the two are independent, additive-vs-multiplicative knobs, not
+        # competing sources of the same value. `agent.scenario_value` already resolves
+        # the most-specific matching scenario row (technology+segment, then less
+        # specific, then a blank-scope wildcard row) before falling back to `default`,
+        # which is the technology-specific -> generic -> default fallback chain.
+        capex_multiplier = agent.scenario_value(
+            "capex_multiplier",
+            year,
+            segment=clean_scope_value(asset["segment"]),
+            technology_name=clean_scope_value(technology_row["technology_name"]),
+            default=1.0,
+        )
+        asset_price = (
+            float(technology_row["capex_eur"])
+            * (1.0 + float(dynamic_price_index))
+            * float(capex_multiplier)
+        )
         depreciation_cost = float(technology_row["depreciation_cost_share"]) * asset_price
         interest_rate = float(technology_row["payback_interest_rate"])
 
@@ -331,9 +349,20 @@ class NATMDecisionScorer:
             )
             if offset == 0:
                 first_year_metrics = operation_metrics
-            revenue = self._compute_revenue(agent, asset, technology_row, future_year)
-            additional_costs = self._additional_operating_costs(revenue, technology_row)
-            total_costs.append(operation_metrics.total_cost + additional_costs + depreciation_cost)
+            if agent.model.scenario.investment_timing.cashflow_mode == "direct_net_operating_cost":
+                revenue, net_operating_cost = self._resolve_direct_cashflow(
+                    agent,
+                    asset,
+                    technology_row,
+                    future_year,
+                )
+                total_costs.append(net_operating_cost + depreciation_cost)
+            else:
+                revenue = self._compute_revenue(agent, asset, technology_row, future_year)
+                additional_costs = self._additional_operating_costs(revenue, technology_row)
+                total_costs.append(
+                    operation_metrics.total_cost + additional_costs + depreciation_cost,
+                )
             revenues.append(revenue)
 
         npv = -asset_price
@@ -437,9 +466,18 @@ class NATMDecisionScorer:
             )
             if offset == 0:
                 first_year_metrics = operation_metrics
-            revenue = self._compute_revenue(agent, asset, technology_row, future_year)
-            additional_costs = self._additional_operating_costs(revenue, technology_row)
-            total_costs.append(operation_metrics.total_cost + additional_costs)
+            if agent.model.scenario.investment_timing.cashflow_mode == "direct_net_operating_cost":
+                revenue, net_operating_cost = self._resolve_direct_cashflow(
+                    agent,
+                    asset,
+                    technology_row,
+                    future_year,
+                )
+                total_costs.append(net_operating_cost)
+            else:
+                revenue = self._compute_revenue(agent, asset, technology_row, future_year)
+                additional_costs = self._additional_operating_costs(revenue, technology_row)
+                total_costs.append(operation_metrics.total_cost + additional_costs)
             revenues.append(revenue)
 
         interest_rate = float(technology_row["payback_interest_rate"])
@@ -494,6 +532,59 @@ class NATMDecisionScorer:
             effective_alternative_cost=mean_operation_cost,
             net_present_value=npv,
         )
+
+    def _resolve_direct_cashflow(
+        self,
+        agent,
+        asset: pd.Series,
+        technology_row: pd.Series,
+        year: int,
+    ) -> tuple[float, float]:
+        """Look up one period's (revenue, net_operating_cost) for direct-mode cashflow.
+
+        Mirrors AURIS's `direct_net_operating_cost` cashflow mode: instead of
+        computing revenue and cost through each sector's component methods
+        (`_compute_revenue`/`_additional_operating_costs`/`annual_operation_metrics`),
+        read one scenario-table parameter for the whole period's net operating cost,
+        and optionally a separate revenue parameter. If no revenue parameter is
+        configured, revenue is 0 and the cashflow is pure cost, same as AURIS.
+        """
+        timing = agent.model.scenario.investment_timing
+        segment = clean_scope_value(asset["segment"])
+        technology_name = clean_scope_value(technology_row["technology_name"])
+        net_operating_cost = agent.scenario_value(
+            timing.direct_net_operating_cost_parameter,
+            year,
+            segment=segment,
+            technology_name=technology_name,
+            default=None,
+        )
+        if net_operating_cost is None:
+            parameter_name = timing.direct_net_operating_cost_parameter
+            raise ValueError(
+                "No scenario value found for investment_timing."
+                f"direct_net_operating_cost_parameter='{parameter_name}' "
+                f"in sector '{agent.sector_name}', segment '{segment}', "
+                f"technology '{technology_name}', year {year}",
+            )
+        if timing.direct_revenue_parameter:
+            revenue = agent.scenario_value(
+                timing.direct_revenue_parameter,
+                year,
+                segment=segment,
+                technology_name=technology_name,
+                default=None,
+            )
+            if revenue is None:
+                raise ValueError(
+                    "No scenario value found for investment_timing."
+                    f"direct_revenue_parameter='{timing.direct_revenue_parameter}' "
+                    f"in sector '{agent.sector_name}', segment '{segment}', "
+                    f"technology '{technology_name}', year {year}",
+                )
+        else:
+            revenue = 0.0
+        return float(revenue), float(net_operating_cost)
 
     def _payback_year_fallback(self, life_time: int, max_npv_year: int) -> int:
         """Payback year to use when NPV never turns positive within the horizon.

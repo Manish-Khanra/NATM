@@ -288,7 +288,19 @@ case must opt in through an `investment_timing` block in `scenario.yaml`:
 investment_timing:
   include_continue_option: false        # set true to enable continue-vs-invest
   residual_value_method: none           # or straight_line_remaining_life
+  minimum_holding_period: 0             # years to wait before an early replacement
+  include_life_extension: false         # reserved, not implemented (see below)
+  include_shutdown: false               # reserved, not implemented (see below)
+  cashflow_mode: component_based        # or direct_net_operating_cost
+  direct_net_operating_cost_parameter: ""   # scenario variable_name, required for direct mode
+  direct_revenue_parameter: ""          # optional scenario variable_name
 ```
+
+These five knobs mirror AURIS's `DynamicInvestmentTimingEvaluator`
+(`investment_timing.py` in the AURIS repo) — ported to the same
+`NATMDecisionScorer` that already handles continue-vs-invest, so they apply
+to all four sectors and both decision logics for free, same as everything
+else on this page.
 
 ### Continue vs. invest
 
@@ -340,6 +352,61 @@ discounted back at the technology's own `payback_interest_rate`. This only
 changes anything for a case whose `scenario.end_year` is shorter than a
 winning technology's `lifetime_years`; it never applies to `continue_current`
 candidates, since those spend no fresh capex to credit back.
+
+### Minimum holding period
+
+`minimum_holding_period` sets a minimum number of years between a fresh
+investment and the next time that same asset can be pulled into early
+replacement by the policy/subsidy acceleration window. It reads each fleet
+row's `investment_year` (already recorded by every fresh investment) and
+only gates the acceleration-window path — an asset that is genuinely due at
+the end of its own `lifetime_years` always replaces on schedule regardless
+of this setting, since `replacement_year` is never set earlier than
+`investment_year + lifetime_years` in the first place. A fresh row loaded
+from the fleet stock CSV (no `investment_year` yet) is never gated.
+
+### Reserved: life extension and shutdown
+
+`include_life_extension` and `include_shutdown` are ported as reserved
+configuration surface only, matching AURIS exactly: AURIS's own
+`DynamicInvestmentTimingEvaluator.validate_config` raises
+`NotImplementedError` immediately if either is set, because neither
+knob has a working implementation upstream. Setting either to `true` in
+NATM raises the same `NotImplementedError` at scenario-load time, so a case
+that turns them on fails fast instead of silently no-op'ing.
+
+### Direct net-operating-cost cashflow mode
+
+By default (`cashflow_mode: component_based`), revenue and cost are computed
+per period from each sector's own formulas (`annual_revenue`, maintenance/
+wages/crew/port-fee cost lines, `annual_operation_metrics`). Setting
+`cashflow_mode: direct_net_operating_cost` instead reads one scenario-table
+`variable_name` (`direct_net_operating_cost_parameter`, scoped by segment/
+technology/year the same way `technology_dynamic_price_index` is) as the
+*entire* per-period operating cost, bypassing the component formulas.
+Revenue is `0.0` unless `direct_revenue_parameter` is also set, in which case
+it is looked up the same way — matching AURIS, where an unset revenue
+parameter means the mode is a pure cost minimization rather than a profit
+calculation. NATM's own per-period `depreciation_cost` charge (capex
+amortization) still applies on top in `calc_payback_year` in both modes;
+`evaluate_continue_current` never adds it, in either mode, since continuing
+spends no fresh capex. A scenario missing the configured parameter for a
+requested segment/technology/year fails fast with a `ValueError` rather than
+silently defaulting.
+
+### Capex multiplier
+
+A `capex_multiplier` scenario-table value multiplies a technology's
+`capex_eur` at investment time, composing with (not replacing) the existing
+`technology_dynamic_price_index` additive adjustment:
+`asset_price = capex_eur * (1 + dynamic_price_index) * capex_multiplier`.
+Like `technology_dynamic_price_index`, it needs no separate on/off flag —
+it resolves through the same `variable_name` lookup, scoped by
+segment/technology/year, which already falls back from a
+technology-and-segment-specific row to a less-specific or blank-scope
+("wildcard") row to a default of `1.0` when no `capex_multiplier` rows exist
+at all. Only `calc_payback_year` consults it; continuing an asset spends no
+capex, so `evaluate_continue_current` is unaffected.
 
 ## Workflow
 

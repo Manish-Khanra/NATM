@@ -230,11 +230,29 @@ class AmbiguityAwareDecisionConfig:
 
 SUPPORTED_RESIDUAL_VALUE_METHODS = ("none", "straight_line_remaining_life")
 
+# Mirrors AURIS's CASHFLOW_MODE_ALIASES: several spellings collapse onto the
+# same two underlying modes.
+CASHFLOW_MODE_ALIASES = {
+    "": "component_based",
+    "component": "component_based",
+    "component_based": "component_based",
+    "direct": "direct_net_operating_cost",
+    "direct_net_cost": "direct_net_operating_cost",
+    "direct_net_operating_cost": "direct_net_operating_cost",
+}
+SUPPORTED_CASHFLOW_MODES = ("component_based", "direct_net_operating_cost")
+
 
 @dataclass(frozen=True)
 class InvestmentTimingConfig:
     include_continue_option: bool = False
     residual_value_method: str = "none"
+    minimum_holding_period: int = 0
+    include_life_extension: bool = False
+    include_shutdown: bool = False
+    cashflow_mode: str = "component_based"
+    direct_net_operating_cost_parameter: str = ""
+    direct_revenue_parameter: str = ""
 
     def __post_init__(self) -> None:
         if self.residual_value_method not in SUPPORTED_RESIDUAL_VALUE_METHODS:
@@ -243,6 +261,34 @@ class InvestmentTimingConfig:
                 f"Unsupported investment_timing.residual_value_method "
                 f"'{self.residual_value_method}'. Supported values: {supported}",
             )
+        if self.minimum_holding_period < 0:
+            raise ValueError("investment_timing.minimum_holding_period must be >= 0")
+        # AURIS itself does not implement these two knobs either (its own
+        # validate_config raises NotImplementedError immediately when either
+        # is set) - this ports the reserved, fail-fast surface, not a working
+        # feature that doesn't exist upstream.
+        if self.include_life_extension:
+            raise NotImplementedError(
+                "investment_timing.include_life_extension is not implemented yet",
+            )
+        if self.include_shutdown:
+            raise NotImplementedError(
+                "investment_timing.include_shutdown is not implemented yet",
+            )
+        if self.cashflow_mode not in SUPPORTED_CASHFLOW_MODES:
+            supported = ", ".join(SUPPORTED_CASHFLOW_MODES)
+            raise ValueError(
+                f"Unsupported investment_timing.cashflow_mode "
+                f"'{self.cashflow_mode}'. Supported values: {supported}",
+            )
+        if (
+            self.cashflow_mode == "direct_net_operating_cost"
+            and not self.direct_net_operating_cost_parameter
+        ):
+            raise ValueError(
+                "investment_timing.direct_net_operating_cost_parameter is required "
+                "when cashflow_mode is 'direct_net_operating_cost'",
+            )
 
     @classmethod
     def from_dict(cls, payload: dict | None) -> InvestmentTimingConfig:
@@ -250,10 +296,23 @@ class InvestmentTimingConfig:
             return cls()
         if not isinstance(payload, dict):
             raise ValueError("investment_timing must be a mapping")
+        raw_cashflow_mode = str(payload.get("cashflow_mode", "")).strip().lower()
+        cashflow_mode = CASHFLOW_MODE_ALIASES.get(
+            raw_cashflow_mode,
+            raw_cashflow_mode or "component_based",
+        )
         return cls(
             include_continue_option=bool(payload.get("include_continue_option", False)),
             residual_value_method=str(payload.get("residual_value_method", "none")).strip()
             or "none",
+            minimum_holding_period=int(payload.get("minimum_holding_period", 0)),
+            include_life_extension=bool(payload.get("include_life_extension", False)),
+            include_shutdown=bool(payload.get("include_shutdown", False)),
+            cashflow_mode=cashflow_mode,
+            direct_net_operating_cost_parameter=str(
+                payload.get("direct_net_operating_cost_parameter", ""),
+            ).strip(),
+            direct_revenue_parameter=str(payload.get("direct_revenue_parameter", "")).strip(),
         )
 
 

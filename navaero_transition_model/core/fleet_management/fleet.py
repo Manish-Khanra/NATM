@@ -369,17 +369,28 @@ class Fleet:
             self._frame.loc[row_index, "effective_operating_cost"] = operation_metrics.total_cost
         return remaining_ets_allowance
 
-    def due_replacement_indices(self, year: int, *, acceleration_window: int = 0) -> list[int]:
+    def due_replacement_indices(
+        self,
+        year: int,
+        *,
+        acceleration_window: int = 0,
+        minimum_holding_period: int = 0,
+    ) -> list[int]:
         replacement_rows: list[int] = []
         for row_index, aircraft in self._frame.iterrows():
             is_conventional = self.technology_catalog.is_conventional(
                 str(aircraft["current_technology"]),
             )
             due_now = int(aircraft["replacement_year"]) <= year
+            investment_year = aircraft["investment_year"]
+            holding_period_elapsed = pd.isna(investment_year) or (
+                year - int(investment_year) >= minimum_holding_period
+            )
             early_replacement = (
                 is_conventional
                 and acceleration_window > 0
                 and int(aircraft["replacement_year"]) <= year + acceleration_window
+                and holding_period_elapsed
             )
             if due_now or early_replacement:
                 replacement_rows.append(int(row_index))
