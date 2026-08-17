@@ -441,8 +441,9 @@ still accepted as aliases for existing cases.
 
 Fleet stock can optionally include two related columns, mirroring how AURIS
 separates a plant's `decision_attitude` from its `decision_mode`:
-`decision_mode` (`risk_neutral`, `risk_averse_mean`, or
-`risk_averse_expected_shortfall`) is the precise NPV rule and wins when set;
+`decision_mode` (`risk_neutral`, `risk_averse_mean`,
+`risk_averse_expected_shortfall`, or the probability-free `minimax_regret`)
+is the precise NPV rule and wins when set;
 `decision_attitude` (`risk_neutral`, `risk_averse`, or `ambiguity_averse` —
 the precise mode names are also accepted directly) is a coarser behavioral
 label consulted only when `decision_mode` is blank, with `risk_averse` and

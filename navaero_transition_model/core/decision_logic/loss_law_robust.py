@@ -30,6 +30,7 @@ ACTIVE_LOSS_LAW_DECISION_MODES = (
     "risk_neutral",
     "risk_averse_mean",
     "risk_averse_expected_shortfall",
+    "minimax_regret",
 )
 
 OUTPUT_CONTEXT_COLUMNS = (
@@ -387,6 +388,15 @@ def score_ambiguity_aware_decisions(
                 f"missing={missing_from_eval}, extra={extra_in_eval}",
             )
 
+        # Regret is inherently cross-candidate (the best NPV any candidate reaches
+        # in each scenario), so it is computed once per context, from every row
+        # regardless of mode, the same way expected_npv/robust_worst_case_mean_npv
+        # are always computed as diagnostics even when a different mode drives
+        # the actual selection.
+        context_npv = context.copy()
+        context_npv["npv"] = pd.to_numeric(context_npv["npv"], errors="coerce")
+        best_npv_by_scenario = context_npv.groupby(scenario_column)["npv"].max().to_dict()
+
         context_scores: list[dict[str, object]] = []
         candidates = context.groupby(["decision_id", "technology_id"], dropna=False)
         for (decision_id, technology_id), candidate in candidates:
@@ -448,6 +458,10 @@ def score_ambiguity_aware_decisions(
                 tolerance=tolerance,
             )
             expected_npv = _expected_npv(npv_by_scenario, bounds, representative_probabilities)
+            max_regret = max(
+                best_npv_by_scenario.get(scenario, float("nan")) - npv_by_scenario[scenario]
+                for scenario in bounds.scenarios
+            )
             if normalized_mode == "risk_neutral":
                 robust_score = expected_npv
                 probability_result = RobustMetricResult(
@@ -467,6 +481,23 @@ def score_ambiguity_aware_decisions(
             elif normalized_mode == "risk_averse_expected_shortfall":
                 robust_score = tail_result.robust_tail_npv
                 probability_result = tail_result
+            elif normalized_mode == "minimax_regret":
+                # Probability-free by construction (Savage's minimax regret): no
+                # belief-set probability vector drives this choice, so both fields
+                # are left unset rather than showing a representative vector that
+                # did not actually influence the decision. Ranking is by highest
+                # robust_score everywhere else in this function, so store the
+                # negated regret (lower regret => higher score) instead of
+                # special-casing an ascending sort just for this mode.
+                robust_score = -max_regret
+                probability_result = RobustMetricResult(
+                    robust_mean_loss=None,
+                    robust_worst_npv=None,
+                    robust_tail_loss=None,
+                    robust_tail_npv=None,
+                    probabilities={scenario: pd.NA for scenario in bounds.scenarios},
+                    tail_weights={scenario: pd.NA for scenario in bounds.scenarios},
+                )
             row = {
                 **_output_context(context_values),
                 "decision_id": decision_id,
@@ -477,6 +508,7 @@ def score_ambiguity_aware_decisions(
                 "robust_worst_case_mean_npv": mean_result.robust_worst_npv,
                 "robust_es_loss": tail_result.robust_tail_loss,
                 "robust_expected_shortfall_npv": tail_result.robust_tail_npv,
+                "max_regret": max_regret,
                 # Backward-compatible aliases for older dashboards/tests.
                 "robust_worst_npv": mean_result.robust_worst_npv,
                 "robust_tail_loss": tail_result.robust_tail_loss,
@@ -532,6 +564,7 @@ def score_ambiguity_aware_decisions(
                 "selected_robust_expected_shortfall_npv": best[
                     "robust_expected_shortfall_npv"
                 ],
+                "selected_max_regret": best["max_regret"],
                 # Backward-compatible aliases.
                 "selected_risk_metric": normalized_mode,
                 "selected_robust_worst_npv": best["robust_worst_case_mean_npv"],

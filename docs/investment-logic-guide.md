@@ -36,8 +36,8 @@ the same way AURIS keeps `decision_attitude` and `decision_mode` separate in
 `plants.csv`:
 
 - `decision_mode` is the precise NPV-selection rule that actually drives the
-  math: `risk_neutral`, `risk_averse_mean`, or `risk_averse_expected_shortfall`.
-  When set, it is authoritative.
+  math: `risk_neutral`, `risk_averse_mean`, `risk_averse_expected_shortfall`,
+  or `minimax_regret`. When set, it is authoritative.
 - `decision_attitude` is a coarser, human-readable behavioral label:
   `risk_neutral`, `risk_averse`, or `ambiguity_averse` (the precise mode names
   are also accepted directly, for backward compatibility). When `decision_mode`
@@ -70,6 +70,18 @@ What each `decision_mode` value selects:
 - `risk_averse_expected_shortfall`: selects the highest robust
   expected-shortfall NPV. NATM again works on the loss scale and evaluates the
   worst tail under the most adverse admissible probability vector.
+- `minimax_regret`: probability-free (Savage's minimax regret). For every
+  scenario, regret is the gap between the best NPV any candidate reaches in
+  that scenario and this candidate's NPV in that scenario; NATM selects the
+  candidate whose worst regret across scenarios is smallest. No belief-set
+  probability vector influences this choice — a case still needs
+  `ambiguity_aware_decision.scenario_ids` configured (to know which scenarios
+  to compare candidates across), but the probability columns in the belief-set
+  table are unused for this mode. `max_regret`/`selected_max_regret` appear
+  alongside the other NPV metrics in `ambiguity_decision_scores.csv` and
+  `selected_ambiguity_aware_decisions.csv` regardless of which mode is active,
+  the same way `robust_worst_case_mean_npv` is always shown as a diagnostic
+  even under `risk_neutral`.
 
 If both columns are missing, NATM defaults to `decision_attitude=risk_neutral`,
 which resolves to `decision_mode=risk_neutral`. Neither column changes

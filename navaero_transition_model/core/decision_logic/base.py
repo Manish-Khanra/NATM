@@ -24,6 +24,7 @@ ACTIVE_DECISION_ATTITUDES = (
     "risk_neutral",
     "risk_averse_mean",
     "risk_averse_expected_shortfall",
+    "minimax_regret",
 )
 # The precise NPV-selection rule vocabulary. Same values as
 # ACTIVE_DECISION_ATTITUDES; aliased under this name for readability at the

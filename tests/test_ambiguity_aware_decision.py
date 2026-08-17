@@ -659,3 +659,50 @@ def test_risk_attitudes_comparison_case_uses_three_npv_modes() -> None:
         "robust_worst_case_mean_npv",
         "robust_expected_shortfall_npv",
     }.issubset(scores.columns)
+
+
+def test_minimax_regret_decision_mode_runs_end_to_end(tmp_path: Path) -> None:
+    source_dir = Path(__file__).resolve().parents[1] / "data" / "baseline-passenger-transition"
+    case_dir = tmp_path / "baseline-passenger-transition"
+    shutil.copytree(source_dir, case_dir)
+
+    fleet_path = case_dir / "aviation_fleet_stock.csv"
+    fleet = pd.read_csv(fleet_path).head(1).copy()
+    fleet["investment_logic"] = "ambiguity_aware_utility"
+    fleet["decision_attitude"] = "risk_neutral"
+    fleet["decision_mode"] = "minimax_regret"
+    fleet["Age (Years)"] = 35.0
+    fleet.to_csv(fleet_path, index=False)
+
+    technology_path = case_dir / "aviation_technology_catalog.csv"
+    technology_catalog = pd.read_csv(technology_path)
+    technology_catalog["lifetime_years"] = 2
+    technology_catalog.to_csv(technology_path, index=False)
+
+    scenario_yaml = case_dir / "scenario.yaml"
+    _append_ambiguity_config(scenario_yaml)
+
+    scenario = NATMScenario.from_yaml(scenario_yaml)
+    model = NATMModel(scenario, seed=42)
+    agent = model.get_sector_agents("aviation")[0]
+    aircraft = agent.fleet.frame.iloc[0]
+    agent.decision_logic.select_technology_for_aircraft(
+        agent,
+        aircraft,
+        scenario.start_year,
+        initial_ets_balance=agent.remaining_ets_allowance,
+    )
+
+    scores = model.to_ambiguity_decision_scores_frame()
+    assert set(scores["decision_mode"].unique()) == {"minimax_regret"}
+    assert "max_regret" in scores.columns
+    assert (scores["max_regret"] >= -1e-9).all()
+    assert scores["robust_score"].equals(-scores["max_regret"])
+
+    selected = model.to_selected_ambiguity_decisions_frame()
+    assert "selected_max_regret" in selected.columns
+
+    # Probability-free: no belief-set probability vector drives this mode.
+    probabilities = model.to_ambiguity_worst_case_probabilities_frame()
+    minimax_rows = probabilities.loc[probabilities["decision_mode"] == "minimax_regret"]
+    assert minimax_rows["probability"].isna().all()

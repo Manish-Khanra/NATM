@@ -320,6 +320,55 @@ def test_risk_averse_mean_selects_highest_robust_worst_case_mean_npv() -> None:
     assert result.scores["robust_score"].equals(result.scores["robust_worst_case_mean_npv"])
 
 
+def test_minimax_regret_selects_lowest_worst_case_regret_not_highest_npv() -> None:
+    # Hand-computed: best NPV per scenario is S1=150 (D2), S2=200 (D1), S3=300 (D2).
+    # Regret[D,s] = best_npv[s] - npv[D,s]:
+    #   D1: S1=50, S2=0,   S3=250 -> max 250
+    #   D2: S1=0,  S2=150, S3=0   -> max 150   (lowest -> winner)
+    #   D3: S1=70, S2=20,  S3=200 -> max 200
+    # Note D1 has the highest expected/summed NPV but loses on minimax regret,
+    # confirming this is a distinct criterion from the NPV-based modes.
+    bounds = _bounds()
+    rows = []
+    for decision_id, values in {
+        "D1": {"S1": 100.0, "S2": 200.0, "S3": 50.0},
+        "D2": {"S1": 150.0, "S2": 50.0, "S3": 300.0},
+        "D3": {"S1": 80.0, "S2": 180.0, "S3": 100.0},
+    }.items():
+        for scenario, npv in values.items():
+            rows.append(
+                {
+                    "operator_id": "A",
+                    "decision_id": decision_id,
+                    "technology_id": decision_id,
+                    "scenario": scenario,
+                    "npv": npv,
+                },
+            )
+
+    result = score_ambiguity_aware_decisions(
+        pd.DataFrame(rows),
+        bounds,
+        decision_mode="minimax_regret",
+    )
+
+    regret_by_decision = dict(
+        zip(result.scores["decision_id"], result.scores["max_regret"], strict=False),
+    )
+    assert regret_by_decision == pytest.approx({"D1": 250.0, "D2": 150.0, "D3": 200.0})
+    assert result.selected.iloc[0]["selected_decision_id"] == "D2"
+    assert result.selected.iloc[0]["selected_max_regret"] == pytest.approx(150.0)
+    # Ranking is by highest robust_score everywhere, including this mode: lower
+    # regret must correspond to a higher (less negative) robust_score.
+    assert result.scores["robust_score"].equals(-result.scores["max_regret"])
+    # No probability vector drives a probability-free criterion.
+    probabilities = result.worst_case_probabilities.loc[
+        result.worst_case_probabilities["decision_id"] == "D2",
+        "probability",
+    ]
+    assert probabilities.isna().all()
+
+
 def test_incomplete_candidate_is_excluded_and_no_valid_candidate_raises() -> None:
     bounds = _bounds()
     rows = [
