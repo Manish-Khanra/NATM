@@ -14,6 +14,7 @@ from navaero_transition_model.core.decision_logic.base import (
     clamp,
     clean_scope_value,
 )
+from navaero_transition_model.core.decision_logic.scorer import NATMDecisionScorer
 
 if TYPE_CHECKING:
     from navaero_transition_model.core.agent_types.aviation_cargo_airline import (
@@ -33,15 +34,8 @@ if TYPE_CHECKING:
 AVERAGE_PASSENGER_WEIGHT_KG = 100.0
 
 
-class LegacyWeightedUtilityLogic(AviationPassengerDecisionLogic):
+class LegacyWeightedUtilityLogic(NATMDecisionScorer, AviationPassengerDecisionLogic):
     name = "legacy_weighted_utility"
-
-    def step(self, agent: AviationPassengerAirlineAgent, year: int) -> None:
-        agent.fleet.reset_actions()
-        replacement_rows = self.replacement_row_indices(agent, year)
-        agent.update_existing_fleet(year, excluded_indices=set(replacement_rows))
-        self._replace_due_aircraft(agent, year, replacement_rows=replacement_rows)
-        self._add_growth_aircraft(agent, year)
 
     def current_carbon_price(self, agent: AviationPassengerAirlineAgent, year: int) -> float:
         scenario_price = agent.scenario_value("carbon_price", year)
@@ -292,225 +286,6 @@ class LegacyWeightedUtilityLogic(AviationPassengerDecisionLogic):
         cargo_revenue = (spare_cargo_mass / 1000.0) * float(freight_rate) * annual_flights
         return economy_revenue + business_revenue + first_revenue + cargo_revenue
 
-    def calc_payback_year(
-        self,
-        agent: AviationPassengerAirlineAgent,
-        aircraft: pd.Series,
-        technology_row: pd.Series,
-        year: int,
-        initial_ets_balance: float | None = None,
-    ) -> CandidateEvaluation:
-        life_time = max(int(technology_row["lifetime_years"]), 1)
-        dynamic_price_index = agent.scenario_value(
-            "technology_dynamic_price_index",
-            year,
-            segment=clean_scope_value(aircraft["segment"]),
-            technology_name=clean_scope_value(technology_row["technology_name"]),
-            default=0.0,
-        )
-        aircraft_price = float(technology_row["capex_eur"]) * (1.0 + float(dynamic_price_index))
-        depreciation_cost = float(technology_row["depreciation_cost_share"]) * aircraft_price
-        interest_rate = float(technology_row["payback_interest_rate"])
-
-        # By default (residual_value_method="none"), cash flows are projected over the
-        # technology's full nominal lifetime regardless of the model horizon, matching
-        # today's behavior exactly. Opting into straight_line_remaining_life truncates
-        # the projection at the horizon and credits back the unused CAPEX life instead of
-        # the full-lifetime salvage value.
-        residual_value_method = agent.model.scenario.investment_timing.residual_value_method
-        horizon_periods = max(agent.model.scenario.end_year - year + 1, 0)
-        if residual_value_method == "straight_line_remaining_life" and horizon_periods < life_time:
-            evaluated_periods = horizon_periods
-            residual_value = aircraft_price * (life_time - evaluated_periods) / life_time
-        else:
-            evaluated_periods = life_time
-            residual_value = max(aircraft_price - (depreciation_cost * life_time), 0.0)
-
-        total_costs: list[float] = []
-        revenues: list[float] = []
-        emissions: list[float] = []
-        primary_energy_quantities: list[float] = []
-        secondary_energy_quantities: list[float] = []
-        first_year_metrics: OperationMetrics | None = None
-        for offset in range(evaluated_periods):
-            future_year = min(year + offset, agent.model.scenario.end_year)
-            operation_metrics = self.annual_operation_metrics(
-                agent,
-                aircraft,
-                technology_row,
-                future_year,
-                initial_ets_balance if offset == 0 else None,
-            )
-            if offset == 0:
-                first_year_metrics = operation_metrics
-            revenue = self.annual_revenue(agent, aircraft, technology_row, future_year)
-            maintenance_cost = revenue * float(technology_row["maintenance_cost_share"])
-            wages = revenue * 0.24
-            landing_fees = revenue * 0.10
-            total_costs.append(
-                operation_metrics.total_cost
-                + maintenance_cost
-                + wages
-                + landing_fees
-                + depreciation_cost,
-            )
-            revenues.append(revenue)
-            emissions.append(operation_metrics.total_emission)
-            primary_energy_quantities.append(operation_metrics.primary_energy_quantity)
-            secondary_energy_quantities.append(operation_metrics.secondary_energy_quantity)
-
-        npv = -aircraft_price
-        payback_year = life_time
-        for offset, (revenue, cost) in enumerate(zip(revenues, total_costs, strict=False), start=1):
-            npv += (revenue - cost) / ((1.0 + interest_rate) ** offset)
-            if npv > 0:
-                payback_year = offset - 1
-                break
-        npv += residual_value / ((1.0 + interest_rate) ** evaluated_periods)
-
-        economic_utility = clamp(((life_time + 1) - payback_year) / max(life_time, 1), 0.0, 1.0)
-        environmental_utility = self.environmental_utility(technology_row)
-        technology_name = str(technology_row["technology_name"])
-        if first_year_metrics is None:
-            first_year_metrics = self.annual_operation_metrics(
-                agent,
-                aircraft,
-                technology_row,
-                year,
-                initial_ets_balance,
-            )
-        policy_bonus = 0.0
-        if not agent.technology_catalog.is_conventional(technology_name):
-            policy_bonus = (
-                0.08 * self.current_clean_fuel_subsidy(agent)
-                + 0.06 * agent.model.current_policy_signal.aviation.adoption_mandate
-            )
-
-        total_utility = (
-            economic_utility * agent.operator_economic_weight
-            + environmental_utility * agent.operator_environmental_weight
-            + policy_bonus
-        )
-        mean_total_cost = sum(total_costs) / max(len(total_costs), 1)
-        mean_operation_cost = sum(
-            revenue - (revenue - cost + depreciation_cost)
-            for revenue, cost in zip(revenues, total_costs, strict=False)
-        ) / max(len(total_costs), 1)
-        return CandidateEvaluation(
-            technology_name=technology_name,
-            total_utility=total_utility,
-            economic_utility=economic_utility,
-            environmental_utility=environmental_utility,
-            payback_year=payback_year,
-            total_emission=first_year_metrics.total_emission,
-            primary_energy_quantity=first_year_metrics.primary_energy_quantity,
-            secondary_energy_quantity=first_year_metrics.secondary_energy_quantity,
-            chargeable_emission=first_year_metrics.chargeable_emission,
-            remaining_ets_allowance=first_year_metrics.remaining_ets_allowance,
-            current_year_operating_cost=first_year_metrics.total_cost,
-            effective_conventional_cost=mean_total_cost,
-            effective_alternative_cost=mean_operation_cost,
-            net_present_value=npv,
-        )
-
-    def evaluate_continue_current(
-        self,
-        agent: AviationPassengerAirlineAgent,
-        aircraft: pd.Series,
-        year: int,
-        initial_ets_balance: float | None = None,
-    ) -> CandidateEvaluation:
-        """Evaluate keeping the aircraft on its current technology, at zero capex.
-
-        Mirrors `calc_payback_year` but with no fresh investment: the aircraft is
-        assumed sunk, so there is no depreciation/salvage schedule to restart, and
-        the projection only covers the aircraft's already-scheduled remaining
-        lifetime (`replacement_year - year`) rather than a fresh full lifetime.
-        """
-        technology_row = agent.technology_row(str(aircraft["current_technology"]))
-        remaining_lifetime = max(int(aircraft["replacement_year"]) - year, 0)
-        residual_value_method = agent.model.scenario.investment_timing.residual_value_method
-        if residual_value_method == "straight_line_remaining_life":
-            horizon_periods = max(agent.model.scenario.end_year - year + 1, 0)
-            evaluated_periods = min(remaining_lifetime, horizon_periods)
-        else:
-            evaluated_periods = remaining_lifetime
-
-        total_costs: list[float] = []
-        revenues: list[float] = []
-        first_year_metrics: OperationMetrics | None = None
-        for offset in range(evaluated_periods):
-            future_year = min(year + offset, agent.model.scenario.end_year)
-            operation_metrics = self.annual_operation_metrics(
-                agent,
-                aircraft,
-                technology_row,
-                future_year,
-                initial_ets_balance if offset == 0 else None,
-            )
-            if offset == 0:
-                first_year_metrics = operation_metrics
-            revenue = self.annual_revenue(agent, aircraft, technology_row, future_year)
-            maintenance_cost = revenue * float(technology_row["maintenance_cost_share"])
-            wages = revenue * 0.24
-            landing_fees = revenue * 0.10
-            total_costs.append(
-                operation_metrics.total_cost + maintenance_cost + wages + landing_fees,
-            )
-            revenues.append(revenue)
-
-        interest_rate = float(technology_row["payback_interest_rate"])
-        npv = 0.0
-        for offset, (revenue, cost) in enumerate(zip(revenues, total_costs, strict=False), start=1):
-            npv += (revenue - cost) / ((1.0 + interest_rate) ** offset)
-
-        # No capex was spent, so there is no capital to pay back: continuing is
-        # always scored as maximally payback-efficient on the economic axis. Whether
-        # continuing is actually cash-flow positive still shows up in `net_present_value`,
-        # which the ambiguity-aware NPV-based selection uses directly.
-        economic_utility = 1.0
-        environmental_utility = self.environmental_utility(technology_row)
-        technology_name = str(technology_row["technology_name"])
-        if first_year_metrics is None:
-            first_year_metrics = self.annual_operation_metrics(
-                agent,
-                aircraft,
-                technology_row,
-                year,
-                initial_ets_balance,
-            )
-        policy_bonus = 0.0
-        if not agent.technology_catalog.is_conventional(technology_name):
-            policy_bonus = (
-                0.08 * self.current_clean_fuel_subsidy(agent)
-                + 0.06 * agent.model.current_policy_signal.aviation.adoption_mandate
-            )
-        total_utility = (
-            economic_utility * agent.operator_economic_weight
-            + environmental_utility * agent.operator_environmental_weight
-            + policy_bonus
-        )
-        mean_total_cost = sum(total_costs) / max(len(total_costs), 1)
-        mean_operation_cost = sum(
-            revenue - (revenue - cost) for revenue, cost in zip(revenues, total_costs, strict=False)
-        ) / max(len(total_costs), 1)
-        return CandidateEvaluation(
-            technology_name=technology_name,
-            total_utility=total_utility,
-            economic_utility=economic_utility,
-            environmental_utility=environmental_utility,
-            payback_year=0,
-            total_emission=first_year_metrics.total_emission,
-            primary_energy_quantity=first_year_metrics.primary_energy_quantity,
-            secondary_energy_quantity=first_year_metrics.secondary_energy_quantity,
-            chargeable_emission=first_year_metrics.chargeable_emission,
-            remaining_ets_allowance=first_year_metrics.remaining_ets_allowance,
-            current_year_operating_cost=first_year_metrics.total_cost,
-            effective_conventional_cost=mean_total_cost,
-            effective_alternative_cost=mean_operation_cost,
-            net_present_value=npv,
-        )
-
     def partial_environmental_utility(self, value: float, thresholds: tuple[float, ...]) -> float:
         if value <= 0.0:
             return 1.0
@@ -593,6 +368,77 @@ class LegacyWeightedUtilityLogic(AviationPassengerDecisionLogic):
             )
         return bool(technology_flag) and bool(infrastructure_flag) and bool(saf_flag)
 
+    # --- NATMDecisionScorer hooks -------------------------------------------------
+
+    def _compute_revenue(
+        self,
+        agent: AviationPassengerAirlineAgent,
+        asset: pd.Series,
+        technology_row: pd.Series,
+        year: int,
+    ) -> float:
+        return self.annual_revenue(agent, asset, technology_row, year)
+
+    def _additional_operating_costs(self, revenue: float, technology_row: pd.Series) -> float:
+        maintenance_cost = revenue * float(technology_row["maintenance_cost_share"])
+        wages = revenue * 0.24
+        landing_fees = revenue * 0.10
+        return maintenance_cost + wages + landing_fees
+
+    def _asset_capacity(
+        self,
+        agent: AviationPassengerAirlineAgent,
+        asset: pd.Series,
+        technology_row: pd.Series,
+        year: int,
+    ) -> float:
+        return agent.aircraft_passenger_km_capacity(asset, technology_row, year)
+
+    def _segment_capacity(
+        self,
+        agent: AviationPassengerAirlineAgent,
+        segment: str,
+        year: int,
+    ) -> float:
+        return agent.segment_passenger_km_capacity(segment, year)
+
+    def _allocated_demand(
+        self,
+        agent: AviationPassengerAirlineAgent,
+        segment: str,
+        year: int,
+    ) -> float:
+        return agent.allocated_passenger_km(segment, year)
+
+    def _apply_technology(
+        self,
+        agent: AviationPassengerAirlineAgent,
+        row_index: int,
+        technology_row: pd.Series,
+        evaluation: CandidateEvaluation,
+        year: int,
+        *,
+        action: str = "invest",
+    ) -> None:
+        agent.apply_technology_to_aircraft(
+            row_index,
+            technology_row,
+            evaluation,
+            year,
+            action=action,
+        )
+
+    def _continue_operation(
+        self,
+        agent: AviationPassengerAirlineAgent,
+        row_index: int,
+        evaluation: CandidateEvaluation,
+        year: int,
+    ) -> None:
+        agent.continue_aircraft_operation(row_index, evaluation, year)
+
+    # --- Public per-sector aliases (external API preserved exactly) --------------
+
     def select_technology_for_aircraft(
         self,
         agent: AviationPassengerAirlineAgent,
@@ -602,87 +448,13 @@ class LegacyWeightedUtilityLogic(AviationPassengerDecisionLogic):
         *,
         row_index: int | None = None,
     ) -> tuple[pd.Series, CandidateEvaluation, str]:
-        is_planned = row_index is not None and not agent.fleet.planned_technology_choices(
-            row_index,
+        return self._select_technology_for_asset(
+            agent,
+            aircraft,
             year,
-        ).empty
-        candidates = (
-            agent.fleet.planned_technology_choices(row_index, year)
-            if is_planned
-            else agent.candidate_technology_rows(aircraft)
+            initial_ets_balance,
+            row_index=row_index,
         )
-
-        evaluations: list[tuple[pd.Series, CandidateEvaluation, str]] = []
-        for _, technology_row in candidates.iterrows():
-            if not self.is_candidate_available(
-                agent,
-                technology_row,
-                year,
-                str(aircraft["segment"]),
-            ):
-                continue
-            evaluation = self.calc_payback_year(
-                agent,
-                aircraft,
-                technology_row,
-                year,
-                initial_ets_balance,
-            )
-            evaluations.append((technology_row, evaluation, "invest"))
-
-        if (
-            not is_planned
-            and row_index is not None
-            and agent.model.scenario.investment_timing.include_continue_option
-            and int(aircraft["replacement_year"]) - year > 0
-        ):
-            current_row = agent.technology_row(
-                technology_name=str(aircraft["current_technology"]),
-            )
-            continue_evaluation = self.evaluate_continue_current(
-                agent,
-                aircraft,
-                year,
-                initial_ets_balance,
-            )
-            evaluations.append((current_row, continue_evaluation, "continue_current"))
-
-        if not evaluations:
-            current_row = agent.technology_row(
-                technology_name=str(aircraft["current_technology"]),
-            )
-            return (
-                current_row,
-                self.calc_payback_year(
-                    agent,
-                    aircraft,
-                    current_row,
-                    year,
-                    initial_ets_balance,
-                ),
-                "invest",
-            )
-
-        evaluations.sort(key=lambda item: item[1].total_utility, reverse=True)
-        return evaluations[0]
-
-    def replacement_row_indices(self, agent: AviationPassengerAirlineAgent, year: int) -> list[int]:
-        clean_fuel_subsidy = self.current_clean_fuel_subsidy(agent)
-        acceleration_window = int(
-            (agent.model.current_policy_signal.aviation.adoption_mandate + clean_fuel_subsidy) * 5,
-        )
-        due_rows = agent.fleet.due_replacement_indices(
-            year,
-            acceleration_window=acceleration_window,
-        )
-        planned_rows = agent.fleet.planned_investment_row_indices(year)
-        if not planned_rows:
-            return due_rows
-        combined_rows = list(due_rows)
-        for row_index in planned_rows:
-            if row_index not in combined_rows:
-                combined_rows.append(row_index)
-        return combined_rows
 
     def replace_due_aircraft(
         self,
@@ -691,184 +463,14 @@ class LegacyWeightedUtilityLogic(AviationPassengerDecisionLogic):
         *,
         replacement_rows: list[int] | None = None,
     ) -> None:
-        rows_to_replace = (
-            self.replacement_row_indices(agent, year)
-            if replacement_rows is None
-            else replacement_rows
-        )
-        planned_rows = set(agent.fleet.planned_investment_row_indices(year))
-        for row_index in rows_to_replace:
-            aircraft = agent.fleet.frame.loc[row_index]
-            technology_row, evaluation, action = self.select_technology_for_aircraft(
-                agent,
-                aircraft,
-                year,
-                initial_ets_balance=agent.remaining_ets_allowance,
-                row_index=row_index,
-            )
-            if action == "continue_current":
-                agent.continue_aircraft_operation(row_index, evaluation, year)
-                continue
-            if row_index in planned_rows:
-                action = "planned_investment"
-            agent.apply_technology_to_aircraft(
-                row_index,
-                technology_row,
-                evaluation,
-                year,
-                action=action,
-            )
+        self._replace_due_assets(agent, year, replacement_rows=replacement_rows)
 
     def add_growth_aircraft(self, agent: AviationPassengerAirlineAgent, year: int) -> None:
-        next_aircraft_id = agent.fleet.next_aircraft_id()
-        for segment in sorted(agent.fleet.frame["segment"].dropna().unique()):
-            template = agent.segment_template(str(segment))
-            if template is None:
-                continue
-
-            residual_pkm_gap = max(
-                agent.allocated_passenger_km(str(segment), year)
-                - agent.segment_passenger_km_capacity(str(segment), year),
-                0.0,
-            )
-            if residual_pkm_gap <= 0.0:
-                continue
-
-            planned_rows = agent.planned_delivery_rows(str(segment), year)
-            if not planned_rows.empty:
-                planned_rows = planned_rows.assign(
-                    _technology_specific=planned_rows["technology_name"]
-                    .fillna("")
-                    .astype(str)
-                    .str.strip()
-                    .ne(""),
-                ).sort_values(
-                    by=["_technology_specific", "technology_name"],
-                    ascending=[False, True],
-                    kind="stable",
-                )
-
-            for _, planned_delivery in planned_rows.iterrows():
-                delivery_count = max(int(round(float(planned_delivery["value"]))), 0)
-                if delivery_count == 0:
-                    continue
-
-                forced_technology_name = clean_scope_value(
-                    planned_delivery.get("technology_name", ""),
-                )
-                for _ in range(delivery_count):
-                    technology_row, evaluation = self._growth_addition_choice(
-                        agent,
-                        template,
-                        year,
-                        forced_technology_name=forced_technology_name or None,
-                    )
-                    new_row_index = agent.fleet.add_aircraft_from_template(
-                        template,
-                        next_aircraft_id=next_aircraft_id,
-                    )
-                    agent.apply_technology_to_aircraft(
-                        new_row_index,
-                        technology_row,
-                        evaluation,
-                        year,
-                    )
-                    added_capacity = agent.aircraft_passenger_km_capacity(
-                        agent.fleet.frame.loc[new_row_index],
-                        technology_row,
-                        year,
-                    )
-                    residual_pkm_gap = max(residual_pkm_gap - added_capacity, 0.0)
-                    next_aircraft_id += 1
-                    if residual_pkm_gap <= 0.0:
-                        break
-                if residual_pkm_gap <= 0.0:
-                    break
-
-            if residual_pkm_gap <= 0.0:
-                continue
-
-            segment_rows = agent.fleet.frame.loc[agent.fleet.frame["segment"] == segment]
-            max_endogenous_additions = max(len(segment_rows) * 4, 10)
-            additions_made = 0
-            while residual_pkm_gap > 0.0 and additions_made < max_endogenous_additions:
-                technology_row, evaluation = self._growth_addition_choice(
-                    agent,
-                    template,
-                    year,
-                )
-                new_row_index = agent.fleet.add_aircraft_from_template(
-                    template,
-                    next_aircraft_id=next_aircraft_id,
-                )
-                agent.apply_technology_to_aircraft(
-                    new_row_index,
-                    technology_row,
-                    evaluation,
-                    year,
-                )
-                added_capacity = agent.aircraft_passenger_km_capacity(
-                    agent.fleet.frame.loc[new_row_index],
-                    technology_row,
-                    year,
-                )
-                if added_capacity <= 0.0:
-                    break
-                residual_pkm_gap = max(residual_pkm_gap - added_capacity, 0.0)
-                next_aircraft_id += 1
-                additions_made += 1
-
-    def _growth_addition_choice(
-        self,
-        agent: AviationPassengerAirlineAgent,
-        template: pd.Series,
-        year: int,
-        *,
-        forced_technology_name: str | None = None,
-    ) -> tuple[pd.Series, CandidateEvaluation]:
-        if forced_technology_name:
-            technology_row = agent.technology_row(
-                technology_name=forced_technology_name,
-            )
-            evaluation = self.calc_payback_year(
-                agent,
-                template,
-                technology_row,
-                year,
-                initial_ets_balance=agent.remaining_ets_allowance,
-            )
-            return technology_row, evaluation
-
-        technology_row, evaluation, _action = self.select_technology_for_aircraft(
-            agent,
-            template,
-            year,
-            initial_ets_balance=agent.remaining_ets_allowance,
-        )
-        return technology_row, evaluation
-
-    def _replace_due_aircraft(
-        self,
-        agent: AviationPassengerAirlineAgent,
-        year: int,
-        *,
-        replacement_rows: list[int] | None = None,
-    ) -> None:
-        self.replace_due_aircraft(agent, year, replacement_rows=replacement_rows)
-
-    def _add_growth_aircraft(self, agent: AviationPassengerAirlineAgent, year: int) -> None:
-        self.add_growth_aircraft(agent, year)
+        self._add_growth_assets(agent, year)
 
 
-class LegacyWeightedUtilityCargoLogic(AviationCargoDecisionLogic):
+class LegacyWeightedUtilityCargoLogic(NATMDecisionScorer, AviationCargoDecisionLogic):
     name = LegacyWeightedUtilityLogic.name
-
-    def step(self, agent: AviationCargoAirlineAgent, year: int) -> None:
-        agent.fleet.reset_actions()
-        replacement_rows = self.replacement_row_indices(agent, year)
-        agent.update_existing_fleet(year, excluded_indices=set(replacement_rows))
-        self._replace_due_aircraft(agent, year, replacement_rows=replacement_rows)
-        self._add_growth_aircraft(agent, year)
 
     def current_carbon_price(self, agent: AviationCargoAirlineAgent, year: int) -> float:
         scenario_price = agent.scenario_value("carbon_price", year)
@@ -1063,114 +665,6 @@ class LegacyWeightedUtilityCargoLogic(AviationCargoDecisionLogic):
             * float(freight_rate or 0.0)
         )
 
-    def calc_payback_year(
-        self,
-        agent: AviationCargoAirlineAgent,
-        aircraft: pd.Series,
-        technology_row: pd.Series,
-        year: int,
-        initial_ets_balance: float | None = None,
-    ) -> CandidateEvaluation:
-        life_time = max(int(technology_row["lifetime_years"]), 1)
-        dynamic_price_index = agent.scenario_value(
-            "technology_dynamic_price_index",
-            year,
-            segment=clean_scope_value(aircraft["segment"]),
-            technology_name=clean_scope_value(technology_row["technology_name"]),
-            default=0.0,
-        )
-        aircraft_price = float(technology_row["capex_eur"]) * (1.0 + float(dynamic_price_index))
-        depreciation_cost = float(technology_row["depreciation_cost_share"]) * aircraft_price
-        salvage_value = max(aircraft_price - (depreciation_cost * life_time), 0.0)
-        interest_rate = float(technology_row["payback_interest_rate"])
-
-        total_costs: list[float] = []
-        revenues: list[float] = []
-        emissions: list[float] = []
-        primary_energy_quantities: list[float] = []
-        secondary_energy_quantities: list[float] = []
-        first_year_metrics: OperationMetrics | None = None
-        for offset in range(life_time):
-            future_year = min(year + offset, agent.model.scenario.end_year)
-            operation_metrics = self.annual_operation_metrics(
-                agent,
-                aircraft,
-                technology_row,
-                future_year,
-                initial_ets_balance if offset == 0 else None,
-            )
-            if offset == 0:
-                first_year_metrics = operation_metrics
-            revenue = self.annual_revenue(agent, aircraft, technology_row, future_year)
-            maintenance_cost = revenue * float(technology_row["maintenance_cost_share"])
-            wages = revenue * 0.24
-            landing_fees = revenue * 0.10
-            total_costs.append(
-                operation_metrics.total_cost
-                + maintenance_cost
-                + wages
-                + landing_fees
-                + depreciation_cost,
-            )
-            revenues.append(revenue)
-            emissions.append(operation_metrics.total_emission)
-            primary_energy_quantities.append(operation_metrics.primary_energy_quantity)
-            secondary_energy_quantities.append(operation_metrics.secondary_energy_quantity)
-
-        npv = -aircraft_price
-        payback_year = life_time
-        for offset, (revenue, cost) in enumerate(zip(revenues, total_costs, strict=False), start=1):
-            npv += (revenue - cost) / ((1.0 + interest_rate) ** offset)
-            if npv > 0:
-                payback_year = offset - 1
-                break
-        npv += salvage_value / ((1.0 + interest_rate) ** life_time)
-
-        economic_utility = clamp(((life_time + 1) - payback_year) / max(life_time, 1), 0.0, 1.0)
-        environmental_utility = self.environmental_utility(technology_row)
-        technology_name = str(technology_row["technology_name"])
-        if first_year_metrics is None:
-            first_year_metrics = self.annual_operation_metrics(
-                agent,
-                aircraft,
-                technology_row,
-                year,
-                initial_ets_balance,
-            )
-        policy_bonus = 0.0
-        if not agent.technology_catalog.is_conventional(technology_name):
-            policy_bonus = (
-                0.08 * self.current_clean_fuel_subsidy(agent)
-                + 0.06 * agent.model.current_policy_signal.aviation.adoption_mandate
-            )
-
-        total_utility = (
-            economic_utility * agent.operator_economic_weight
-            + environmental_utility * agent.operator_environmental_weight
-            + policy_bonus
-        )
-        mean_total_cost = sum(total_costs) / max(len(total_costs), 1)
-        mean_operation_cost = sum(
-            revenue - (revenue - cost + depreciation_cost)
-            for revenue, cost in zip(revenues, total_costs, strict=False)
-        ) / max(len(total_costs), 1)
-        return CandidateEvaluation(
-            technology_name=technology_name,
-            total_utility=total_utility,
-            economic_utility=economic_utility,
-            environmental_utility=environmental_utility,
-            payback_year=payback_year,
-            total_emission=first_year_metrics.total_emission,
-            primary_energy_quantity=first_year_metrics.primary_energy_quantity,
-            secondary_energy_quantity=first_year_metrics.secondary_energy_quantity,
-            chargeable_emission=first_year_metrics.chargeable_emission,
-            remaining_ets_allowance=first_year_metrics.remaining_ets_allowance,
-            current_year_operating_cost=first_year_metrics.total_cost,
-            effective_conventional_cost=mean_total_cost,
-            effective_alternative_cost=mean_operation_cost,
-            net_present_value=npv,
-        )
-
     def partial_environmental_utility(self, value: float, thresholds: tuple[float, ...]) -> float:
         if value <= 0.0:
             return 1.0
@@ -1253,55 +747,82 @@ class LegacyWeightedUtilityCargoLogic(AviationCargoDecisionLogic):
             )
         return bool(technology_flag) and bool(infrastructure_flag) and bool(saf_flag)
 
+    # --- NATMDecisionScorer hooks -------------------------------------------------
+
+    def _compute_revenue(
+        self,
+        agent: AviationCargoAirlineAgent,
+        asset: pd.Series,
+        technology_row: pd.Series,
+        year: int,
+    ) -> float:
+        return self.annual_revenue(agent, asset, technology_row, year)
+
+    def _additional_operating_costs(self, revenue: float, technology_row: pd.Series) -> float:
+        maintenance_cost = revenue * float(technology_row["maintenance_cost_share"])
+        wages = revenue * 0.24
+        landing_fees = revenue * 0.10
+        return maintenance_cost + wages + landing_fees
+
+    def _asset_capacity(
+        self,
+        agent: AviationCargoAirlineAgent,
+        asset: pd.Series,
+        technology_row: pd.Series,
+        year: int,
+    ) -> float:
+        return agent.aircraft_freight_tonne_km_capacity(asset, technology_row, year)
+
+    def _segment_capacity(self, agent: AviationCargoAirlineAgent, segment: str, year: int) -> float:
+        return agent.segment_freight_tonne_km_capacity(segment, year)
+
+    def _allocated_demand(self, agent: AviationCargoAirlineAgent, segment: str, year: int) -> float:
+        return agent.allocated_freight_tonne_km(segment, year)
+
+    def _apply_technology(
+        self,
+        agent: AviationCargoAirlineAgent,
+        row_index: int,
+        technology_row: pd.Series,
+        evaluation: CandidateEvaluation,
+        year: int,
+        *,
+        action: str = "invest",
+    ) -> None:
+        agent.apply_technology_to_aircraft(
+            row_index,
+            technology_row,
+            evaluation,
+            year,
+            action=action,
+        )
+
+    def _continue_operation(
+        self,
+        agent: AviationCargoAirlineAgent,
+        row_index: int,
+        evaluation: CandidateEvaluation,
+        year: int,
+    ) -> None:
+        agent.continue_aircraft_operation(row_index, evaluation, year)
+
+    # --- Public per-sector aliases (external API preserved exactly) --------------
+
     def select_technology_for_aircraft(
         self,
         agent: AviationCargoAirlineAgent,
         aircraft: pd.Series,
         year: int,
         initial_ets_balance: float | None = None,
-    ) -> tuple[pd.Series, CandidateEvaluation]:
-        candidates = agent.candidate_technology_rows(aircraft)
-        evaluations: list[tuple[pd.Series, CandidateEvaluation]] = []
-        for _, technology_row in candidates.iterrows():
-            if not self.is_candidate_available(
-                agent,
-                technology_row,
-                year,
-                str(aircraft["segment"]),
-            ):
-                continue
-            evaluation = self.calc_payback_year(
-                agent,
-                aircraft,
-                technology_row,
-                year,
-                initial_ets_balance,
-            )
-            evaluations.append((technology_row, evaluation))
-
-        if not evaluations:
-            current_row = agent.technology_row(
-                technology_name=str(aircraft["current_technology"]),
-            )
-            return current_row, self.calc_payback_year(
-                agent,
-                aircraft,
-                current_row,
-                year,
-                initial_ets_balance,
-            )
-
-        evaluations.sort(key=lambda item: item[1].total_utility, reverse=True)
-        return evaluations[0]
-
-    def replacement_row_indices(self, agent: AviationCargoAirlineAgent, year: int) -> list[int]:
-        clean_fuel_subsidy = self.current_clean_fuel_subsidy(agent)
-        acceleration_window = int(
-            (agent.model.current_policy_signal.aviation.adoption_mandate + clean_fuel_subsidy) * 5,
-        )
-        return agent.fleet.due_replacement_indices(
+        *,
+        row_index: int | None = None,
+    ) -> tuple[pd.Series, CandidateEvaluation, str]:
+        return self._select_technology_for_asset(
+            agent,
+            aircraft,
             year,
-            acceleration_window=acceleration_window,
+            initial_ets_balance,
+            row_index=row_index,
         )
 
     def replace_due_aircraft(
@@ -1311,175 +832,14 @@ class LegacyWeightedUtilityCargoLogic(AviationCargoDecisionLogic):
         *,
         replacement_rows: list[int] | None = None,
     ) -> None:
-        rows_to_replace = (
-            self.replacement_row_indices(agent, year)
-            if replacement_rows is None
-            else replacement_rows
-        )
-        for row_index in rows_to_replace:
-            aircraft = agent.fleet.frame.loc[row_index]
-            # select_technology_for_aircraft may resolve (via MRO) to either this
-            # class's 2-tuple legacy implementation or the shared ambiguity-aware
-            # mixin's 3-tuple (technology_row, evaluation, action) implementation.
-            selection = self.select_technology_for_aircraft(
-                agent,
-                aircraft,
-                year,
-                initial_ets_balance=agent.remaining_ets_allowance,
-            )
-            technology_row, evaluation = selection[0], selection[1]
-            agent.apply_technology_to_aircraft(row_index, technology_row, evaluation, year)
+        self._replace_due_assets(agent, year, replacement_rows=replacement_rows)
 
     def add_growth_aircraft(self, agent: AviationCargoAirlineAgent, year: int) -> None:
-        next_aircraft_id = agent.fleet.next_aircraft_id()
-        for segment in sorted(agent.fleet.frame["segment"].dropna().unique()):
-            template = agent.segment_template(str(segment))
-            if template is None:
-                continue
-
-            residual_tonne_km_gap = max(
-                agent.allocated_freight_tonne_km(str(segment), year)
-                - agent.segment_freight_tonne_km_capacity(str(segment), year),
-                0.0,
-            )
-            if residual_tonne_km_gap <= 0.0:
-                continue
-
-            planned_rows = agent.planned_delivery_rows(str(segment), year)
-            if not planned_rows.empty:
-                planned_rows = planned_rows.assign(
-                    _technology_specific=planned_rows["technology_name"]
-                    .fillna("")
-                    .astype(str)
-                    .str.strip()
-                    .ne(""),
-                ).sort_values(
-                    by=["_technology_specific", "technology_name"],
-                    ascending=[False, True],
-                    kind="stable",
-                )
-
-            for _, planned_delivery in planned_rows.iterrows():
-                delivery_count = max(int(round(float(planned_delivery["value"]))), 0)
-                if delivery_count == 0:
-                    continue
-
-                forced_technology_name = clean_scope_value(
-                    planned_delivery.get("technology_name", ""),
-                )
-                for _ in range(delivery_count):
-                    technology_row, evaluation = self._growth_addition_choice(
-                        agent,
-                        template,
-                        year,
-                        forced_technology_name=forced_technology_name or None,
-                    )
-                    new_row_index = agent.fleet.add_aircraft_from_template(
-                        template,
-                        next_aircraft_id=next_aircraft_id,
-                    )
-                    agent.apply_technology_to_aircraft(
-                        new_row_index,
-                        technology_row,
-                        evaluation,
-                        year,
-                    )
-                    added_capacity = agent.aircraft_freight_tonne_km_capacity(
-                        agent.fleet.frame.loc[new_row_index],
-                        technology_row,
-                        year,
-                    )
-                    residual_tonne_km_gap = max(residual_tonne_km_gap - added_capacity, 0.0)
-                    next_aircraft_id += 1
-                    if residual_tonne_km_gap <= 0.0:
-                        break
-                if residual_tonne_km_gap <= 0.0:
-                    break
-
-            if residual_tonne_km_gap <= 0.0:
-                continue
-
-            segment_rows = agent.fleet.frame.loc[agent.fleet.frame["segment"] == segment]
-            max_endogenous_additions = max(len(segment_rows) * 4, 10)
-            additions_made = 0
-            while residual_tonne_km_gap > 0.0 and additions_made < max_endogenous_additions:
-                technology_row, evaluation = self._growth_addition_choice(
-                    agent,
-                    template,
-                    year,
-                )
-                new_row_index = agent.fleet.add_aircraft_from_template(
-                    template,
-                    next_aircraft_id=next_aircraft_id,
-                )
-                agent.apply_technology_to_aircraft(
-                    new_row_index,
-                    technology_row,
-                    evaluation,
-                    year,
-                )
-                added_capacity = agent.aircraft_freight_tonne_km_capacity(
-                    agent.fleet.frame.loc[new_row_index],
-                    technology_row,
-                    year,
-                )
-                if added_capacity <= 0.0:
-                    break
-                residual_tonne_km_gap = max(residual_tonne_km_gap - added_capacity, 0.0)
-                next_aircraft_id += 1
-                additions_made += 1
-
-    def _growth_addition_choice(
-        self,
-        agent: AviationCargoAirlineAgent,
-        template: pd.Series,
-        year: int,
-        *,
-        forced_technology_name: str | None = None,
-    ) -> tuple[pd.Series, CandidateEvaluation]:
-        if forced_technology_name:
-            technology_row = agent.technology_row(
-                technology_name=forced_technology_name,
-            )
-            evaluation = self.calc_payback_year(
-                agent,
-                template,
-                technology_row,
-                year,
-                initial_ets_balance=agent.remaining_ets_allowance,
-            )
-            return technology_row, evaluation
-
-        selection = self.select_technology_for_aircraft(
-            agent,
-            template,
-            year,
-            initial_ets_balance=agent.remaining_ets_allowance,
-        )
-        return selection[0], selection[1]
-
-    def _replace_due_aircraft(
-        self,
-        agent: AviationCargoAirlineAgent,
-        year: int,
-        *,
-        replacement_rows: list[int] | None = None,
-    ) -> None:
-        self.replace_due_aircraft(agent, year, replacement_rows=replacement_rows)
-
-    def _add_growth_aircraft(self, agent: AviationCargoAirlineAgent, year: int) -> None:
-        self.add_growth_aircraft(agent, year)
+        self._add_growth_assets(agent, year)
 
 
-class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
+class LegacyWeightedUtilityMaritimeCargoLogic(NATMDecisionScorer, MaritimeCargoDecisionLogic):
     name = LegacyWeightedUtilityLogic.name
-
-    def step(self, agent: MaritimeCargoShiplineAgent, year: int) -> None:
-        agent.fleet.reset_actions()
-        replacement_rows = self.replacement_row_indices(agent, year)
-        agent.update_existing_fleet(year, excluded_indices=set(replacement_rows))
-        self._replace_due_vessels(agent, year, replacement_rows=replacement_rows)
-        self._add_growth_vessels(agent, year)
 
     def current_carbon_price(self, agent: MaritimeCargoShiplineAgent, year: int) -> float:
         scenario_price = agent.scenario_value("carbon_tax", year)
@@ -1759,110 +1119,6 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
             * float(freight_rate or 0.0)
         )
 
-    def calc_payback_year(
-        self,
-        agent: MaritimeCargoShiplineAgent,
-        vessel: pd.Series,
-        technology_row: pd.Series,
-        year: int,
-        initial_ets_balance: float | None = None,
-    ) -> CandidateEvaluation:
-        life_time = max(int(technology_row["lifetime_years"]), 1)
-        dynamic_price_index = agent.scenario_value(
-            "technology_dynamic_price_index",
-            year,
-            segment=clean_scope_value(vessel["segment"]),
-            technology_name=clean_scope_value(technology_row["technology_name"]),
-            default=0.0,
-        )
-        vessel_price = float(technology_row["capex_eur"]) * (1.0 + float(dynamic_price_index))
-        depreciation_cost = float(technology_row["depreciation_cost_share"]) * vessel_price
-        salvage_value = max(vessel_price - (depreciation_cost * life_time), 0.0)
-        interest_rate = float(technology_row["payback_interest_rate"])
-
-        total_costs: list[float] = []
-        revenues: list[float] = []
-        first_year_metrics: OperationMetrics | None = None
-        for offset in range(life_time):
-            future_year = min(year + offset, agent.model.scenario.end_year)
-            operation_metrics = self.annual_operation_metrics(
-                agent,
-                vessel,
-                technology_row,
-                future_year,
-                initial_ets_balance if offset == 0 else None,
-            )
-            if offset == 0:
-                first_year_metrics = operation_metrics
-            revenue = self.annual_revenue(agent, technology_row, future_year)
-            maintenance_cost = revenue * float(technology_row["maintenance_cost_share"])
-            crew_cost = revenue * 0.18
-            port_fees = revenue * 0.08
-            cargo_handling = revenue * 0.06
-            total_costs.append(
-                operation_metrics.total_cost
-                + maintenance_cost
-                + crew_cost
-                + port_fees
-                + cargo_handling
-                + depreciation_cost,
-            )
-            revenues.append(revenue)
-
-        npv = -vessel_price
-        payback_year = life_time
-        for offset, (revenue, cost) in enumerate(zip(revenues, total_costs, strict=False), start=1):
-            npv += (revenue - cost) / ((1.0 + interest_rate) ** offset)
-            if npv > 0:
-                payback_year = offset - 1
-                break
-        npv += salvage_value / ((1.0 + interest_rate) ** life_time)
-
-        economic_utility = clamp(((life_time + 1) - payback_year) / max(life_time, 1), 0.0, 1.0)
-        environmental_utility = self.environmental_utility(technology_row)
-        technology_name = str(technology_row["technology_name"])
-        if first_year_metrics is None:
-            first_year_metrics = self.annual_operation_metrics(
-                agent,
-                vessel,
-                technology_row,
-                year,
-                initial_ets_balance,
-            )
-        policy_bonus = 0.0
-        if not agent.technology_catalog.is_conventional_row(technology_row):
-            policy_bonus = (
-                0.08 * self.current_clean_fuel_subsidy(agent)
-                + 0.06 * agent.model.current_policy_signal.maritime.adoption_mandate
-            )
-
-        total_utility = (
-            economic_utility * agent.operator_economic_weight
-            + environmental_utility * agent.operator_environmental_weight
-            + policy_bonus
-        )
-        mean_total_cost = sum(total_costs) / max(len(total_costs), 1)
-        mean_operation_cost = sum(
-            revenue - (revenue - cost + depreciation_cost)
-            for revenue, cost in zip(revenues, total_costs, strict=False)
-        ) / max(len(total_costs), 1)
-        return CandidateEvaluation(
-            technology_name=technology_name,
-            total_utility=total_utility,
-            economic_utility=economic_utility,
-            environmental_utility=environmental_utility,
-            payback_year=payback_year,
-            total_emission=first_year_metrics.total_emission,
-            primary_energy_quantity=first_year_metrics.primary_energy_quantity,
-            secondary_energy_quantity=first_year_metrics.secondary_energy_quantity,
-            chargeable_emission=first_year_metrics.chargeable_emission,
-            remaining_ets_allowance=first_year_metrics.remaining_ets_allowance,
-            current_year_operating_cost=first_year_metrics.total_cost,
-            effective_conventional_cost=mean_total_cost,
-            effective_alternative_cost=mean_operation_cost,
-            net_present_value=npv,
-        )
-
     def partial_environmental_utility(self, value: float, thresholds: tuple[float, ...]) -> float:
         if value <= 0.0:
             return 1.0
@@ -2007,50 +1263,88 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
             )
         return bool(technology_flag) and bool(infrastructure_flag) and bool(biofuel_flag)
 
+    # --- NATMDecisionScorer hooks -------------------------------------------------
+
+    def _compute_revenue(
+        self,
+        agent: MaritimeCargoShiplineAgent,
+        asset: pd.Series,
+        technology_row: pd.Series,
+        year: int,
+    ) -> float:
+        del asset
+        return self.annual_revenue(agent, technology_row, year)
+
+    def _additional_operating_costs(self, revenue: float, technology_row: pd.Series) -> float:
+        maintenance_cost = revenue * float(technology_row["maintenance_cost_share"])
+        crew_cost = revenue * 0.18
+        port_fees = revenue * 0.08
+        cargo_handling = revenue * 0.06
+        return maintenance_cost + crew_cost + port_fees + cargo_handling
+
+    def _asset_capacity(
+        self,
+        agent: MaritimeCargoShiplineAgent,
+        asset: pd.Series,
+        technology_row: pd.Series,
+        year: int,
+    ) -> float:
+        return agent.vessel_freight_tonne_km_capacity(asset, technology_row, year)
+
+    def _segment_capacity(
+        self,
+        agent: MaritimeCargoShiplineAgent,
+        segment: str,
+        year: int,
+    ) -> float:
+        return agent.segment_freight_tonne_km_capacity(segment, year)
+
+    def _allocated_demand(
+        self,
+        agent: MaritimeCargoShiplineAgent,
+        segment: str,
+        year: int,
+    ) -> float:
+        return agent.allocated_freight_tonne_km(segment, year)
+
+    def _apply_technology(
+        self,
+        agent: MaritimeCargoShiplineAgent,
+        row_index: int,
+        technology_row: pd.Series,
+        evaluation: CandidateEvaluation,
+        year: int,
+        *,
+        action: str = "invest",
+    ) -> None:
+        agent.apply_technology_to_vessel(row_index, technology_row, evaluation, year, action=action)
+
+    def _continue_operation(
+        self,
+        agent: MaritimeCargoShiplineAgent,
+        row_index: int,
+        evaluation: CandidateEvaluation,
+        year: int,
+    ) -> None:
+        agent.continue_vessel_operation(row_index, evaluation, year)
+
+    # --- Public per-sector aliases (external API preserved exactly) --------------
+
     def select_technology_for_vessel(
         self,
         agent: MaritimeCargoShiplineAgent,
         vessel: pd.Series,
         year: int,
         initial_ets_balance: float | None = None,
-    ) -> tuple[pd.Series, CandidateEvaluation]:
-        candidates = agent.candidate_technology_rows(vessel)
-        evaluations: list[tuple[pd.Series, CandidateEvaluation]] = []
-        for _, technology_row in candidates.iterrows():
-            if not self.is_candidate_available(agent, technology_row, year, str(vessel["segment"])):
-                continue
-            evaluation = self.calc_payback_year(
-                agent,
-                vessel,
-                technology_row,
-                year,
-                initial_ets_balance,
-            )
-            evaluations.append((technology_row, evaluation))
-
-        if not evaluations:
-            current_row = agent.technology_row(
-                technology_name=str(vessel["current_technology"]),
-            )
-            return current_row, self.calc_payback_year(
-                agent,
-                vessel,
-                current_row,
-                year,
-                initial_ets_balance,
-            )
-
-        evaluations.sort(key=lambda item: item[1].total_utility, reverse=True)
-        return evaluations[0]
-
-    def replacement_row_indices(self, agent: MaritimeCargoShiplineAgent, year: int) -> list[int]:
-        clean_fuel_subsidy = self.current_clean_fuel_subsidy(agent)
-        acceleration_window = int(
-            (agent.model.current_policy_signal.maritime.adoption_mandate + clean_fuel_subsidy) * 5,
-        )
-        return agent.fleet.due_replacement_indices(
+        *,
+        row_index: int | None = None,
+    ) -> tuple[pd.Series, CandidateEvaluation, str]:
+        return self._select_technology_for_asset(
+            agent,
+            vessel,
             year,
-            acceleration_window=acceleration_window,
+            initial_ets_balance,
+            row_index=row_index,
         )
 
     def replace_due_vessels(
@@ -2060,167 +1354,16 @@ class LegacyWeightedUtilityMaritimeCargoLogic(MaritimeCargoDecisionLogic):
         *,
         replacement_rows: list[int] | None = None,
     ) -> None:
-        rows_to_replace = (
-            self.replacement_row_indices(agent, year)
-            if replacement_rows is None
-            else replacement_rows
-        )
-        for row_index in rows_to_replace:
-            vessel = agent.fleet.frame.loc[row_index]
-            # select_technology_for_vessel may resolve (via MRO) to either this
-            # class's 2-tuple legacy implementation or the shared ambiguity-aware
-            # mixin's 3-tuple (technology_row, evaluation, action) implementation.
-            selection = self.select_technology_for_vessel(
-                agent,
-                vessel,
-                year,
-                initial_ets_balance=agent.remaining_ets_allowance,
-            )
-            technology_row, evaluation = selection[0], selection[1]
-            agent.apply_technology_to_vessel(row_index, technology_row, evaluation, year)
+        self._replace_due_assets(agent, year, replacement_rows=replacement_rows)
 
     def add_growth_vessels(self, agent: MaritimeCargoShiplineAgent, year: int) -> None:
-        next_vessel_id = agent.fleet.next_aircraft_id()
-        for segment in sorted(agent.fleet.frame["segment"].dropna().unique()):
-            template = agent.segment_template(str(segment))
-            if template is None:
-                continue
-
-            residual_tonne_km_gap = max(
-                agent.allocated_freight_tonne_km(str(segment), year)
-                - agent.segment_freight_tonne_km_capacity(str(segment), year),
-                0.0,
-            )
-            if residual_tonne_km_gap <= 0.0:
-                continue
-
-            planned_rows = agent.planned_delivery_rows(str(segment), year)
-            if not planned_rows.empty:
-                planned_rows = planned_rows.assign(
-                    _technology_specific=planned_rows["technology_name"]
-                    .fillna("")
-                    .astype(str)
-                    .str.strip()
-                    .ne(""),
-                ).sort_values(
-                    by=["_technology_specific", "technology_name"],
-                    ascending=[False, True],
-                    kind="stable",
-                )
-
-            for _, planned_delivery in planned_rows.iterrows():
-                delivery_count = max(int(round(float(planned_delivery["value"]))), 0)
-                if delivery_count == 0:
-                    continue
-
-                forced_technology_name = clean_scope_value(
-                    planned_delivery.get("technology_name", ""),
-                )
-                for _ in range(delivery_count):
-                    technology_row, evaluation = self._growth_addition_choice(
-                        agent,
-                        template,
-                        year,
-                        forced_technology_name=forced_technology_name or None,
-                    )
-                    new_row_index = agent.fleet.add_aircraft_from_template(
-                        template,
-                        next_aircraft_id=next_vessel_id,
-                    )
-                    agent.apply_technology_to_vessel(
-                        new_row_index,
-                        technology_row,
-                        evaluation,
-                        year,
-                    )
-                    added_capacity = agent.vessel_freight_tonne_km_capacity(
-                        agent.fleet.frame.loc[new_row_index],
-                        technology_row,
-                        year,
-                    )
-                    residual_tonne_km_gap = max(residual_tonne_km_gap - added_capacity, 0.0)
-                    next_vessel_id += 1
-                    if residual_tonne_km_gap <= 0.0:
-                        break
-                if residual_tonne_km_gap <= 0.0:
-                    break
-
-            if residual_tonne_km_gap <= 0.0:
-                continue
-
-            segment_rows = agent.fleet.frame.loc[agent.fleet.frame["segment"] == segment]
-            max_endogenous_additions = max(len(segment_rows) * 4, 10)
-            additions_made = 0
-            while residual_tonne_km_gap > 0.0 and additions_made < max_endogenous_additions:
-                technology_row, evaluation = self._growth_addition_choice(
-                    agent,
-                    template,
-                    year,
-                )
-                new_row_index = agent.fleet.add_aircraft_from_template(
-                    template,
-                    next_aircraft_id=next_vessel_id,
-                )
-                agent.apply_technology_to_vessel(
-                    new_row_index,
-                    technology_row,
-                    evaluation,
-                    year,
-                )
-                added_capacity = agent.vessel_freight_tonne_km_capacity(
-                    agent.fleet.frame.loc[new_row_index],
-                    technology_row,
-                    year,
-                )
-                if added_capacity <= 0.0:
-                    break
-                residual_tonne_km_gap = max(residual_tonne_km_gap - added_capacity, 0.0)
-                next_vessel_id += 1
-                additions_made += 1
-
-    def _growth_addition_choice(
-        self,
-        agent: MaritimeCargoShiplineAgent,
-        template: pd.Series,
-        year: int,
-        *,
-        forced_technology_name: str | None = None,
-    ) -> tuple[pd.Series, CandidateEvaluation]:
-        if forced_technology_name:
-            technology_row = agent.technology_row(
-                technology_name=forced_technology_name,
-            )
-            evaluation = self.calc_payback_year(
-                agent,
-                template,
-                technology_row,
-                year,
-                initial_ets_balance=agent.remaining_ets_allowance,
-            )
-            return technology_row, evaluation
-
-        selection = self.select_technology_for_vessel(
-            agent,
-            template,
-            year,
-            initial_ets_balance=agent.remaining_ets_allowance,
-        )
-        return selection[0], selection[1]
-
-    def _replace_due_vessels(
-        self,
-        agent: MaritimeCargoShiplineAgent,
-        year: int,
-        *,
-        replacement_rows: list[int] | None = None,
-    ) -> None:
-        self.replace_due_vessels(agent, year, replacement_rows=replacement_rows)
-
-    def _add_growth_vessels(self, agent: MaritimeCargoShiplineAgent, year: int) -> None:
-        self.add_growth_vessels(agent, year)
+        self._add_growth_assets(agent, year)
 
 
-class LegacyWeightedUtilityMaritimePassengerLogic(MaritimePassengerDecisionLogic):
+class LegacyWeightedUtilityMaritimePassengerLogic(
+    NATMDecisionScorer,
+    MaritimePassengerDecisionLogic,
+):
     name = LegacyWeightedUtilityLogic.name
 
     cabin_names = (
@@ -2230,13 +1373,6 @@ class LegacyWeightedUtilityMaritimePassengerLogic(MaritimePassengerDecisionLogic
         "passenger_business_class",
         "passenger_family_cabin",
     )
-
-    def step(self, agent: MaritimePassengerShiplineAgent, year: int) -> None:
-        agent.fleet.reset_actions()
-        replacement_rows = self.replacement_row_indices(agent, year)
-        agent.update_existing_fleet(year, excluded_indices=set(replacement_rows))
-        self._replace_due_vessels(agent, year, replacement_rows=replacement_rows)
-        self._add_growth_vessels(agent, year)
 
     def current_carbon_price(self, agent: MaritimePassengerShiplineAgent, year: int) -> float:
         scenario_price = agent.scenario_value("carbon_tax", year)
@@ -2532,133 +1668,6 @@ class LegacyWeightedUtilityMaritimePassengerLogic(MaritimePassengerDecisionLogic
         )
         return ticket_revenue + onboard_revenue
 
-    def calc_payback_year(
-        self,
-        agent: MaritimePassengerShiplineAgent,
-        vessel: pd.Series,
-        technology_row: pd.Series,
-        year: int,
-        initial_ets_balance: float | None = None,
-    ) -> CandidateEvaluation:
-        life_time = max(int(technology_row["lifetime_years"]), 1)
-        dynamic_price_index = agent.scenario_value(
-            "technology_dynamic_price_index",
-            year,
-            segment=clean_scope_value(vessel["segment"]),
-            technology_name=clean_scope_value(technology_row["technology_name"]),
-            default=0.0,
-        )
-        vessel_price = float(technology_row["capex_eur"]) * (1.0 + float(dynamic_price_index))
-        depreciation_cost = float(technology_row["depreciation_cost_share"]) * vessel_price
-        salvage_value = max(vessel_price - (depreciation_cost * life_time), 0.0)
-        interest_rate = float(technology_row["payback_interest_rate"])
-
-        total_costs: list[float] = []
-        revenues: list[float] = []
-        first_year_metrics: OperationMetrics | None = None
-        uses_drop_in_branch = (
-            int(technology_row["drop_in_fuel"]) == 1
-            and float(
-                technology_row["maximum_secondary_energy_share"],
-            )
-            > 0.0
-        )
-        for offset in range(life_time):
-            future_year = min(year + offset, agent.model.scenario.end_year)
-            operation_metrics = self.annual_operation_metrics(
-                agent,
-                vessel,
-                technology_row,
-                future_year,
-                initial_ets_balance if offset == 0 else None,
-            )
-            if offset == 0:
-                first_year_metrics = operation_metrics
-            revenue = self.annual_revenue(
-                agent,
-                technology_row,
-                future_year,
-                clean_scope_value(vessel["segment"]),
-            )
-            maintenance_cost = revenue * float(technology_row["maintenance_cost_share"])
-            crew_cost = revenue * 0.24
-            port_fees = revenue * 0.10
-            passenger_service_cost = 0.0 if uses_drop_in_branch else revenue * 0.10
-            total_costs.append(
-                operation_metrics.total_cost
-                + maintenance_cost
-                + crew_cost
-                + port_fees
-                + passenger_service_cost
-                + depreciation_cost,
-            )
-            revenues.append(revenue)
-
-        npv = -vessel_price
-        payback_year = life_time - 1
-        max_npv = float("-inf")
-        max_npv_year = life_time - 1
-        for offset, (revenue, cost) in enumerate(zip(revenues, total_costs, strict=False), start=1):
-            npv += (revenue - cost) / ((1.0 + interest_rate) ** offset)
-            if npv > max_npv:
-                max_npv = npv
-                max_npv_year = offset - 1
-            if npv > 0:
-                payback_year = offset - 1
-                break
-        else:
-            payback_year = max_npv_year
-        npv += salvage_value / ((1.0 + interest_rate) ** life_time)
-
-        economic_utility = clamp(
-            ((life_time + 1) - payback_year) / max((life_time + 1) - 1, 1),
-            0.0,
-            1.0,
-        )
-        environmental_utility = self.environmental_utility(technology_row)
-        technology_name = str(technology_row["technology_name"])
-        if first_year_metrics is None:
-            first_year_metrics = self.annual_operation_metrics(
-                agent,
-                vessel,
-                technology_row,
-                year,
-                initial_ets_balance,
-            )
-        policy_bonus = 0.0
-        if not agent.technology_catalog.is_conventional_row(technology_row):
-            policy_bonus = (
-                0.08 * self.current_clean_fuel_subsidy(agent)
-                + 0.06 * agent.model.current_policy_signal.maritime.adoption_mandate
-            )
-
-        total_utility = (
-            economic_utility * agent.operator_economic_weight
-            + environmental_utility * agent.operator_environmental_weight
-            + policy_bonus
-        )
-        mean_total_cost = sum(total_costs) / max(len(total_costs), 1)
-        mean_operation_cost = sum(
-            revenue - (revenue - cost + depreciation_cost)
-            for revenue, cost in zip(revenues, total_costs, strict=False)
-        ) / max(len(total_costs), 1)
-        return CandidateEvaluation(
-            technology_name=technology_name,
-            total_utility=total_utility,
-            economic_utility=economic_utility,
-            environmental_utility=environmental_utility,
-            payback_year=payback_year,
-            total_emission=first_year_metrics.total_emission,
-            primary_energy_quantity=first_year_metrics.primary_energy_quantity,
-            secondary_energy_quantity=first_year_metrics.secondary_energy_quantity,
-            chargeable_emission=first_year_metrics.chargeable_emission,
-            remaining_ets_allowance=first_year_metrics.remaining_ets_allowance,
-            current_year_operating_cost=first_year_metrics.total_cost,
-            effective_conventional_cost=mean_total_cost,
-            effective_alternative_cost=mean_operation_cost,
-            net_present_value=npv,
-        )
-
     def environmental_utility(self, technology_row: pd.Series) -> float:
         hydrocarbon = self._partial_utility_hydrocarbon(
             float(technology_row["hydrocarbon_factor"]),
@@ -2788,54 +1797,97 @@ class LegacyWeightedUtilityMaritimePassengerLogic(MaritimePassengerDecisionLogic
             )
         return bool(technology_flag) and bool(infrastructure_flag) and bool(biofuel_flag)
 
+    # --- NATMDecisionScorer hooks -------------------------------------------------
+
+    def _compute_revenue(
+        self,
+        agent: MaritimePassengerShiplineAgent,
+        asset: pd.Series,
+        technology_row: pd.Series,
+        year: int,
+    ) -> float:
+        return self.annual_revenue(agent, technology_row, year, str(asset["segment"]))
+
+    def _additional_operating_costs(self, revenue: float, technology_row: pd.Series) -> float:
+        uses_drop_in_branch = (
+            int(technology_row["drop_in_fuel"]) == 1
+            and float(technology_row["maximum_secondary_energy_share"]) > 0.0
+        )
+        maintenance_cost = revenue * float(technology_row["maintenance_cost_share"])
+        crew_cost = revenue * 0.24
+        port_fees = revenue * 0.10
+        passenger_service_cost = 0.0 if uses_drop_in_branch else revenue * 0.10
+        return maintenance_cost + crew_cost + port_fees + passenger_service_cost
+
+    def _asset_capacity(
+        self,
+        agent: MaritimePassengerShiplineAgent,
+        asset: pd.Series,
+        technology_row: pd.Series,
+        year: int,
+    ) -> float:
+        return agent.vessel_passenger_km_capacity(asset, technology_row, year)
+
+    def _segment_capacity(
+        self,
+        agent: MaritimePassengerShiplineAgent,
+        segment: str,
+        year: int,
+    ) -> float:
+        return agent.segment_passenger_km_capacity(segment, year)
+
+    def _allocated_demand(
+        self,
+        agent: MaritimePassengerShiplineAgent,
+        segment: str,
+        year: int,
+    ) -> float:
+        return agent.allocated_passenger_km(segment, year)
+
+    def _apply_technology(
+        self,
+        agent: MaritimePassengerShiplineAgent,
+        row_index: int,
+        technology_row: pd.Series,
+        evaluation: CandidateEvaluation,
+        year: int,
+        *,
+        action: str = "invest",
+    ) -> None:
+        agent.apply_technology_to_vessel(row_index, technology_row, evaluation, year, action=action)
+
+    def _continue_operation(
+        self,
+        agent: MaritimePassengerShiplineAgent,
+        row_index: int,
+        evaluation: CandidateEvaluation,
+        year: int,
+    ) -> None:
+        agent.continue_vessel_operation(row_index, evaluation, year)
+
+    def _payback_year_fallback(self, life_time: int, max_npv_year: int) -> int:
+        """Maritime passenger uses the best-NPV-so-far year as its fallback,
+        instead of the conservative life_time default every other sector uses."""
+        del life_time
+        return max_npv_year
+
+    # --- Public per-sector aliases (external API preserved exactly) --------------
+
     def select_technology_for_vessel(
         self,
         agent: MaritimePassengerShiplineAgent,
         vessel: pd.Series,
         year: int,
         initial_ets_balance: float | None = None,
-    ) -> tuple[pd.Series, CandidateEvaluation]:
-        candidates = agent.candidate_technology_rows(vessel)
-        evaluations: list[tuple[pd.Series, CandidateEvaluation]] = []
-        for _, technology_row in candidates.iterrows():
-            if not self.is_candidate_available(agent, technology_row, year, str(vessel["segment"])):
-                continue
-            evaluation = self.calc_payback_year(
-                agent,
-                vessel,
-                technology_row,
-                year,
-                initial_ets_balance,
-            )
-            evaluations.append((technology_row, evaluation))
-
-        if not evaluations:
-            current_row = agent.technology_row(
-                technology_name=str(vessel["current_technology"]),
-            )
-            return current_row, self.calc_payback_year(
-                agent,
-                vessel,
-                current_row,
-                year,
-                initial_ets_balance,
-            )
-
-        evaluations.sort(key=lambda item: item[1].total_utility, reverse=True)
-        return evaluations[0]
-
-    def replacement_row_indices(
-        self,
-        agent: MaritimePassengerShiplineAgent,
-        year: int,
-    ) -> list[int]:
-        clean_fuel_subsidy = self.current_clean_fuel_subsidy(agent)
-        acceleration_window = int(
-            (agent.model.current_policy_signal.maritime.adoption_mandate + clean_fuel_subsidy) * 5,
-        )
-        return agent.fleet.due_replacement_indices(
+        *,
+        row_index: int | None = None,
+    ) -> tuple[pd.Series, CandidateEvaluation, str]:
+        return self._select_technology_for_asset(
+            agent,
+            vessel,
             year,
-            acceleration_window=acceleration_window,
+            initial_ets_balance,
+            row_index=row_index,
         )
 
     def replace_due_vessels(
@@ -2845,171 +1897,7 @@ class LegacyWeightedUtilityMaritimePassengerLogic(MaritimePassengerDecisionLogic
         *,
         replacement_rows: list[int] | None = None,
     ) -> None:
-        rows_to_replace = (
-            self.replacement_row_indices(agent, year)
-            if replacement_rows is None
-            else replacement_rows
-        )
-        for row_index in rows_to_replace:
-            vessel = agent.fleet.frame.loc[row_index]
-            # select_technology_for_vessel may resolve (via MRO) to either this
-            # class's 2-tuple legacy implementation or the shared ambiguity-aware
-            # mixin's 3-tuple (technology_row, evaluation, action) implementation.
-            selection = self.select_technology_for_vessel(
-                agent,
-                vessel,
-                year,
-                initial_ets_balance=agent.remaining_ets_allowance,
-            )
-            technology_row, evaluation = selection[0], selection[1]
-            agent.apply_technology_to_vessel(row_index, technology_row, evaluation, year)
+        self._replace_due_assets(agent, year, replacement_rows=replacement_rows)
 
     def add_growth_vessels(self, agent: MaritimePassengerShiplineAgent, year: int) -> None:
-        next_vessel_id = agent.fleet.next_aircraft_id()
-        for segment in sorted(agent.fleet.frame["segment"].dropna().unique()):
-            template = agent.segment_template(str(segment))
-            if template is None:
-                continue
-
-            residual_passenger_km_gap = max(
-                agent.allocated_passenger_km(str(segment), year)
-                - agent.segment_passenger_km_capacity(str(segment), year),
-                0.0,
-            )
-            if residual_passenger_km_gap <= 0.0:
-                continue
-
-            planned_rows = agent.planned_delivery_rows(str(segment), year)
-            if not planned_rows.empty:
-                planned_rows = planned_rows.assign(
-                    _technology_specific=planned_rows["technology_name"]
-                    .fillna("")
-                    .astype(str)
-                    .str.strip()
-                    .ne(""),
-                ).sort_values(
-                    by=["_technology_specific", "technology_name"],
-                    ascending=[False, True],
-                    kind="stable",
-                )
-
-            for _, planned_delivery in planned_rows.iterrows():
-                delivery_count = max(int(round(float(planned_delivery["value"]))), 0)
-                if delivery_count == 0:
-                    continue
-
-                forced_technology_name = clean_scope_value(
-                    planned_delivery.get("technology_name", ""),
-                )
-                for _ in range(delivery_count):
-                    technology_row, evaluation = self._growth_addition_choice(
-                        agent,
-                        template,
-                        year,
-                        forced_technology_name=forced_technology_name or None,
-                    )
-                    new_row_index = agent.fleet.add_aircraft_from_template(
-                        template,
-                        next_aircraft_id=next_vessel_id,
-                    )
-                    agent.apply_technology_to_vessel(
-                        new_row_index,
-                        technology_row,
-                        evaluation,
-                        year,
-                    )
-                    added_capacity = agent.vessel_passenger_km_capacity(
-                        agent.fleet.frame.loc[new_row_index],
-                        technology_row,
-                        year,
-                    )
-                    residual_passenger_km_gap = max(
-                        residual_passenger_km_gap - added_capacity,
-                        0.0,
-                    )
-                    next_vessel_id += 1
-                    if residual_passenger_km_gap <= 0.0:
-                        break
-                if residual_passenger_km_gap <= 0.0:
-                    break
-
-            if residual_passenger_km_gap <= 0.0:
-                continue
-
-            segment_rows = agent.fleet.frame.loc[agent.fleet.frame["segment"] == segment]
-            max_endogenous_additions = max(len(segment_rows) * 4, 10)
-            additions_made = 0
-            while residual_passenger_km_gap > 0.0 and additions_made < max_endogenous_additions:
-                technology_row, evaluation = self._growth_addition_choice(
-                    agent,
-                    template,
-                    year,
-                )
-                new_row_index = agent.fleet.add_aircraft_from_template(
-                    template,
-                    next_aircraft_id=next_vessel_id,
-                )
-                agent.apply_technology_to_vessel(
-                    new_row_index,
-                    technology_row,
-                    evaluation,
-                    year,
-                )
-                added_capacity = agent.vessel_passenger_km_capacity(
-                    agent.fleet.frame.loc[new_row_index],
-                    technology_row,
-                    year,
-                )
-                if added_capacity <= 0.0:
-                    break
-                residual_passenger_km_gap = max(
-                    residual_passenger_km_gap - added_capacity,
-                    0.0,
-                )
-                next_vessel_id += 1
-                additions_made += 1
-
-    def _growth_addition_choice(
-        self,
-        agent: MaritimePassengerShiplineAgent,
-        template: pd.Series,
-        year: int,
-        *,
-        forced_technology_name: str | None = None,
-    ) -> tuple[pd.Series, CandidateEvaluation]:
-        if forced_technology_name:
-            technology_row = agent.technology_row(
-                technology_name=forced_technology_name,
-            )
-            evaluation = self.calc_payback_year(
-                agent,
-                template,
-                technology_row,
-                year,
-                initial_ets_balance=agent.remaining_ets_allowance,
-            )
-            return technology_row, evaluation
-
-        selection = self.select_technology_for_vessel(
-            agent,
-            template,
-            year,
-            initial_ets_balance=agent.remaining_ets_allowance,
-        )
-        return selection[0], selection[1]
-
-    def _replace_due_vessels(
-        self,
-        agent: MaritimePassengerShiplineAgent,
-        year: int,
-        *,
-        replacement_rows: list[int] | None = None,
-    ) -> None:
-        self.replace_due_vessels(agent, year, replacement_rows=replacement_rows)
-
-    def _add_growth_vessels(
-        self,
-        agent: MaritimePassengerShiplineAgent,
-        year: int,
-    ) -> None:
-        self.add_growth_vessels(agent, year)
+        self._add_growth_assets(agent, year)

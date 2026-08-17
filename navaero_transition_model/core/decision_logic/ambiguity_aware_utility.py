@@ -597,17 +597,26 @@ class AmbiguityAwareSelectionMixin:
         )
         return selected_row, selected_evaluation, selected_action
 
-    def _select_ambiguity_aware_asset(
+    def _select_technology_for_asset(
         self,
         agent,
         asset: pd.Series,
         year: int,
-        initial_ets_balance: float | None,
-        fallback_selection,
+        initial_ets_balance: float | None = None,
         *,
         row_index: int | None = None,
     ) -> tuple[pd.Series, CandidateEvaluation, str]:
-        del fallback_selection
+        """Override point for NATMDecisionScorer's internal ranking hook.
+
+        `_replace_due_assets`/`_growth_addition_choice` (shared in
+        NATMDecisionScorer) call `self._select_technology_for_asset(...)`
+        directly, and each sector's public `select_technology_for_aircraft`/
+        `select_technology_for_vessel` alias also forwards to it — so
+        overriding it here (instead of the public per-sector names) is
+        enough for every internal and external caller to correctly dispatch
+        to robust NPV-based selection via normal MRO, with no need to also
+        override the public aliases.
+        """
         if agent.decision_attitude not in DECISION_ATTITUDES:
             agent.decision_attitude = "risk_neutral"
         return self._select_loss_law_robust_asset(
@@ -628,24 +637,6 @@ class AmbiguityAwareUtilityLogic(AmbiguityAwareSelectionMixin, LegacyWeightedUti
             agent.model.current_policy_signal.aviation,
         )
 
-    def select_technology_for_aircraft(
-        self,
-        agent: AviationPassengerAirlineAgent,
-        aircraft: pd.Series,
-        year: int,
-        initial_ets_balance: float | None = None,
-        *,
-        row_index: int | None = None,
-    ) -> tuple[pd.Series, CandidateEvaluation, str]:
-        return self._select_ambiguity_aware_asset(
-            agent,
-            aircraft,
-            year,
-            initial_ets_balance,
-            super().select_technology_for_aircraft,
-            row_index=row_index,
-        )
-
 
 class AmbiguityAwareCargoLogic(AmbiguityAwareSelectionMixin, LegacyWeightedUtilityCargoLogic):
     name = AmbiguityAwareUtilityLogic.name
@@ -654,23 +645,6 @@ class AmbiguityAwareCargoLogic(AmbiguityAwareSelectionMixin, LegacyWeightedUtili
         return self._scenario_clean_fuel_subsidy(
             agent,
             agent.model.current_policy_signal.aviation,
-        )
-
-    def select_technology_for_aircraft(
-        self,
-        agent: AviationCargoAirlineAgent,
-        aircraft: pd.Series,
-        year: int,
-        initial_ets_balance: float | None = None,
-    ) -> tuple[pd.Series, CandidateEvaluation, str]:
-        # continue_current / planned-investment support is aviation-passenger only
-        # for now; row_index is intentionally not threaded through here yet.
-        return self._select_ambiguity_aware_asset(
-            agent,
-            aircraft,
-            year,
-            initial_ets_balance,
-            super().select_technology_for_aircraft,
         )
 
 
@@ -686,23 +660,6 @@ class AmbiguityAwareMaritimeCargoLogic(
             agent.model.current_policy_signal.maritime,
         )
 
-    def select_technology_for_vessel(
-        self,
-        agent: MaritimeCargoShiplineAgent,
-        vessel: pd.Series,
-        year: int,
-        initial_ets_balance: float | None = None,
-    ) -> tuple[pd.Series, CandidateEvaluation, str]:
-        # continue_current / planned-investment support is aviation-passenger only
-        # for now; row_index is intentionally not threaded through here yet.
-        return self._select_ambiguity_aware_asset(
-            agent,
-            vessel,
-            year,
-            initial_ets_balance,
-            super().select_technology_for_vessel,
-        )
-
 
 class AmbiguityAwareMaritimePassengerLogic(
     AmbiguityAwareSelectionMixin,
@@ -714,21 +671,4 @@ class AmbiguityAwareMaritimePassengerLogic(
         return self._scenario_clean_fuel_subsidy(
             agent,
             agent.model.current_policy_signal.maritime,
-        )
-
-    def select_technology_for_vessel(
-        self,
-        agent: MaritimePassengerShiplineAgent,
-        vessel: pd.Series,
-        year: int,
-        initial_ets_balance: float | None = None,
-    ) -> tuple[pd.Series, CandidateEvaluation, str]:
-        # continue_current / planned-investment support is aviation-passenger only
-        # for now; row_index is intentionally not threaded through here yet.
-        return self._select_ambiguity_aware_asset(
-            agent,
-            vessel,
-            year,
-            initial_ets_balance,
-            super().select_technology_for_vessel,
         )

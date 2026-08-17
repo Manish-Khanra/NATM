@@ -5,9 +5,15 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-from navaero_transition_model.core.agent_types import AviationPassengerAirlineAgent
+from navaero_transition_model.core.agent_types import (
+    AviationCargoAirlineAgent,
+    AviationPassengerAirlineAgent,
+    MaritimeCargoShiplineAgent,
+)
 from navaero_transition_model.core.decision_logic.legacy_weighted_utility import (
+    LegacyWeightedUtilityCargoLogic,
     LegacyWeightedUtilityLogic,
+    LegacyWeightedUtilityMaritimeCargoLogic,
 )
 from navaero_transition_model.core.fleet_management import Fleet, planned_investments_from_fleet
 from navaero_transition_model.core.model import NATMModel
@@ -277,3 +283,161 @@ def test_default_scenario_still_runs_end_to_end_with_flags_off() -> None:
     aircraft_summary = model.to_aircraft_frame()
     assert "action" in aircraft_summary.columns
     assert set(aircraft_summary["action"].unique()) <= {"", "invest"}
+
+
+# --- Cross-sector rollout: continue_current / planned investment now apply to every
+# sector via the shared NATMDecisionScorer, not just aviation passenger. These cases
+# prove the rollout, they don't re-derive the full aviation-passenger coverage above. ---
+
+_ROLLOUT_CASES = [
+    pytest.param(
+        "baseline-cargo-transition",
+        "aviation_fleet_stock.csv",
+        "aviation_technology_catalog.csv",
+        "Lufthansa Cargo",
+        "kerosene_freight_long",
+        AviationCargoAirlineAgent,
+        LegacyWeightedUtilityCargoLogic,
+        "select_technology_for_aircraft",
+        id="aviation_cargo",
+    ),
+    pytest.param(
+        "baseline-maritime-cargo-transition",
+        "maritime_fleet_stock.csv",
+        "maritime_technology_catalog.csv",
+        "Hapag-Lloyd",
+        "marine_diesel_deepsea",
+        MaritimeCargoShiplineAgent,
+        LegacyWeightedUtilityMaritimeCargoLogic,
+        "select_technology_for_vessel",
+        id="maritime_cargo",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    (
+        "case_name",
+        "fleet_filename",
+        "technology_filename",
+        "operator_name",
+        "current_technology",
+        "agent_class",
+        "logic_class",
+        "select_method",
+    ),
+    _ROLLOUT_CASES,
+)
+def test_continue_current_rolled_out_to_other_sectors(
+    tmp_path: Path,
+    case_name: str,
+    fleet_filename: str,
+    technology_filename: str,
+    operator_name: str,
+    current_technology: str,
+    agent_class: type,
+    logic_class: type,
+    select_method: str,
+) -> None:
+    source_dir = _repo_root() / "data" / case_name
+    case_dir = tmp_path / case_name
+    shutil.copytree(source_dir, case_dir)
+
+    fleet_path = case_dir / fleet_filename
+    fleet = pd.read_csv(fleet_path)
+    target_mask = (fleet["Operator"] == operator_name) & (
+        fleet["current_technology"] == current_technology
+    )
+    fleet.loc[target_mask, "Age (Years)"] = 1.0
+    fleet.to_csv(fleet_path, index=False)
+
+    # Cripple every technology's capex, including the currently-installed one: a
+    # fresh reinvestment in the same technology can otherwise pay back just as
+    # fast as continuing (economic_utility clamps to 1.0 either way), tying with
+    # continue_current and winning the stable sort on iteration order alone. With
+    # every investment made unaffordable, only continuing (zero capex) stays
+    # attractive, so the comparison is unambiguous.
+    technology_path = case_dir / technology_filename
+    technology_catalog = pd.read_csv(technology_path)
+    technology_catalog["capex_eur"] = 1_000_000_000_000.0
+    technology_catalog.to_csv(technology_path, index=False)
+
+    scenario = NATMScenario.from_yaml(case_dir / "scenario.yaml")
+    scenario.investment_timing = InvestmentTimingConfig(include_continue_option=True)
+    model = NATMModel(scenario, seed=42)
+    agent = next(
+        candidate
+        for candidate in model.agents_by_type[agent_class]
+        if candidate.operator_name == operator_name
+    )
+    row_index = agent.fleet.frame.index[
+        agent.fleet.frame["current_technology"] == current_technology
+    ][0]
+    asset = agent.fleet.frame.loc[row_index]
+    logic = logic_class()
+
+    technology_row, _evaluation, action = getattr(logic, select_method)(
+        agent,
+        asset,
+        model.current_year,
+        initial_ets_balance=0.0,
+        row_index=int(row_index),
+    )
+
+    assert action == "continue_current"
+    assert technology_row["technology_name"] == current_technology
+
+
+@pytest.mark.parametrize(
+    (
+        "case_name",
+        "fleet_filename",
+        "technology_filename",
+        "operator_name",
+        "current_technology",
+        "agent_class",
+        "logic_class",
+        "select_method",
+    ),
+    _ROLLOUT_CASES,
+)
+def test_planned_investment_rolled_out_to_other_sectors(
+    tmp_path: Path,
+    case_name: str,
+    fleet_filename: str,
+    technology_filename: str,
+    operator_name: str,
+    current_technology: str,
+    agent_class: type,
+    logic_class: type,
+    select_method: str,
+) -> None:
+    del technology_filename, select_method
+    source_dir = _repo_root() / "data" / case_name
+    case_dir = tmp_path / case_name
+    shutil.copytree(source_dir, case_dir)
+
+    fleet_path = case_dir / fleet_filename
+    fleet = pd.read_csv(fleet_path)
+    target_mask = (fleet["Operator"] == operator_name) & (
+        fleet["current_technology"] == current_technology
+    )
+    fleet.loc[target_mask, "Age (Years)"] = 1.0
+    target_id = str(fleet.loc[target_mask, "ID"].iloc[0])
+    planned_year = 2026
+    fleet.loc[target_mask, "planned_investment_1_year"] = planned_year
+    fleet.loc[target_mask, "planned_investment_1_technology_name"] = current_technology
+    fleet.to_csv(fleet_path, index=False)
+
+    scenario = NATMScenario.from_yaml(case_dir / "scenario.yaml")
+    model = NATMModel(scenario, seed=42)
+    agent = next(
+        candidate
+        for candidate in model.agents_by_type[agent_class]
+        if candidate.operator_name == operator_name
+    )
+    row_index = agent.fleet.frame.index[agent.fleet.frame["aircraft_id"] == int(target_id)][0]
+
+    logic = logic_class()
+    replacement_rows = logic.replacement_row_indices(agent, planned_year)
+    assert int(row_index) in replacement_rows

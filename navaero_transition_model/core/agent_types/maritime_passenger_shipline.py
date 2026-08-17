@@ -315,17 +315,24 @@ class MaritimePassengerShiplineAgent(BaseOperatorAgent):
         technology_row: pd.Series,
         evaluation,
         year: int,
+        *,
+        action: str = "invest",
     ) -> None:
         self.fleet.apply_technology(
             row_index,
             technology_row,
             evaluation,
             year=year,
+            action=action,
         )
         self.remaining_ets_allowance = evaluation.remaining_ets_allowance
         self.technology_investment_cost[(year, str(technology_row["technology_name"]))] = float(
             technology_row["capex_eur"],
         )
+
+    def continue_vessel_operation(self, row_index: int, evaluation, year: int) -> None:
+        self.fleet.continue_operation(row_index, evaluation, year=year)
+        self.remaining_ets_allowance = evaluation.remaining_ets_allowance
 
     def refresh_summary(self) -> None:
         current_rows = self.fleet.technology_rows()

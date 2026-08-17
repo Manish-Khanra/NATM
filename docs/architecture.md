@@ -385,6 +385,17 @@ All legacy weighted-utility variants are implemented in
 `legacy_weighted_utility.py`; there are no sector-specific legacy weighted
 utility modules.
 
+The four sector classes in that file (aviation passenger/cargo, maritime
+cargo/passenger) hold only the genuinely sector-specific math: revenue
+formulas, extra operating-cost lines, and environmental-utility/pollutant
+models. Everything mechanically identical across sectors — which asset is
+due for replacement, how growth is sized against demand, how a candidate
+technology is ranked, and how continue-vs-invest-vs-planned is decided —
+lives once in the shared `NATMDecisionScorer` mixin
+(`decision_logic/scorer.py`), called through a small set of hook methods each
+sector class implements. This mirrors AURIS's own split between small
+per-sector plant classes and one shared `AURISDecisionScorer`.
+
 The ambiguity-aware investment-logic name is also `ambiguity_aware_utility` for
 every sector and application. Older sector-specific ambiguity-aware names are
 still accepted as aliases for existing cases.
@@ -697,10 +708,11 @@ For someone new to the codebase, this is the best order:
 9. [aviation_cargo_airline.py](C:/Manish_REPO/NATM/navaero_transition_model/core/agent_types/aviation_cargo_airline.py:1)
 10. [maritime_cargo_shipline.py](C:/Manish_REPO/NATM/navaero_transition_model/core/agent_types/maritime_cargo_shipline.py:1)
 11. [maritime_passenger_shipline.py](C:/Manish_REPO/NATM/navaero_transition_model/core/agent_types/maritime_passenger_shipline.py:1)
-12. [legacy_weighted_utility.py](C:/Manish_REPO/NATM/navaero_transition_model/core/decision_logic/legacy_weighted_utility.py:1)
-13. [fleet.py](C:/Manish_REPO/NATM/navaero_transition_model/core/fleet_management/fleet.py:1)
-14. [aviation_exports.py](C:/Manish_REPO/NATM/navaero_transition_model/core/result_exports/aviation_exports.py:1)
-15. [sqlite_store.py](C:/Manish_REPO/NATM/navaero_transition_model/core/database/sqlite_store.py:1)
+12. [scorer.py](C:/Manish_REPO/NATM/navaero_transition_model/core/decision_logic/scorer.py:1)
+13. [legacy_weighted_utility.py](C:/Manish_REPO/NATM/navaero_transition_model/core/decision_logic/legacy_weighted_utility.py:1)
+14. [fleet.py](C:/Manish_REPO/NATM/navaero_transition_model/core/fleet_management/fleet.py:1)
+15. [aviation_exports.py](C:/Manish_REPO/NATM/navaero_transition_model/core/result_exports/aviation_exports.py:1)
+16. [sqlite_store.py](C:/Manish_REPO/NATM/navaero_transition_model/core/database/sqlite_store.py:1)
 
 That path follows the same order the system itself uses during a run.
 

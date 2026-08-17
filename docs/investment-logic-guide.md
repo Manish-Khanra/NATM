@@ -262,12 +262,15 @@ The probability-vector output records the representative risk-neutral vector,
 the worst-case vector for `risk_averse_mean`, and the worst-case vector plus
 tail weights for `risk_averse_expected_shortfall`.
 
-## Dynamic Investment Timing (Aviation Passenger, Opt-In)
+## Dynamic Investment Timing (Opt-In, All Sectors)
 
-These features currently apply only to `AviationPassengerAirlineAgent` (both
-`legacy_weighted_utility` and `ambiguity_aware_utility`). They default to
-today's behavior; a case must opt in through a new `investment_timing` block
-in `scenario.yaml`:
+These features apply to every sector and application (aviation passenger,
+aviation cargo, maritime cargo, maritime passenger), under both
+`legacy_weighted_utility` and `ambiguity_aware_utility` — the replacement,
+growth, and candidate-selection orchestration for all four is one shared
+`NATMDecisionScorer` (`navaero_transition_model/core/decision_logic/scorer.py`),
+so this is not a per-sector special case. They default to today's behavior; a
+case must opt in through an `investment_timing` block in `scenario.yaml`:
 
 ```yaml
 investment_timing:
@@ -277,24 +280,24 @@ investment_timing:
 
 ### Continue vs. invest
 
-By default, once an aircraft is due for replacement it is always re-invested
-into. With `include_continue_option: true`, NATM adds one more candidate to
-the ranking each time a replacement is being evaluated: keep flying the
-current aircraft, at zero capex, for its already-scheduled remaining
-lifetime. This only ever changes anything when an aircraft is pulled into
-replacement early by the policy/subsidy acceleration window while its
+By default, once an aircraft or vessel is due for replacement it is always
+re-invested into. With `include_continue_option: true`, NATM adds one more
+candidate to the ranking each time a replacement is being evaluated: keep
+operating the current asset, at zero capex, for its already-scheduled
+remaining lifetime. This only ever changes anything when an asset is pulled
+into replacement early by the policy/subsidy acceleration window while its
 current technology is still economically or environmentally competitive
-against the catalog alternatives; aircraft at natural end of life always get
-replaced. The chosen action is recorded per aircraft/year in the new
-`action` column (`invest`, `continue_current`, or `planned_investment`) in
+against the catalog alternatives; assets at natural end of life always get
+replaced. The chosen action is recorded per asset/year in the `action`
+column (`invest`, `continue_current`, or `planned_investment`) in
 `aircraft.csv` and, for `ambiguity_aware_utility`, in
-`aviation_robust_frontier.csv`.
+`aviation_robust_frontier.csv`/`maritime_robust_frontier.csv`.
 
 ### Planned investments
 
-Fleet stock can force a specific aircraft to a specific technology in a
-specific year, independent of whether it is naturally due, using numbered
-columns in `aviation_fleet_stock.csv`:
+Fleet stock can force a specific aircraft or vessel to a specific technology
+in a specific year, independent of whether it is naturally due, using
+numbered columns in `aviation_fleet_stock.csv` or `maritime_fleet_stock.csv`:
 
 ```csv
 aircraft_id,planned_investment_1_year,planned_investment_1_technology_name,planned_investment_1_technology_pattern
@@ -302,10 +305,10 @@ aircraft_id,planned_investment_1_year,planned_investment_1_technology_name,plann
 1241,2032,,hybrid_electric_*
 ```
 
-Add `_2_`, `_3_`, and so on for later events on the same aircraft. Give
-either an exact `technology_name` or a shell-style `technology_pattern`
-(matched with `fnmatch` against the catalog); when a pattern matches several
-technologies, the aircraft's normal ranking (utility or robust NPV) selects
+Add `_2_`, `_3_`, and so on for later events on the same asset. Give either
+an exact `technology_name` or a shell-style `technology_pattern` (matched
+with `fnmatch` against the catalog); when a pattern matches several
+technologies, the asset's normal ranking (utility or robust NPV) selects
 among that family. Every planned-investment technology reference is
 validated against the technology catalog when the case loads, so a typo
 fails at startup rather than mid-run.
