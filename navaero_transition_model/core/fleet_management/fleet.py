@@ -547,6 +547,7 @@ class Fleet:
         operator_country: str,
         investment_logic: str,
         decision_attitude: str = "risk_neutral",
+        decision_mode: str = "",
     ) -> pd.DataFrame:
         fleet_snapshot = self._frame.copy()
         fleet_snapshot["year"] = year
@@ -556,6 +557,7 @@ class Fleet:
         fleet_snapshot["operator_country"] = operator_country
         fleet_snapshot["investment_logic"] = investment_logic
         fleet_snapshot["decision_attitude"] = decision_attitude
+        fleet_snapshot["decision_mode"] = decision_mode
         preferred_order = [
             "year",
             "sector_name",
@@ -564,6 +566,7 @@ class Fleet:
             "operator_country",
             "investment_logic",
             "decision_attitude",
+            "decision_mode",
         ]
         remaining_columns = [
             column for column in fleet_snapshot.columns if column not in preferred_order

@@ -25,13 +25,23 @@ ACTIVE_DECISION_ATTITUDES = (
     "risk_averse_mean",
     "risk_averse_expected_shortfall",
 )
-DEPRECATED_DECISION_ATTITUDE_ALIASES = {
+# The precise NPV-selection rule vocabulary. Same values as
+# ACTIVE_DECISION_ATTITUDES; aliased under this name for readability at the
+# `decision_mode` column call sites, which are a separate concept from
+# `decision_attitude` even though they currently share a value set.
+DECISION_MODES = ACTIVE_DECISION_ATTITUDES
+# Coarse `decision_attitude` behavioral labels (risk_averse, ambiguity_averse)
+# map to this default `decision_mode` when a fleet row leaves decision_mode
+# blank. Both labels default to the same mode today; they remain distinct,
+# permanent labels a case can use to tell two similarly-cautious operators
+# apart in output even when they resolve to the same underlying rule.
+DECISION_ATTITUDE_DEFAULT_MODE = {
     "risk_averse": "risk_averse_expected_shortfall",
     "ambiguity_averse": "risk_averse_expected_shortfall",
 }
 DECISION_ATTITUDES = (
     *ACTIVE_DECISION_ATTITUDES,
-    *DEPRECATED_DECISION_ATTITUDE_ALIASES,
+    *DECISION_ATTITUDE_DEFAULT_MODE,
 )
 
 

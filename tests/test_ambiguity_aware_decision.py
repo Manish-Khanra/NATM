@@ -464,7 +464,13 @@ def test_aviation_passenger_ambiguity_logic_writes_robust_frontier(tmp_path: Pat
     }.issubset(scores.columns)
 
 
-def test_deprecated_ambiguity_attitudes_alias_to_expected_shortfall(tmp_path: Path) -> None:
+def test_ambiguity_averse_attitude_defaults_to_expected_shortfall_mode(
+    tmp_path: Path,
+    recwarn: pytest.WarningsRecorder,
+) -> None:
+    """decision_attitude=ambiguity_averse is a permanent label, not a deprecated
+    alias: it is left untouched, and with no decision_mode column it silently
+    resolves to the risk_averse_expected_shortfall rule."""
     source_dir = Path(__file__).resolve().parents[1] / "data" / "baseline-passenger-transition"
     case_dir = tmp_path / "baseline-passenger-transition"
     shutil.copytree(source_dir, case_dir)
@@ -480,16 +486,22 @@ def test_deprecated_ambiguity_attitudes_alias_to_expected_shortfall(tmp_path: Pa
     model = NATMModel(scenario, seed=42)
     agent = model.get_sector_agents("aviation")[0]
     aircraft = agent.fleet.frame.iloc[0]
+    assert agent.decision_mode == ""
 
-    with pytest.warns(DeprecationWarning, match="decision_attitude='ambiguity_averse'"):
-        agent.decision_logic.select_technology_for_aircraft(
-            agent,
-            aircraft,
-            scenario.start_year,
-            initial_ets_balance=agent.remaining_ets_allowance,
-        )
+    agent.decision_logic.select_technology_for_aircraft(
+        agent,
+        aircraft,
+        scenario.start_year,
+        initial_ets_balance=agent.remaining_ets_allowance,
+    )
 
-    assert agent.decision_attitude == "risk_averse_expected_shortfall"
+    deprecation_warnings = [
+        warning for warning in recwarn.list if issubclass(warning.category, DeprecationWarning)
+    ]
+    assert not deprecation_warnings
+    assert agent.decision_attitude == "ambiguity_averse"
+    scores = model.to_ambiguity_decision_scores_frame()
+    assert set(scores["decision_mode"].unique()) == {"risk_averse_expected_shortfall"}
 
 
 def test_ambiguity_aware_utility_requires_probability_table(tmp_path: Path) -> None:

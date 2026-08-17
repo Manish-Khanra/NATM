@@ -206,6 +206,7 @@ class NATMModel(mesa.Model):
                     "decision_attitude",
                     "risk_neutral",
                 ),
+                "decision_mode": lambda agent: getattr(agent, "decision_mode", ""),
             },
         )
 

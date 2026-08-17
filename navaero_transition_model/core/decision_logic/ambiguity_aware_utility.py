@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import warnings
 from collections.abc import Iterable
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -10,8 +9,9 @@ import pandas as pd
 
 from navaero_transition_model.core.case_inputs.scenario_table import DEFAULT_SCENARIO_ID
 from navaero_transition_model.core.decision_logic.base import (
+    DECISION_ATTITUDE_DEFAULT_MODE,
     DECISION_ATTITUDES,
-    DEPRECATED_DECISION_ATTITUDE_ALIASES,
+    DECISION_MODES,
     CandidateEvaluation,
     clean_scope_value,
 )
@@ -109,21 +109,20 @@ class AmbiguityAwareSelectionMixin:
         return self._loss_law_probability_inputs(agent)[1]
 
     def _decision_mode(self, agent) -> str:
-        mode = str(getattr(agent, "decision_attitude", "risk_neutral")).strip().lower()
-        if mode in DEPRECATED_DECISION_ATTITUDE_ALIASES:
-            replacement = DEPRECATED_DECISION_ATTITUDE_ALIASES[mode]
-            warnings.warn(
-                f"decision_attitude='{mode}' is deprecated for ambiguity_aware_utility; "
-                f"use '{replacement}' instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            mode = replacement
-            agent.decision_attitude = replacement
-        if mode not in {"risk_neutral", "risk_averse_mean", "risk_averse_expected_shortfall"}:
-            mode = "risk_neutral"
-            agent.decision_attitude = mode
-        return mode
+        """Resolve the effective NPV-selection rule for this decision.
+
+        `decision_mode` (precise, e.g. risk_averse_mean) is authoritative when
+        set. Otherwise it is derived from `decision_attitude` (coarse label,
+        e.g. risk_averse), which may itself already be a precise mode name.
+        Resolved fresh on every call rather than cached, so nothing here
+        mutates the agent.
+        """
+        explicit_mode = str(getattr(agent, "decision_mode", "")).strip().lower()
+        if explicit_mode in DECISION_MODES:
+            return explicit_mode
+        attitude = str(getattr(agent, "decision_attitude", "risk_neutral")).strip().lower()
+        derived = DECISION_ATTITUDE_DEFAULT_MODE.get(attitude, attitude)
+        return derived if derived in DECISION_MODES else "risk_neutral"
 
     def _scenario_probabilities(self, agent) -> dict[str, float]:
         config = agent.model.scenario.ambiguity_aware_decision

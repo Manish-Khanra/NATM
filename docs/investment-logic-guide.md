@@ -1,8 +1,8 @@
 # Investment Logic Guide
 
-This guide shows the canonical `investment_logic` and `decision_attitude`
-settings for NATM. The same public strategy names apply to all four model
-types:
+This guide shows the canonical `investment_logic`, `decision_attitude`, and
+`decision_mode` settings for NATM. The same public strategy names apply to
+all four model types:
 
 - aviation passenger
 - aviation cargo
@@ -29,7 +29,37 @@ ambiguity_aware_utility,risk_averse_mean
 ambiguity_aware_utility,risk_averse_expected_shortfall
 ```
 
-The active `decision_attitude` values for `ambiguity_aware_utility` are:
+### `decision_attitude` vs. `decision_mode`
+
+For `ambiguity_aware_utility`, NATM keeps two independent fleet-stock columns,
+the same way AURIS keeps `decision_attitude` and `decision_mode` separate in
+`plants.csv`:
+
+- `decision_mode` is the precise NPV-selection rule that actually drives the
+  math: `risk_neutral`, `risk_averse_mean`, or `risk_averse_expected_shortfall`.
+  When set, it is authoritative.
+- `decision_attitude` is a coarser, human-readable behavioral label:
+  `risk_neutral`, `risk_averse`, or `ambiguity_averse` (the precise mode names
+  are also accepted directly, for backward compatibility). When `decision_mode`
+  is blank, NATM derives it from `decision_attitude`:
+  - `risk_neutral` -> `risk_neutral`
+  - `risk_averse_mean` / `risk_averse_expected_shortfall` -> itself, unchanged
+  - `risk_averse` -> `risk_averse_expected_shortfall`
+  - `ambiguity_averse` -> `risk_averse_expected_shortfall`
+
+The label does not have to match the rule it defaults to. Two cases can use
+the same `decision_attitude` label with different `decision_mode` values to
+tell different stories about the same underlying math, or the same math under
+different narrative labels:
+
+```csv
+investment_logic,decision_attitude,decision_mode
+ambiguity_aware_utility,ambiguity_averse,risk_averse_mean
+ambiguity_aware_utility,risk_averse,risk_averse_mean
+ambiguity_aware_utility,risk_averse,risk_averse_expected_shortfall
+```
+
+What each `decision_mode` value selects:
 
 - `risk_neutral`: selects the highest expected NPV using a representative
   probability vector. By default this is the mean probability across all belief
@@ -41,14 +71,12 @@ The active `decision_attitude` values for `ambiguity_aware_utility` are:
   expected-shortfall NPV. NATM again works on the loss scale and evaluates the
   worst tail under the most adverse admissible probability vector.
 
-Older `decision_attitude` values remain accepted as deprecated aliases:
-
-- `risk_averse` -> `risk_averse_expected_shortfall`
-- `ambiguity_averse` -> `risk_averse_expected_shortfall`
-
-If `decision_attitude` is missing, NATM defaults to `risk_neutral`. The column
-only changes behaviour for `ambiguity_aware_utility`; legacy weighted-utility
-decisions are unchanged.
+If both columns are missing, NATM defaults to `decision_attitude=risk_neutral`,
+which resolves to `decision_mode=risk_neutral`. Neither column changes
+behaviour for `legacy_weighted_utility`; only `ambiguity_aware_utility` reads
+them. The resolved mode is re-derived fresh every time a decision is scored
+(never cached), and is visible per decision in `ambiguity_decision_scores.csv`
+and per aircraft/vessel/year in `aircraft.csv` and `agents.csv`.
 
 Older sector-specific investment-logic names remain accepted as aliases for
 existing cases, but new input files should use only:
@@ -91,7 +119,8 @@ risk_neutral_belief_set: Base
 ```
 
 `ambiguity_aware_decision.risk_metric` is deprecated as an active selector.
-Selection is controlled by the fleet-stock `decision_attitude` value.
+Selection is controlled by the fleet-stock `decision_mode` value, or
+`decision_attitude` when `decision_mode` is blank.
 
 ## Belief-Set Probability Table
 
@@ -302,8 +331,9 @@ candidates, since those spend no fresh capex to credit back.
 1. Choose or copy a case folder under `data/`.
 2. In `aviation_fleet_stock.csv` or `maritime_fleet_stock.csv`, set
    `investment_logic=ambiguity_aware_utility`.
-3. Set `decision_attitude` to `risk_neutral`, `risk_averse_mean`, or
-   `risk_averse_expected_shortfall`.
+3. Set `decision_mode` to `risk_neutral`, `risk_averse_mean`, or
+   `risk_averse_expected_shortfall` (or leave it blank and set `decision_attitude`
+   to `risk_neutral`, `risk_averse`, or `ambiguity_averse` instead).
 4. Add `ambiguity_aware_decision.probability_table` to `scenario.yaml`.
 5. Add `scenario_id` rows to `aviation_scenario.csv` or `maritime_scenario.csv`
    when scenario values differ.

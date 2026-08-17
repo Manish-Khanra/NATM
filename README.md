@@ -439,12 +439,18 @@ The ambiguity-aware extension also uses one strategy name for every sector:
 `ambiguity_aware_utility`. Older sector-specific ambiguity-aware names are
 still accepted as aliases for existing cases.
 
-Fleet stock can optionally include `decision_attitude` with
-`risk_neutral`, `risk_averse_mean`, or `risk_averse_expected_shortfall`. Older
-`risk_averse` and `ambiguity_averse` values remain accepted as deprecated
-aliases for `risk_averse_expected_shortfall`. If the column is missing, NATM
-defaults to `risk_neutral`. The column only changes behavior for the
-ambiguity-aware logic; legacy weighted-utility decisions are unchanged.
+Fleet stock can optionally include two related columns, mirroring how AURIS
+separates a plant's `decision_attitude` from its `decision_mode`:
+`decision_mode` (`risk_neutral`, `risk_averse_mean`, or
+`risk_averse_expected_shortfall`) is the precise NPV rule and wins when set;
+`decision_attitude` (`risk_neutral`, `risk_averse`, or `ambiguity_averse` —
+the precise mode names are also accepted directly) is a coarser behavioral
+label consulted only when `decision_mode` is blank, with `risk_averse` and
+`ambiguity_averse` both defaulting to `risk_averse_expected_shortfall`. If
+both columns are missing, NATM defaults to `risk_neutral`. Neither column
+changes behavior for the legacy weighted-utility logic. See the
+[investment logic guide](docs/investment-logic-guide.md) for the full
+derivation table and examples.
 
 Scenario CSVs can optionally include `scenario_id`. If the column is missing,
 all rows are treated as `baseline`. When present, the ambiguity-aware logic

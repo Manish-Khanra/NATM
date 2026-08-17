@@ -6,7 +6,7 @@ import pandas as pd
 
 from navaero_transition_model.core.case_inputs.scenario_table import ScenarioTable
 from navaero_transition_model.core.case_inputs.technology_catalog import TechnologyCatalog
-from navaero_transition_model.core.decision_logic.base import DECISION_ATTITUDES
+from navaero_transition_model.core.decision_logic.base import DECISION_ATTITUDES, DECISION_MODES
 
 FLEET_COLUMN_ALIASES = {
     "ID": "aircraft_id",
@@ -107,6 +107,19 @@ def normalize_maritime_passenger_fleet_stock(path: str | Path) -> pd.DataFrame:
         unsupported = ", ".join(sorted(unsupported_attitudes))
         raise ValueError(
             f"Unsupported maritime passenger decision_attitude values: {unsupported}. "
+            f"Supported values: {supported}",
+        )
+    if "decision_mode" not in normalized.columns:
+        normalized["decision_mode"] = ""
+    else:
+        normalized["decision_mode"] = normalized["decision_mode"].fillna("")
+    normalized["decision_mode"] = normalized["decision_mode"].astype(str).str.strip().str.lower()
+    unsupported_modes = set(normalized["decision_mode"].astype(str)) - set(DECISION_MODES) - {""}
+    if unsupported_modes:
+        supported = ", ".join(DECISION_MODES)
+        unsupported = ", ".join(sorted(unsupported_modes))
+        raise ValueError(
+            f"Unsupported maritime passenger decision_mode values: {unsupported}. "
             f"Supported values: {supported}",
         )
     normalized["operator_key"] = (

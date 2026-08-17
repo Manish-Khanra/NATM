@@ -65,6 +65,11 @@ class MaritimeCargoShiplineAgent(BaseOperatorAgent):
             "decision_attitude",
             default="risk_neutral",
         )
+        self.decision_mode = self._fleet_text_value(
+            fleet_frame,
+            "decision_mode",
+            default="",
+        )
         self.decision_logic = build_maritime_cargo_decision_logic(self.investment_logic_name)
         self.remaining_ets_allowance = 0.0
         self.technology_investment_cost: dict[tuple[int, str], float] = {}
@@ -313,10 +318,12 @@ class MaritimeCargoShiplineAgent(BaseOperatorAgent):
             operator_country=self.operator_country,
             investment_logic=self.investment_logic_name,
             decision_attitude=self.decision_attitude,
+            decision_mode=self.decision_mode,
         )
 
     def get_output_metadata(self) -> dict[str, Any]:
         metadata = super().get_output_metadata()
         metadata["investment_logic"] = self.investment_logic_name
         metadata["decision_attitude"] = self.decision_attitude
+        metadata["decision_mode"] = self.decision_mode
         return metadata
