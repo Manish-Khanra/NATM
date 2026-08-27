@@ -97,6 +97,29 @@ class OpenAPFuelEmissionBackend:
         properties = self._aircraft_properties_cached(str(openap_type).upper().strip())
         return dict(properties)
 
+    @staticmethod
+    @lru_cache(maxsize=512)
+    def _fuel_flow_model_cached(openap_type: str) -> Any:
+        # openap.FuelFlow(...) loads parametric model coefficients from disk on
+        # construction - instantiating it fresh per timestep (as opposed to once
+        # per aircraft type) made large batches thousands of times slower.
+        try:
+            import openap  # type: ignore[import-not-found]
+
+            return openap.FuelFlow(openap_type)
+        except Exception:
+            return None
+
+    @staticmethod
+    @lru_cache(maxsize=512)
+    def _emission_model_cached(openap_type: str) -> Any:
+        try:
+            import openap  # type: ignore[import-not-found]
+
+            return openap.Emission(openap_type)
+        except Exception:
+            return None
+
     def _mtow_from_properties(self, openap_type: str) -> float:
         properties = self.get_aircraft_properties(openap_type)
         candidates = [
@@ -300,9 +323,9 @@ class OpenAPFuelEmissionBackend:
     ) -> float:
         self._reset_last_flags()
         try:
-            import openap  # type: ignore[import-not-found]
-
-            fuel_flow_model = openap.FuelFlow(str(openap_type).upper().strip())
+            fuel_flow_model = self._fuel_flow_model_cached(str(openap_type).upper().strip())
+            if fuel_flow_model is None:
+                raise ValueError(f"No FuelFlow model for {openap_type}")
             for kwargs in (
                 {"mass": mass_kg, "tas": tas_kt, "alt": alt_ft, "vs": vs_fpm or 0.0},
                 {"mass": mass_kg, "tas": tas_kt, "alt": alt_ft},
@@ -342,9 +365,9 @@ class OpenAPFuelEmissionBackend:
             return emissions
 
         try:
-            import openap  # type: ignore[import-not-found]
-
-            emission_model = openap.Emission(str(openap_type).upper().strip())
+            emission_model = self._emission_model_cached(str(openap_type).upper().strip())
+            if emission_model is None:
+                raise ValueError(f"No Emission model for {openap_type}")
             for output_key, method_name in (
                 ("h2o_kg", "h2o"),
                 ("nox_kg", "nox"),

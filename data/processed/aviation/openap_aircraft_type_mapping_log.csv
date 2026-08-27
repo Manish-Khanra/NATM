@@ -1,4 +1,25 @@
 raw_aircraft_type,openap_type,mapping_status,mapping_note,count
-A319,A319,exact,A319 is supported by OpenAP.,2
-A320,A320,exact,A320 is supported by OpenAP.,2
-A359,A359,exact,A359 is supported by OpenAP.,1
+A20N,A20N,exact,A20N is supported by OpenAP.,64072
+A21N,A21N,exact,A21N is supported by OpenAP.,27132
+A306,B763,fallback,A306 is not supported; using B763.,13232
+A319,A319,exact,A319 is supported by OpenAP.,84646
+A320,A320,exact,A320 is supported by OpenAP.,115932
+A321,A321,exact,A321 is supported by OpenAP.,70074
+A332,A332,exact,A332 is supported by OpenAP.,1503
+A333,A333,exact,A333 is supported by OpenAP.,5172
+A339,A333,fallback,A339 is not supported; using A333.,4564
+A343,A343,exact,A343 is supported by OpenAP.,2912
+A346,A343,fallback,A346 is not supported; using A343.,1091
+A359,A359,exact,A359 is supported by OpenAP.,9926
+A388,A388,exact,A388 is supported by OpenAP.,2419
+B38M,B38M,exact,B38M is supported by OpenAP.,2782
+B738,B738,exact,B738 is supported by OpenAP.,6371
+B744,B744,exact,B744 is supported by OpenAP.,1645
+B748,B748,exact,B748 is supported by OpenAP.,4532
+B752,B752,exact,B752 is supported by OpenAP.,893
+B77L,B77W,fallback,B77L is not supported; using B77W.,12780
+B789,B789,exact,B789 is supported by OpenAP.,3473
+DH8D,,unsupported,No supported OpenAP type found for DH8D.,1623
+E145,E145,exact,E145 is supported by OpenAP.,432
+E190,E190,exact,E190 is supported by OpenAP.,12920
+J328,,unsupported,No supported OpenAP type found for J328.,3

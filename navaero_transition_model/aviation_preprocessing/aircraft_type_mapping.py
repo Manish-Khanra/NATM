@@ -55,6 +55,18 @@ FALLBACK_CANDIDATES: dict[str, tuple[str, ...]] = {
     "CRJ2": ("CRJ2",),
     "AT72": ("AT72", "ATR72"),
     "ATR72": ("ATR72", "AT72"),
+    # Verified against OpenAP's own coverage (openap.prop.aircraft) directly -
+    # these codes appeared as real, common "unsupported_aircraft_type" flags in
+    # actual flight data with no fallback attempted at all (not even OpenAP-checked).
+    "A306": ("A306", "B763"),  # A300-600: no OpenAP model; closest weight-class twin
+    "B77L": ("B77L", "B77W", "B772"),  # 777-200LR/777F
+    "A339": ("A339", "A333", "A332"),  # A330-900neo
+    "A346": ("A346", "A345", "A343"),  # A340-600
+    # DH8D (Dash 8-400): this OpenAP installation has no turboprop coverage at
+    # all - DH8A/B/C and ATR72/AT72 are all unsupported too (verified directly),
+    # so the existing "AT72"/"ATR72" entries above were already non-functional
+    # before this change. Left as genuinely unsupported rather than implying a
+    # fallback that doesn't work.
     "DH8D": ("DH8D", "DH8C", "DH8A"),
 }
 

@@ -9,6 +9,7 @@ pytest-cache-files-*/
 *.pyo
 *.pyd
 outputs/
+data/archive/
 simulation_results/
 .DS_Store
 Thumbs.db

@@ -1,14 +1,36 @@
 OpenAP aviation fuel/emissions validation report
-flights_processed: 5
-flights_skipped: 0
-exact_aircraft_mappings: 5
-fallback_aircraft_mappings: 0
-unsupported_aircraft_mappings: 0
-total_fuel_kg: 17486.111
-total_energy_mwh: 208.861878
-total_co2_kg: 55256.110
+flights_processed: 445002
+flights_skipped: 5127
+exact_aircraft_mappings: 416836
+fallback_aircraft_mappings: 31667
+unsupported_aircraft_mappings: 1626
+total_fuel_kg: 4975618257.215
+total_energy_mwh: 59430995.850071
+total_co2_kg: 15722953692.800
+top_unsupported_aircraft_types:
+  DH8D: 1623
+  J328: 3
 fuel_kg_per_km_by_aircraft_type:
-  A319/A319: 5.328827 kg/km, 1597.909 kg/flight
-  A320/A320: 4.256316 kg/km, 4622.922 kg/flight
-  A359/A359: 11.240445 kg/km, 5044.448 kg/flight
+  A20N/A20N: 2.463322 kg/km, 2519.571 kg/flight
+  A21N/A21N: 3.235742 kg/km, 4731.938 kg/flight
+  A306/B763: 5.379405 kg/km, 4659.286 kg/flight
+  A319/A319: 4.109533 kg/km, 2836.277 kg/flight
+  A320/A320: 4.170465 kg/km, 3700.291 kg/flight
+  A321/A321: 4.741221 kg/km, 4855.044 kg/flight
+  A332/A332: 7.100989 kg/km, 32900.925 kg/flight
+  A333/A333: 6.933598 kg/km, 44608.232 kg/flight
+  A339/A333: 6.818255 kg/km, 52806.255 kg/flight
+  A343/A343: 9.363837 kg/km, 62797.979 kg/flight
+  A346/A343: 9.515900 kg/km, 60452.531 kg/flight
+  A359/A359: 8.959991 kg/km, 70828.160 kg/flight
+  A388/A388: 16.275981 kg/km, 123210.046 kg/flight
+  B38M/B38M: 3.004184 kg/km, 5424.345 kg/flight
+  B738/B738: 3.636672 kg/km, 6923.814 kg/flight
+  B744/B744: 14.420536 kg/km, 109371.349 kg/flight
+  B748/B748: 14.107468 kg/km, 119865.721 kg/flight
+  B752/B752: 6.778222 kg/km, 5950.741 kg/flight
+  B77L/B77W: 12.432564 kg/km, 73332.747 kg/flight
+  B789/B789: 8.159083 kg/km, 47349.523 kg/flight
+  E145/E145: 0.751643 kg/km, 619.585 kg/flight
+  E190/E190: 3.734453 kg/km, 1871.897 kg/flight
 sanity_warnings: 0
