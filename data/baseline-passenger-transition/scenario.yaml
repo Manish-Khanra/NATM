@@ -9,7 +9,12 @@ sectors:
 ambiguity_aware_decision:
   enabled: true
   scenario_ids:
-    - baseline
+    - aktuellepolitiken
+    - fokusstrom
+    - fokusH2
+    - technologiemix
+    - hohenachfrage
+    - niedrigenachfrage
   probability_table: ambiguity_probabilities.csv
 
 preprocessing:

@@ -5,3 +5,14 @@ end_year: 2035
 sectors:
   maritime:
     - cargo
+
+ambiguity_aware_decision:
+  enabled: true
+  scenario_ids:
+    - aktuellepolitiken
+    - fokusstrom
+    - fokusH2
+    - technologiemix
+    - hohenachfrage
+    - niedrigenachfrage
+  probability_table: ambiguity_probabilities.csv

@@ -300,21 +300,26 @@ class LegacyWeightedUtilityLogic(NATMDecisionScorer, AviationPassengerDecisionLo
         return 0.0
 
     def environmental_utility(self, technology_row: pd.Series) -> float:
+        # Thresholds are real-EDB-calibrated: base = max(real conventional
+        # aircraft's ICAO/EASA-certified value across the installed fleet) / 4,
+        # same linear-quartile structure as the original (arbitrary) constants
+        # they replace. See data/archive/registration_matching/
+        # fix_aviation_emission_factors.py for the derivation.
         hc = self.partial_environmental_utility(
             float(technology_row["hydrocarbon_factor"]),
-            (148, 296, 444, 592),
+            (1.45, 2.89, 4.33, 5.78),
         )
         co = self.partial_environmental_utility(
             float(technology_row["carbon_monoxide_factor"]),
-            (131.8, 263.6, 395.4, 527.2),
+            (11.72, 23.44, 35.16, 46.88),
         )
         nox = self.partial_environmental_utility(
             float(technology_row["nitrogen_oxide_factor"]),
-            (16.78, 33.56, 50.34, 67.12),
+            (17.33, 34.66, 51.98, 69.31),
         )
         smoke = self.partial_environmental_utility(
             float(technology_row["smoke_number_factor"]),
-            (15.6, 31.2, 46.8, 62.4),
+            (2.51, 5.01, 7.52, 10.03),
         )
         co2_primary = 1.0 if float(technology_row["primary_energy_emission_factor"]) == 0.0 else 0.0
         co2_secondary = (
@@ -679,21 +684,26 @@ class LegacyWeightedUtilityCargoLogic(NATMDecisionScorer, AviationCargoDecisionL
         return 0.0
 
     def environmental_utility(self, technology_row: pd.Series) -> float:
+        # Thresholds are real-EDB-calibrated: base = max(real conventional
+        # aircraft's ICAO/EASA-certified value across the installed fleet) / 4,
+        # same linear-quartile structure as the original (arbitrary) constants
+        # they replace. See data/archive/registration_matching/
+        # fix_aviation_emission_factors.py for the derivation.
         hc = self.partial_environmental_utility(
             float(technology_row["hydrocarbon_factor"]),
-            (148, 296, 444, 592),
+            (1.45, 2.89, 4.33, 5.78),
         )
         co = self.partial_environmental_utility(
             float(technology_row["carbon_monoxide_factor"]),
-            (131.8, 263.6, 395.4, 527.2),
+            (11.72, 23.44, 35.16, 46.88),
         )
         nox = self.partial_environmental_utility(
             float(technology_row["nitrogen_oxide_factor"]),
-            (16.78, 33.56, 50.34, 67.12),
+            (17.33, 34.66, 51.98, 69.31),
         )
         smoke = self.partial_environmental_utility(
             float(technology_row["smoke_number_factor"]),
-            (15.6, 31.2, 46.8, 62.4),
+            (2.51, 5.01, 7.52, 10.03),
         )
         co2_primary = 1.0 if float(technology_row["primary_energy_emission_factor"]) == 0.0 else 0.0
         co2_secondary = (
