@@ -13,3 +13,4 @@ data/archive/
 simulation_results/
 .DS_Store
 Thumbs.db
+data/processed/aviation/openap_flight_fuel_emissions.csv
