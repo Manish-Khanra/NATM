@@ -40,7 +40,7 @@ def _prepare_case(
     decision_attitude: str,
     decision_mode: str | None,
 ) -> Path:
-    source_dir = Path(__file__).resolve().parents[1] / "data" / "baseline-passenger-transition"
+    source_dir = Path(__file__).resolve().parents[1] / "data" / "input" / "baseline-passenger-transition"
     case_dir = tmp_path / "baseline-passenger-transition"
     shutil.copytree(source_dir, case_dir)
 
@@ -115,7 +115,7 @@ def test_invalid_decision_mode_fails_fast_at_load(
     case_name: str,
     label: str,
 ) -> None:
-    source_dir = Path(__file__).resolve().parents[1] / "data" / case_name
+    source_dir = Path(__file__).resolve().parents[1] / "data" / "input" / case_name
     case_dir = tmp_path / case_name
     shutil.copytree(source_dir, case_dir)
 
@@ -151,8 +151,7 @@ def test_decision_mode_round_trips_into_outputs(tmp_path: Path) -> None:
 def test_default_decision_mode_is_blank_when_column_absent() -> None:
     scenario = NATMScenario.from_yaml(
         Path(__file__).resolve().parents[1]
-        / "data"
-        / "baseline-passenger-transition"
+        / "data" / "input" / "baseline-passenger-transition"
         / "scenario.yaml",
     )
     model = NATMModel(scenario, seed=42)

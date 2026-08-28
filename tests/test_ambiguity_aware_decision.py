@@ -405,7 +405,7 @@ def test_sector_specific_legacy_names_remain_aliases(builder, legacy_alias, logi
 
 
 def test_aviation_passenger_ambiguity_logic_writes_robust_frontier(tmp_path: Path) -> None:
-    source_dir = Path(__file__).resolve().parents[1] / "data" / "baseline-passenger-transition"
+    source_dir = Path(__file__).resolve().parents[1] / "data" / "input" / "baseline-passenger-transition"
     case_dir = tmp_path / "baseline-passenger-transition"
     shutil.copytree(source_dir, case_dir)
 
@@ -471,7 +471,7 @@ def test_ambiguity_averse_attitude_defaults_to_expected_shortfall_mode(
     """decision_attitude=ambiguity_averse is a permanent label, not a deprecated
     alias: it is left untouched, and with no decision_mode column it silently
     resolves to the risk_averse_expected_shortfall rule."""
-    source_dir = Path(__file__).resolve().parents[1] / "data" / "baseline-passenger-transition"
+    source_dir = Path(__file__).resolve().parents[1] / "data" / "input" / "baseline-passenger-transition"
     case_dir = tmp_path / "baseline-passenger-transition"
     shutil.copytree(source_dir, case_dir)
 
@@ -505,7 +505,7 @@ def test_ambiguity_averse_attitude_defaults_to_expected_shortfall_mode(
 
 
 def test_ambiguity_aware_utility_requires_probability_table(tmp_path: Path) -> None:
-    source_dir = Path(__file__).resolve().parents[1] / "data" / "baseline-passenger-transition"
+    source_dir = Path(__file__).resolve().parents[1] / "data" / "input" / "baseline-passenger-transition"
     case_dir = tmp_path / "baseline-passenger-transition"
     shutil.copytree(source_dir, case_dir)
     (case_dir / "ambiguity_probabilities.csv").unlink()
@@ -564,7 +564,7 @@ def test_generalized_ambiguity_logic_writes_robust_frontier(
     selection_method: str,
     frontier_method: str,
 ) -> None:
-    source_dir = Path(__file__).resolve().parents[1] / "data" / case_name
+    source_dir = Path(__file__).resolve().parents[1] / "data" / "input" / case_name
     case_dir = tmp_path / case_name
     shutil.copytree(source_dir, case_dir)
 
@@ -605,7 +605,7 @@ def test_generalized_ambiguity_logic_writes_robust_frontier(
 
 
 def test_risk_attitudes_comparison_case_uses_three_npv_modes() -> None:
-    case_dir = Path(__file__).resolve().parents[1] / "data" / "risk-attitudes-comparison"
+    case_dir = Path(__file__).resolve().parents[1] / "data" / "input" / "risk-attitudes-comparison"
     case_inputs = load_aviation_passenger_case(case_dir)
     scenario = NATMScenario.from_yaml(case_dir / "scenario.yaml")
 
@@ -662,7 +662,7 @@ def test_risk_attitudes_comparison_case_uses_three_npv_modes() -> None:
 
 
 def test_minimax_regret_decision_mode_runs_end_to_end(tmp_path: Path) -> None:
-    source_dir = Path(__file__).resolve().parents[1] / "data" / "baseline-passenger-transition"
+    source_dir = Path(__file__).resolve().parents[1] / "data" / "input" / "baseline-passenger-transition"
     case_dir = tmp_path / "baseline-passenger-transition"
     shutil.copytree(source_dir, case_dir)
 

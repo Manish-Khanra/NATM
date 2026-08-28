@@ -1,0 +1,19 @@
+name: baseline-cargo-transition
+start_year: 2025
+end_year: 2035
+
+sectors:
+  aviation:
+    - cargo
+
+ambiguity_aware_decision:
+  enabled: true
+  scenario_ids:
+    - aktuellepolitiken
+    - fokusstrom
+    - fokusH2
+    - technologiemix
+    - hohenachfrage
+    - niedrigenachfrage
+  probability_table: ambiguity_probabilities.csv
+  robust_metric: worst_case_expected_utility

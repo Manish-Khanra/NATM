@@ -49,7 +49,7 @@ def _repo_root() -> Path:
 
 
 def _passenger_case_dir() -> Path:
-    return _repo_root() / "data" / "baseline-passenger-transition"
+    return _repo_root() / "data" / "input" / "baseline-passenger-transition"
 
 
 def test_scenario_loads_optional_aviation_preprocessing_config() -> None:
@@ -174,7 +174,7 @@ def test_openap_trip_outputs_and_activity_profile_aggregation(
         lambda aircraft_type: str(aircraft_type).upper() in {"A319", "A320", "A359"},
     )
     repo_root = _repo_root()
-    example_root = repo_root / "data" / "examples" / "aviation_preprocessing"
+    example_root = repo_root / "data" / "raw" / "aviation_preprocessing"
     raw_opensky_path = example_root / "opensky_aircraft_db_sample.csv"
     airports_path = example_root / "airports_sample.csv"
     flightlist_dir = example_root / "opensky_flightlists"
@@ -231,7 +231,7 @@ def test_stock_matching_enriches_registration_icao24_and_german_flag(tmp_path: P
     raw_opensky_path = (
         repo_root
         / "data"
-        / "examples"
+        / "raw"
         / "aviation_preprocessing"
         / "opensky_aircraft_db_sample.csv"
     )
@@ -270,7 +270,7 @@ def test_stock_matching_enriches_registration_icao24_and_german_flag(tmp_path: P
 
 def test_flightlist_ingestion_activity_profiles_and_allocation_pipeline(tmp_path: Path) -> None:
     repo_root = _repo_root()
-    example_root = repo_root / "data" / "examples" / "aviation_preprocessing"
+    example_root = repo_root / "data" / "raw" / "aviation_preprocessing"
     raw_opensky_path = example_root / "opensky_aircraft_db_sample.csv"
     airports_path = example_root / "airports_sample.csv"
     flightlist_dir = example_root / "opensky_flightlists"
@@ -323,7 +323,7 @@ def test_flightlist_ingestion_activity_profiles_and_allocation_pipeline(tmp_path
 
 def test_enriched_activity_profiles_merge_into_case_and_fleet(tmp_path: Path) -> None:
     repo_root = _repo_root()
-    example_root = repo_root / "data" / "examples" / "aviation_preprocessing"
+    example_root = repo_root / "data" / "raw" / "aviation_preprocessing"
     baseline_case_dir = _passenger_case_dir()
 
     stock_path = baseline_case_dir / "aviation_fleet_stock.csv"

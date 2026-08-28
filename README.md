@@ -189,7 +189,7 @@ outputs into `data/processed/aviation/` and enriches
 
 You can also run the scenario-defined preprocessing flow from `run.py`. The
 baseline passenger case stores its preprocessing recipe in
-`data/baseline-passenger-transition/scenario.yaml`:
+`data/input/baseline-passenger-transition/scenario.yaml`:
 
 ```powershell
 python run.py --mode aviation_preprocessing --example small_with_aviation_passenger

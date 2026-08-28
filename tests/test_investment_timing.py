@@ -29,7 +29,7 @@ def _repo_root() -> Path:
 
 
 def _passenger_case_dir() -> Path:
-    return _repo_root() / "data" / PASSENGER_CASE_NAME
+    return _repo_root() / "data" / "input" / PASSENGER_CASE_NAME
 
 
 def _clone_case_directory(tmp_path: Path) -> Path:
@@ -610,7 +610,7 @@ def test_continue_current_rolled_out_to_other_sectors(
     logic_class: type,
     select_method: str,
 ) -> None:
-    source_dir = _repo_root() / "data" / case_name
+    source_dir = _repo_root() / "data" / "input" / case_name
     case_dir = tmp_path / case_name
     shutil.copytree(source_dir, case_dir)
 
@@ -684,7 +684,7 @@ def test_planned_investment_rolled_out_to_other_sectors(
     select_method: str,
 ) -> None:
     del technology_filename, select_method
-    source_dir = _repo_root() / "data" / case_name
+    source_dir = _repo_root() / "data" / "input" / case_name
     case_dir = tmp_path / case_name
     shutil.copytree(source_dir, case_dir)
 
@@ -728,7 +728,7 @@ def test_continue_current_selected_for_maritime_passenger(tmp_path: Path) -> Non
     on total_utility than continuing, so continue_current wins unambiguously.
     """
     case_name = "baseline-maritime-passenger-transition"
-    source_dir = _repo_root() / "data" / case_name
+    source_dir = _repo_root() / "data" / "input" / case_name
     case_dir = tmp_path / case_name
     shutil.copytree(source_dir, case_dir)
     operator_name = "DFDS"

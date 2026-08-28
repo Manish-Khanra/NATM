@@ -8,7 +8,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PROCESSED_AVIATION_DIR = PROJECT_ROOT / "data" / "processed" / "aviation"
 DEFAULT_AIRPORT_METADATA = (
-    PROJECT_ROOT / "data" / "examples" / "aviation_preprocessing" / "airports_sample.csv"
+    PROJECT_ROOT / "data" / "raw" / "aviation_preprocessing" / "airports_sample.csv"
 )
 JET_A_KWH_PER_KG = 43.0 / 3.6
 

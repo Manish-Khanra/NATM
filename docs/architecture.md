@@ -91,7 +91,7 @@ example to a case folder under `data/`, runs the model, and writes outputs to
 
 ### 3.2 Case loading
 
-The case starts with [scenario.yaml](C:/Manish_REPO/NATM/data/baseline-passenger-transition/scenario.yaml:1),
+The case starts with [scenario.yaml](C:/Manish_REPO/NATM/data/input/baseline-passenger-transition/scenario.yaml:1),
 which is loaded by `NATMScenario`.
 
 `NATMScenario` currently stores:

@@ -1,0 +1,7 @@
+scenario_id,B_Technologiemix,B_FokusStrom,B_FokusH2,B_NachfrageNiedrig,B_HoheNachfrage,B_AktuellePolitiken
+aktuellepolitiken,0.125,0.125,0.125,0.125,0.125,0.625
+fokusstrom,0.0625,0.5625,0.0625,0.0625,0.0625,0.0625
+fokusH2,0.0625,0.0625,0.5625,0.0625,0.0625,0.0625
+technologiemix,0.625,0.125,0.125,0.125,0.125,0.125
+hohenachfrage,0.0625,0.0625,0.0625,0.0625,0.5625,0.0625
+niedrigenachfrage,0.0625,0.0625,0.0625,0.5625,0.0625,0.0625

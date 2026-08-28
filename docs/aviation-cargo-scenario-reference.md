@@ -184,7 +184,7 @@ These are required by the current aviation-cargo case validation.
 ## Current Baseline Cargo Case
 
 The baseline aviation-cargo case in
-`data/baseline-cargo-transition/aviation_scenario.csv` includes examples
+`data/input/baseline-cargo-transition/aviation_scenario.csv` includes examples
 for the cargo variable families above, including:
 
 - demand allocation through `freight_tonne_km_demand` and `operator_market_share`

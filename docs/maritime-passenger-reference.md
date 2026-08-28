@@ -197,7 +197,7 @@ These are required by the current maritime-passenger case validation.
 ## Current Baseline Maritime Passenger Case
 
 The baseline maritime-passenger case in
-`data/baseline-maritime-passenger-transition/maritime_scenario.csv` includes
+`data/input/baseline-maritime-passenger-transition/maritime_scenario.csv` includes
 examples for the maritime-passenger variable families above, including:
 
 - demand allocation through `passenger_km_demand` and `operator_market_share`

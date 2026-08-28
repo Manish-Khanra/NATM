@@ -396,7 +396,7 @@ def test_maritime_passenger_scenario_runs_end_to_end() -> None:
 
 def test_maritime_passenger_case_loader_reads_three_file_structure() -> None:
     case_dir = (
-        Path(__file__).resolve().parents[1] / "data" / "baseline-maritime-passenger-transition"
+        Path(__file__).resolve().parents[1] / "data" / "input" / "baseline-maritime-passenger-transition"
     )
     case_inputs = load_maritime_passenger_case(case_dir)
 

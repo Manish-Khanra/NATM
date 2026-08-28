@@ -265,12 +265,12 @@ preprocessing:
 
 For the baseline passenger case, this points to:
 
-- `data/baseline-passenger-transition/aviation_fleet_stock.csv`
-- `data/examples/aviation_preprocessing/opensky_aircraft_db_sample.csv`
-- `data/examples/aviation_preprocessing/opensky_flightlists/`
-- `data/examples/aviation_preprocessing/airports_sample.csv`
-- `data/baseline-passenger-transition/aviation_technology_catalog.csv`
-- `data/examples/aviation_preprocessing/germany_calibration_input.csv`
+- `data/input/baseline-passenger-transition/aviation_fleet_stock.csv`
+- `data/raw/aviation_preprocessing/opensky_aircraft_db_sample.csv`
+- `data/raw/aviation_preprocessing/opensky_flightlists/`
+- `data/raw/aviation_preprocessing/airports_sample.csv`
+- `data/input/baseline-passenger-transition/aviation_technology_catalog.csv`
+- `data/raw/aviation_preprocessing/germany_calibration_input.csv`
 
 So if you press Run in VS Code with those two lines set, `run.py` does not
 start the diffusion simulation. Instead, it runs the aviation preprocessing
@@ -393,7 +393,7 @@ they do not replace the existing aviation investment logic.
 Synthetic example inputs live under:
 
 ```text
-data/examples/aviation_preprocessing/
+data/raw/aviation_preprocessing/
 ```
 
 They are intentionally small and useful for:

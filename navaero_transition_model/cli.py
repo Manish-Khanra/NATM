@@ -12,7 +12,7 @@ from navaero_transition_model.core.result_exports import DetailedOutputWriter
 from navaero_transition_model.core.scenario import NATMScenario
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-CASE_ROOT = PROJECT_ROOT / "data"
+CASE_ROOT = PROJECT_ROOT / "data" / "input"
 
 
 def resolve_case_config(case_name: str) -> Path:
@@ -24,7 +24,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--case",
         default="baseline-passenger-transition",
-        help="Case folder name under data/ to run.",
+        help="Case folder name under data/input/ to run.",
     )
     parser.add_argument(
         "--config",

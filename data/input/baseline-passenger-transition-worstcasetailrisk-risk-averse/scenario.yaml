@@ -1,0 +1,36 @@
+name: baseline-transition
+start_year: 2025
+end_year: 2028
+
+sectors:
+  aviation:
+    - passenger
+
+ambiguity_aware_decision:
+  enabled: true
+  scenario_ids:
+    - aktuellepolitiken
+    - fokusstrom
+    - fokusH2
+    - technologiemix
+    - hohenachfrage
+    - niedrigenachfrage
+  probability_table: ambiguity_probabilities.csv
+  robust_metric: worst_case_expected_shortfall
+
+preprocessing:
+  aviation:
+    enabled: true
+    stock_input: aviation_fleet_stock.csv
+    opensky_raw: ../../raw/aviation_preprocessing/opensky_aircraft_db_sample.csv
+    flightlist_folder: ../../raw/aviation_preprocessing/opensky_flightlists
+    airport_metadata: ../../raw/aviation_preprocessing/airports_sample.csv
+    technology_catalog: aviation_technology_catalog.csv
+    calibration_input: ../../raw/aviation_preprocessing/germany_calibration_input.csv
+    processed_dir: ../../../data/processed/aviation
+
+    openap:
+      estimate_fuel: true
+      mode: synthetic
+      route_extension_factor: 1.05
+      include_non_co2: true
