@@ -89,6 +89,7 @@ class AmbiguityAwareDecisionConfig:
     probability_tolerance: float = 1e-8
     write_debug_outputs: bool = True
     risk_neutral_belief_set: str | None = None
+    realized_scenario_id: str | None = None
 
     @classmethod
     def from_dict(cls, payload: dict | None) -> AmbiguityAwareDecisionConfig:
@@ -201,6 +202,14 @@ class AmbiguityAwareDecisionConfig:
         if probability_tolerance <= 0.0:
             raise ValueError("ambiguity_aware_decision.probability_tolerance must be positive")
 
+        realized_scenario_id = _optional_text(payload.get("realized_scenario_id"))
+        if realized_scenario_id is not None and realized_scenario_id not in scenario_ids:
+            scenario_ids_text = ", ".join(scenario_ids)
+            raise ValueError(
+                f"ambiguity_aware_decision.realized_scenario_id '{realized_scenario_id}' must be "
+                f"one of scenario_ids: {scenario_ids_text}",
+            )
+
         return cls(
             enabled=True,
             scenario_ids=scenario_ids,
@@ -217,6 +226,7 @@ class AmbiguityAwareDecisionConfig:
             probability_tolerance=probability_tolerance,
             write_debug_outputs=bool(payload.get("write_debug_outputs", True)),
             risk_neutral_belief_set=_optional_text(payload.get("risk_neutral_belief_set")),
+            realized_scenario_id=realized_scenario_id,
         )
 
     def probability_table_path(self, base_path: Path) -> Path | None:

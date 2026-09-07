@@ -50,6 +50,7 @@ def _append_scenario_row(
     value: float,
     segment: str = "",
     technology_name: str = "",
+    primary_energy_carrier: str = "",
     variable_group: str = "cost_index",
     unit: str = "value",
 ) -> None:
@@ -64,6 +65,7 @@ def _append_scenario_row(
             "variable_name": variable_name,
             "segment": segment,
             "technology_name": technology_name,
+            "primary_energy_carrier": primary_energy_carrier,
             "unit": unit,
         },
     )
@@ -179,7 +181,16 @@ def _make_young_aircraft_row(case_dir: Path, *, age_years: float = 2.0) -> tuple
     )
     target_id = str(fleet.loc[target_mask, "ID"].iloc[0])
     fleet.loc[target_mask, "Age (Years)"] = age_years
-    fleet.loc[fleet["Operator"] == "Lufthansa", "investment_logic"] = "legacy_weighted_utility"
+    lufthansa_mask = fleet["Operator"] == "Lufthansa"
+    fleet.loc[lufthansa_mask, "investment_logic"] = "legacy_weighted_utility"
+    # Real fleet installation left operator_economic_weight/operator_environmental_weight
+    # at 0.0 for every operator (this is a behavioral modeling parameter with no real-world
+    # source, unlike the rest of the fleet data). legacy_weighted_utility's total_utility
+    # is meaningless with both weights at zero, so restore a sensible split for these
+    # legacy-path unit tests; the live simulation uses ambiguity_aware_utility exclusively
+    # and never reads these fields.
+    fleet.loc[lufthansa_mask, "operator_economic_weight"] = 0.69
+    fleet.loc[lufthansa_mask, "operator_environmental_weight"] = 0.31
     fleet.to_csv(fleet_path, index=False)
     return fleet_path, target_id
 
@@ -395,7 +406,9 @@ def test_capex_multiplier_scales_asset_price_via_technology_specific_scenario_va
         for candidate in baseline_model.agents_by_type[AviationPassengerAirlineAgent]
         if candidate.operator_name == "Lufthansa"
     )
-    baseline_aircraft = baseline_agent.fleet.frame.iloc[0]
+    baseline_aircraft = baseline_agent.fleet.frame.loc[
+        baseline_agent.fleet.frame["current_technology"] == "kerosene_medium"
+    ].iloc[0]
     technology_row = baseline_agent.technology_row(str(baseline_aircraft["current_technology"]))
     year = baseline_scenario.start_year
     logic = LegacyWeightedUtilityLogic()
@@ -422,13 +435,137 @@ def test_capex_multiplier_scales_asset_price_via_technology_specific_scenario_va
         for candidate in model.agents_by_type[AviationPassengerAirlineAgent]
         if candidate.operator_name == "Lufthansa"
     )
-    aircraft = agent.fleet.frame.iloc[0]
+    aircraft = agent.fleet.frame.loc[
+        agent.fleet.frame["current_technology"] == "kerosene_medium"
+    ].iloc[0]
     scaled_evaluation = logic.calc_payback_year(agent, aircraft, technology_row, year, 0.0)
 
     # A doubled capex_multiplier only worsens NPV through a costlier fresh investment;
     # NPV is bounded above by "no capex at all", so a strictly lower value here is
     # only possible if the multiplier reached calc_payback_year's asset_price.
     assert scaled_evaluation.net_present_value < baseline_evaluation.net_present_value
+
+
+def test_primary_energy_price_resolves_technology_specific_override(tmp_path: Path) -> None:
+    """A technology-scoped primary_energy_price row overrides the generic carrier row.
+
+    This is what lets a drop-in-blend technology (e.g. drop_in_saf_medium) price its
+    fossil share separately from a 100%-conventional technology sharing the same
+    primary_energy_carrier (e.g. kerosene_medium) -- without it, both would
+    silently resolve to whichever row happened to be first in the file, since
+    annual_operation_metrics's primary_energy_price lookup did not scope by
+    technology_name at all.
+    """
+    case_dir = _clone_case_directory(tmp_path)
+    _append_scenario_row(
+        case_dir,
+        variable_name="primary_energy_price",
+        value=0.5,
+        technology_name="kerosene_medium",
+        primary_energy_carrier="kerosene",
+        unit="eur_per_kwh",
+    )
+
+    scenario = _load_scenario(case_dir)
+    model = NATMModel(scenario, seed=42)
+    agent = next(
+        candidate
+        for candidate in model.agents_by_type[AviationPassengerAirlineAgent]
+        if candidate.operator_name == "Lufthansa"
+    )
+    logic = LegacyWeightedUtilityLogic()
+
+    medium_aircraft = agent.fleet.frame.loc[
+        agent.fleet.frame["current_technology"] == "kerosene_medium"
+    ].iloc[0]
+    medium_technology = agent.technology_row("kerosene_medium")
+    medium_metrics = logic.annual_operation_metrics(
+        agent,
+        medium_aircraft,
+        medium_technology,
+        scenario.start_year,
+        0.0,
+    )
+    expected_medium_cost = medium_metrics.primary_energy_quantity * 0.5
+    assert medium_metrics.total_cost == pytest.approx(
+        expected_medium_cost
+        + (medium_metrics.chargeable_emission / 1000.0)
+        * logic.current_carbon_price(agent, scenario.start_year),
+    )
+
+    short_aircraft = agent.fleet.frame.loc[
+        agent.fleet.frame["current_technology"] == "kerosene_short"
+    ].iloc[0]
+    short_technology = agent.technology_row("kerosene_short")
+    short_metrics = logic.annual_operation_metrics(
+        agent,
+        short_aircraft,
+        short_technology,
+        scenario.start_year,
+        0.0,
+    )
+    generic_price = agent.scenario_value(
+        "primary_energy_price",
+        scenario.start_year,
+        country=agent.operator_country,
+        primary_energy_carrier="kerosene",
+        technology_name="kerosene_short",
+        default=0.0,
+    )
+    assert generic_price != 0.5
+    assert short_metrics.primary_energy_quantity * generic_price == pytest.approx(
+        short_metrics.total_cost
+        - (short_metrics.chargeable_emission / 1000.0)
+        * logic.current_carbon_price(agent, scenario.start_year),
+    )
+
+
+def test_eu_ets_zero_rates_saf_secondary_emissions_but_not_total_emission() -> None:
+    """EU ETS zero-rates a compliant drop-in fuel's biomass/RFNBO share for
+    allowance-surrender purposes, even though its true lifecycle emissions
+    are nonzero. chargeable_emission (which drives carbon cost) should
+    exclude the SAF-attributable secondary emissions; total_emission (used
+    for reporting) should not change.
+    """
+    scenario = _load_scenario(_passenger_case_dir())
+    scenario.investment_timing = InvestmentTimingConfig(include_continue_option=False)
+    model = NATMModel(scenario, seed=42)
+    agent = next(
+        candidate
+        for candidate in model.agents_by_type[AviationPassengerAirlineAgent]
+        if candidate.operator_name == "Lufthansa"
+    )
+    logic = LegacyWeightedUtilityLogic()
+    aircraft = agent.fleet.frame.loc[
+        agent.fleet.frame["current_technology"] == "kerosene_medium"
+    ].iloc[0]
+    year = scenario.start_year
+
+    kerosene_row = agent.technology_row("kerosene_medium")
+    saf_row = agent.technology_row("drop_in_saf_medium")
+
+    kerosene_metrics = logic.annual_operation_metrics(agent, aircraft, kerosene_row, year, 0.0)
+    saf_metrics = logic.annual_operation_metrics(agent, aircraft, saf_row, year, 0.0)
+
+    # A 100%-conventional technology has no secondary carrier at all, so
+    # zero-rating is a no-op for it: chargeable == total exactly.
+    assert kerosene_metrics.chargeable_emission == pytest.approx(kerosene_metrics.total_emission)
+
+    # drop_in_saf_medium blends in a real, nonzero secondary emission
+    # (0.0533 kgCO2/kWh, its true lifecycle factor) whenever the SAF mandate
+    # is active, so total_emission must still reflect it in full...
+    assert saf_metrics.secondary_energy_quantity > 0.0
+    secondary_emission = saf_metrics.secondary_energy_quantity * float(
+        saf_row["secondary_energy_emission_factor"],
+    )
+    assert secondary_emission > 0.0
+    primary_emission = saf_metrics.total_emission - secondary_emission
+
+    # ...but chargeable_emission (what carbon cost is computed from) must
+    # exclude that SAF-attributable share, leaving only the primary/fossil
+    # emission as ETS-chargeable.
+    assert saf_metrics.chargeable_emission == pytest.approx(primary_emission)
+    assert saf_metrics.chargeable_emission < saf_metrics.total_emission
 
 
 def test_direct_net_operating_cost_mode_requires_configured_parameter() -> None:
@@ -555,7 +692,7 @@ _ROLLOUT_CASES = [
         "baseline-maritime-cargo-transition",
         "maritime_fleet_stock.csv",
         "maritime_technology_catalog.csv",
-        "Hapag-Lloyd",
+        "Hapag-Lloyd AG",
         "marine_diesel_deepsea",
         MaritimeCargoShiplineAgent,
         LegacyWeightedUtilityMaritimeCargoLogic,
@@ -616,10 +753,16 @@ def test_continue_current_rolled_out_to_other_sectors(
 
     fleet_path = case_dir / fleet_filename
     fleet = pd.read_csv(fleet_path)
-    target_mask = (fleet["Operator"] == operator_name) & (
-        fleet["current_technology"] == current_technology
-    )
+    operator_mask = fleet["Operator"] == operator_name
+    target_mask = operator_mask & (fleet["current_technology"] == current_technology)
     fleet.loc[target_mask, "Age (Years)"] = 1.0
+    # Real fleet installation left operator_economic_weight/operator_environmental_weight
+    # at 0.0 for every operator (see _make_young_aircraft_row above for why). With both
+    # weights zero, total_utility collapses to policy_bonus alone, so a non-conventional
+    # candidate can out-score continue_current regardless of capex, defeating the
+    # capex-crippling below. Restore a sensible split so the economic axis matters again.
+    fleet.loc[operator_mask, "operator_economic_weight"] = 0.7
+    fleet.loc[operator_mask, "operator_environmental_weight"] = 0.3
     fleet.to_csv(fleet_path, index=False)
 
     # Cripple every technology's capex, including the currently-installed one: a

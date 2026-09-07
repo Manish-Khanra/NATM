@@ -110,6 +110,12 @@ class TechnologyCatalog:
                 f"duplicates found: {duplicate_text}"
             )
         self._frame = normalized.reset_index(drop=True)
+        # technology_name is validated unique above and self._frame is never
+        # reassigned after construction, so a name -> row cache is safe and
+        # avoids re-filtering the whole catalog on every row_for() call --
+        # this is called once per candidate technology per scenario per
+        # decision year during ambiguity-aware evaluation, so it adds up fast.
+        self._row_cache: dict[str, pd.Series] = {}
 
     @classmethod
     def from_csv(cls, path: str | Path) -> TechnologyCatalog:
@@ -150,10 +156,15 @@ class TechnologyCatalog:
 
     def row_for(self, technology_name: str, segment: str | None = None) -> pd.Series:
         del segment
+        cached = self._row_cache.get(technology_name)
+        if cached is not None:
+            return cached.copy()
         candidates = self._frame.loc[self._frame["technology_name"] == technology_name]
         if candidates.empty:
             raise ValueError(f"Technology '{technology_name}' not found in aviation catalog")
-        return candidates.iloc[0].copy()
+        row = candidates.iloc[0].copy()
+        self._row_cache[technology_name] = row
+        return row.copy()
 
     def is_conventional_row(self, technology_row: pd.Series) -> bool:
         technology_family = str(technology_row.get("technology_family", "")).strip().lower()

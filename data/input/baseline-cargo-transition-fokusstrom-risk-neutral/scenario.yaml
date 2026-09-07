@@ -1,6 +1,6 @@
 name: baseline-cargo-transition
 start_year: 2025
-end_year: 2035
+end_year: 2050
 
 sectors:
   aviation:
@@ -16,4 +16,5 @@ ambiguity_aware_decision:
     - hohenachfrage
     - niedrigenachfrage
   probability_table: ambiguity_probabilities.csv
+  realized_scenario_id: fokusstrom
   risk_neutral_belief_set: B_FokusStrom

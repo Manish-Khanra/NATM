@@ -53,12 +53,22 @@ dashboard = [
 openap = [
     "openap>=2.0",
 ]
+notebook = [
+    "altair>=5.0",
+    "ipykernel>=6.0",
+    "jupyterlab>=4.0",
+    "nbclient>=0.10",
+    "nbformat>=5.9",
+    "vl-convert-python>=1.0",
+]
 
 [project.scripts]
 natm = "navaero_transition_model.cli:main"
 navaero-transition-model = "navaero_transition_model.cli:main"
 natm-aviation-preprocess = "navaero_transition_model.aviation_preprocessing.cli:main"
 natm-airport-fuel-allocation = "navaero_transition_model.postprocessing.airport_fuel_allocation_cli:main"
+natm-hourly-timeseries = "navaero_transition_model.postprocessing.hourly_timeseries_cli:main"
+natm-maritime-hub-assignment = "navaero_transition_model.maritime_preprocessing.hub_assignment_cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "."}

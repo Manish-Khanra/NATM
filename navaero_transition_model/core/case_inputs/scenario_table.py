@@ -78,10 +78,24 @@ class ScenarioTable:
         self._wide = normalized.reset_index(drop=True)
         self._long = long_dataframe.reset_index(drop=True)
         self._cache: dict[tuple[Any, ...], float | None] = {}
+        # (scenario_id, variable_name, year) -> pre-filtered rows as plain
+        # dicts. value() is called per candidate technology x scenario x
+        # decision-year during an ambiguity-aware evaluation sweep, but the
+        # boolean-mask filter over the full long table only actually depends
+        # on this scope-independent triple, not on the per-aircraft scope
+        # kwargs -- caching it here turns what would be millions of full
+        # -table pandas filters (plus row.iterrows() overhead) into at most
+        # one per distinct (scenario_id, variable_name, year) combination.
+        self._rows_cache: dict[tuple[str, str, int], list[dict[str, str]]] = {}
 
     @classmethod
     def from_csv(cls, path: str | Path) -> ScenarioTable:
         return cls(_read_csv(path))
+
+    def invalidate_cache(self) -> None:
+        """Clear cached lookups after `_long` is mutated in place (e.g. in tests)."""
+        self._cache.clear()
+        self._rows_cache.clear()
 
     def to_wide_frame(self) -> pd.DataFrame:
         return self._wide.copy()
@@ -194,21 +208,31 @@ class ScenarioTable:
         self._cache[cache_key] = resolved
         return resolved
 
+    def _rows_for(self, scenario_id: str, variable_name: str, year: int) -> list[dict[str, str]]:
+        key = (scenario_id, variable_name, year)
+        cached = self._rows_cache.get(key)
+        if cached is not None:
+            return cached
+        rows = self._long.loc[
+            (self._long["scenario_id"] == scenario_id)
+            & (self._long["variable_name"] == variable_name)
+            & (self._long["year"] == year),
+        ]
+        records = rows.to_dict("records")
+        self._rows_cache[key] = records
+        return records
+
     def _best_value_row_for_scenario(
         self,
         scenario_id: str,
         variable_name: str,
         year: int,
         scope: dict[str, str],
-    ) -> pd.Series | None:
-        rows = self._long.loc[
-            (self._long["scenario_id"] == scenario_id)
-            & (self._long["variable_name"] == variable_name)
-            & (self._long["year"] == year),
-        ]
-        best_row: pd.Series | None = None
+    ) -> dict[str, str] | None:
+        rows = self._rows_for(scenario_id, variable_name, year)
+        best_row: dict[str, str] | None = None
         best_score = -1
-        for _, row in rows.iterrows():
+        for row in rows:
             score = 0
             matched = True
             for column, requested_value in scope.items():

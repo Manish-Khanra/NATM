@@ -39,7 +39,7 @@ python run.py --example risk-attitudes-comparison
 Or run the case directly:
 
 ```powershell
-natm --case risk-attitudes-comparison --details-dir simulation_results/risk_attitudes
+natm --case risk-attitudes-comparison --details-dir data/output/risk_attitudes
 ```
 
 Then compare `aviation_robust_frontier.csv`, `agents.csv`,
@@ -47,5 +47,5 @@ Then compare `aviation_robust_frontier.csv`, `agents.csv`,
 robust frontier view in:
 
 ```powershell
-solara run dashboard_examples/common_case_dashboard.py
+solara run analysis/common_case_dashboard.py
 ```

@@ -87,7 +87,7 @@ python run.py
 That launcher writes the results automatically into:
 
 ```text
-simulation_results/<selected_example>/
+data/output/<selected_example>/
 ```
 
 including `model_summary.csv`, the detailed CSV tables, and `natm_runs.sqlite`.
@@ -95,19 +95,19 @@ including `model_summary.csv`, the detailed CSV tables, and `natm_runs.sqlite`.
 If you want to run a case directly through the CLI instead:
 
 ```powershell
-natm --case baseline-passenger-transition --output simulation_results/baseline.csv
+natm --case baseline-passenger-transition --output data/output/baseline.csv
 ```
 
 To export the richer Mesa result tables as well:
 
 ```powershell
-natm --case baseline-passenger-transition --output simulation_results/baseline.csv --details-dir simulation_results/baseline-details
+natm --case baseline-passenger-transition --output data/output/baseline.csv --details-dir data/output/baseline-details
 ```
 
 To persist both case inputs and run outputs into SQLite:
 
 ```powershell
-natm --case baseline-passenger-transition --output simulation_results/baseline.csv --details-dir simulation_results/baseline-details --sqlite-db simulation_results/natm_runs.sqlite
+natm --case baseline-passenger-transition --output data/output/baseline.csv --details-dir data/output/baseline-details --sqlite-db data/output/natm_runs.sqlite
 ```
 
 ### Pre-Commit Setup
@@ -238,14 +238,14 @@ python -m pip install -e .[dashboard]
 Then you can launch the standard live/saved-results dashboard:
 
 ```powershell
-solara run dashboard_examples/common_case_dashboard.py
+solara run analysis/common_case_dashboard.py
 ```
 
 The standalone cartographic dashboard opens a browser-native deck.gl map for
 aviation result folders:
 
 ```powershell
-solara run dashboard_examples/cartographic_dashboard.py
+solara run analysis/cartographic_dashboard.py
 ```
 
 Each dashboard supports two modes inside the browser:
@@ -258,7 +258,7 @@ Each dashboard supports two modes inside the browser:
 `Saved results` reads an already generated folder under:
 
 ```text
-simulation_results/<your-run-name>/
+data/output/<your-run-name>/
 ```
 
 In the dashboard UI:
@@ -270,7 +270,7 @@ In the dashboard UI:
 The saved-results dropdown only shows folders that contain the expected CSV
 outputs for that application.
 
-The cartographic dashboard reads `simulation_results/<your-run-name>/`
+The cartographic dashboard reads `data/output/<your-run-name>/`
 directly. When postprocessed `airport_fuel_demand.csv` and
 `route_energy_flow.csv` files exist, it uses those map-ready airport and route
 layers. Otherwise, it uses `aircraft.csv` for simulated years and airport
@@ -280,14 +280,14 @@ outputs are not present.
 To create dashboard-ready airport fuel-demand and route-flow files after a run:
 
 ```powershell
-natm-airport-fuel-allocation --results simulation_results/<your-run-name>
+natm-airport-fuel-allocation --results data/output/<your-run-name>
 ```
 
 If the new command is not recognized before reinstalling the editable package,
 use:
 
 ```powershell
-python -m navaero_transition_model.postprocessing.airport_fuel_allocation_cli --results simulation_results/<your-run-name>
+python -m navaero_transition_model.postprocessing.airport_fuel_allocation_cli --results data/output/<your-run-name>
 ```
 
 This postprocessor is separate from the investment/adoption simulation. It uses
@@ -339,7 +339,7 @@ python run.py
 The default `run.py` launcher writes outputs to:
 
 ```text
-simulation_results/<selected_example>/
+data/output/<selected_example>/
 ```
 
 This folder contains:
@@ -379,7 +379,7 @@ Named example presets currently included in [run.py](C:/Manish_REPO/NATM/run.py:
 - `navaero_transition_model/core/database/`: optional SQLite-backed database writing for case inputs and run outputs
 - `navaero_transition_model/core/result_exports/`: exporter classes for detailed simulation result tables
 - `navaero_transition_model/cli.py`: command-line entry point
-- `dashboard_examples/`: small Solara/Mesa dashboard examples
+- `analysis/`: small Solara/Mesa dashboard examples
 - `docs/dashboard-guide.md`: how to launch dashboards and switch between live and saved-results mode
 - `docs/aviation-preprocessing-guide.md`: aviation preprocessing architecture, outputs, and CLI usage
 - `docs/architecture.md`: detailed system architecture and runtime flow

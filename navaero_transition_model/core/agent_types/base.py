@@ -30,7 +30,14 @@ class BaseOperatorAgent(mesa.Agent):
         self.conventional_assets = 0.0
         self.alternative_assets = 0.0
         self.peer_influence = 0.0
-        self._active_decision_scenario_id: str | None = None
+        # The realized world this case actually simulates (as opposed to the
+        # scenario_id the ambiguity-aware sweep temporarily swaps in while
+        # scoring each of the 6 belief-set candidates for an investment
+        # decision -- see ambiguity_aware_utility._scenario_context, which
+        # restores this value once that sweep finishes).
+        self._active_decision_scenario_id: str | None = (
+            model.scenario.ambiguity_aware_decision.realized_scenario_id
+        )
         self._active_decision_year: int | None = None
 
     @property

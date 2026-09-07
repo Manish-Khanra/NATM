@@ -273,8 +273,8 @@ class AviationPassengerAirlineAgent(BaseOperatorAgent):
             segment_rows["status"].astype(str).str.strip().str.lower() == "active"
         ]
         if not active_rows.empty:
-            return active_rows.iloc[0].copy()
-        return segment_rows.iloc[0].copy()
+            return self.fleet.representative_row(active_rows)
+        return self.fleet.representative_row(segment_rows)
 
     def apply_technology_to_aircraft(
         self,

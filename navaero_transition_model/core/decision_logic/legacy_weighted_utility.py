@@ -13,6 +13,8 @@ from navaero_transition_model.core.decision_logic.base import (
     OperationMetrics,
     clamp,
     clean_scope_value,
+    is_ets_zero_rated_primary,
+    is_ets_zero_rated_secondary,
 )
 from navaero_transition_model.core.decision_logic.scorer import NATMDecisionScorer
 
@@ -145,6 +147,7 @@ class LegacyWeightedUtilityLogic(NATMDecisionScorer, AviationPassengerDecisionLo
             year,
             country=agent.operator_country,
             primary_energy_carrier=clean_scope_value(technology_row["primary_energy_carrier"]),
+            technology_name=clean_scope_value(technology_row["technology_name"]),
             default=0.0,
         )
         secondary_price = agent.scenario_value(
@@ -170,18 +173,34 @@ class LegacyWeightedUtilityLogic(NATMDecisionScorer, AviationPassengerDecisionLo
             technology_row["secondary_energy_emission_factor"]
         )
         total_emission = primary_emission + secondary_emission
+        # EU ETS zero-rates a compliant fuel's biomass/RFNBO share (SAF,
+        # e-kerosene, renewable hydrogen) for allowance-surrender purposes,
+        # even though its true lifecycle emissions are nonzero. total_emission
+        # (used for reporting) stays the real figure; only the ETS-chargeable
+        # base excludes whichever carrier(s) -- primary and/or secondary --
+        # are zero-rated.
+        ets_relevant_emission = 0.0
+        if not is_ets_zero_rated_primary(technology_row):
+            ets_relevant_emission += primary_emission
+        if not is_ets_zero_rated_secondary(technology_row):
+            ets_relevant_emission += secondary_emission
 
         if free_ets_balance is None:
             remaining_ets_allowance = self.yearly_ets_allowance(agent, year)
         else:
             remaining_ets_allowance = max(float(free_ets_balance), 0.0)
-        covered_emission = min(remaining_ets_allowance, total_emission)
-        chargeable_emission = max(total_emission - covered_emission, 0.0)
-        remaining_ets_allowance = max(remaining_ets_allowance - total_emission, 0.0)
+        covered_emission = min(remaining_ets_allowance, ets_relevant_emission)
+        chargeable_emission = max(ets_relevant_emission - covered_emission, 0.0)
+        remaining_ets_allowance = max(remaining_ets_allowance - ets_relevant_emission, 0.0)
         energy_cost = primary_energy_quantity * float(
             primary_price
         ) + secondary_energy_quantity * float(secondary_price)
-        emission_cost = chargeable_emission * carbon_price
+        # carbon_price is EUR/tonne CO2 (scenario unit: eur_per_tco2), but
+        # chargeable_emission is kg CO2 (emission factors are kg CO2/kWh --
+        # e.g. kerosene's 0.2636 matches the real ~3.15 kgCO2/kg fuel figure
+        # at ~12 kWh/kg). Convert kg -> tonnes before pricing; multiplying
+        # kg directly by a EUR/tonne price overstated emission cost 1000x.
+        emission_cost = (chargeable_emission / 1000.0) * carbon_price
         return OperationMetrics(
             total_cost=energy_cost + emission_cost,
             total_emission=total_emission,
@@ -585,6 +604,7 @@ class LegacyWeightedUtilityCargoLogic(NATMDecisionScorer, AviationCargoDecisionL
             year,
             country=agent.operator_country,
             primary_energy_carrier=clean_scope_value(technology_row["primary_energy_carrier"]),
+            technology_name=clean_scope_value(technology_row["technology_name"]),
             default=0.0,
         )
         secondary_price = agent.scenario_value(
@@ -610,18 +630,34 @@ class LegacyWeightedUtilityCargoLogic(NATMDecisionScorer, AviationCargoDecisionL
             technology_row["secondary_energy_emission_factor"]
         )
         total_emission = primary_emission + secondary_emission
+        # EU ETS zero-rates a compliant fuel's biomass/RFNBO share (SAF,
+        # e-kerosene, renewable hydrogen) for allowance-surrender purposes,
+        # even though its true lifecycle emissions are nonzero. total_emission
+        # (used for reporting) stays the real figure; only the ETS-chargeable
+        # base excludes whichever carrier(s) -- primary and/or secondary --
+        # are zero-rated.
+        ets_relevant_emission = 0.0
+        if not is_ets_zero_rated_primary(technology_row):
+            ets_relevant_emission += primary_emission
+        if not is_ets_zero_rated_secondary(technology_row):
+            ets_relevant_emission += secondary_emission
 
         if free_ets_balance is None:
             remaining_ets_allowance = self.yearly_ets_allowance(agent, year)
         else:
             remaining_ets_allowance = max(float(free_ets_balance), 0.0)
-        covered_emission = min(remaining_ets_allowance, total_emission)
-        chargeable_emission = max(total_emission - covered_emission, 0.0)
-        remaining_ets_allowance = max(remaining_ets_allowance - total_emission, 0.0)
+        covered_emission = min(remaining_ets_allowance, ets_relevant_emission)
+        chargeable_emission = max(ets_relevant_emission - covered_emission, 0.0)
+        remaining_ets_allowance = max(remaining_ets_allowance - ets_relevant_emission, 0.0)
         energy_cost = primary_energy_quantity * float(
             primary_price
         ) + secondary_energy_quantity * float(secondary_price)
-        emission_cost = chargeable_emission * carbon_price
+        # carbon_price is EUR/tonne CO2 (scenario unit: eur_per_tco2), but
+        # chargeable_emission is kg CO2 (emission factors are kg CO2/kWh --
+        # e.g. kerosene's 0.2636 matches the real ~3.15 kgCO2/kg fuel figure
+        # at ~12 kWh/kg). Convert kg -> tonnes before pricing; multiplying
+        # kg directly by a EUR/tonne price overstated emission cost 1000x.
+        emission_cost = (chargeable_emission / 1000.0) * carbon_price
         return OperationMetrics(
             total_cost=energy_cost + emission_cost,
             total_emission=total_emission,
@@ -1023,6 +1059,7 @@ class LegacyWeightedUtilityMaritimeCargoLogic(NATMDecisionScorer, MaritimeCargoD
             year,
             country=agent.operator_country,
             primary_energy_carrier=clean_scope_value(technology_row["primary_energy_carrier"]),
+            technology_name=clean_scope_value(technology_row["technology_name"]),
             default=0.0,
         )
         secondary_price = agent.scenario_value(
@@ -1052,8 +1089,18 @@ class LegacyWeightedUtilityMaritimeCargoLogic(NATMDecisionScorer, MaritimeCargoD
             primary_price = float(primary_price) * (1.0 - clean_fuel_subsidy)
 
         carbondioxide_factor = float(technology_row.get("carbondioxide_factor", 0.0) or 0.0)
+        zero_rated = is_ets_zero_rated_secondary(technology_row)
+        zero_rated_primary = is_ets_zero_rated_primary(technology_row)
         if carbondioxide_factor > 0.0:
             total_emission = carbondioxide_factor * total_energy
+            # carbondioxide_factor blends primary+secondary into one factor,
+            # so there is no direct primary/secondary emission split to
+            # exclude from. Approximate the ETS-zero-rated share by the
+            # secondary carrier's share of total energy consumed.
+            if zero_rated and total_energy > 0.0:
+                ets_relevant_emission = total_emission * (primary_energy_quantity / total_energy)
+            else:
+                ets_relevant_emission = total_emission
         else:
             primary_emission = primary_energy_quantity * float(
                 technology_row["primary_energy_emission_factor"],
@@ -1062,8 +1109,19 @@ class LegacyWeightedUtilityMaritimeCargoLogic(NATMDecisionScorer, MaritimeCargoD
                 technology_row["secondary_energy_emission_factor"],
             )
             total_emission = primary_emission + secondary_emission
+            # EU ETS zero-rates a compliant fuel's biomass/RFNBO share (e.g.
+            # maritime biofuel, or renewable hydrogen used directly as the
+            # primary fuel) for allowance-surrender purposes, even though its
+            # true lifecycle emissions are nonzero. total_emission (used for
+            # reporting) stays the real figure; only the ETS-chargeable base
+            # excludes whichever carrier(s) are zero-rated.
+            ets_relevant_emission = 0.0
+            if not zero_rated_primary:
+                ets_relevant_emission += primary_emission
+            if not zero_rated:
+                ets_relevant_emission += secondary_emission
 
-        reported_emission = total_emission * self.current_reported_emission_share(
+        reported_emission = ets_relevant_emission * self.current_reported_emission_share(
             agent,
             technology_row,
             year,
@@ -1081,7 +1139,12 @@ class LegacyWeightedUtilityMaritimeCargoLogic(NATMDecisionScorer, MaritimeCargoD
         energy_cost = primary_energy_quantity * float(
             primary_price
         ) + secondary_energy_quantity * float(secondary_price)
-        emission_cost = chargeable_emission * carbon_price
+        # carbon_price is EUR/tonne CO2 (scenario unit: eur_per_tco2), but
+        # chargeable_emission is kg CO2 (emission factors are kg CO2/kWh --
+        # e.g. kerosene's 0.2636 matches the real ~3.15 kgCO2/kg fuel figure
+        # at ~12 kWh/kg). Convert kg -> tonnes before pricing; multiplying
+        # kg directly by a EUR/tonne price overstated emission cost 1000x.
+        emission_cost = (chargeable_emission / 1000.0) * carbon_price
         return OperationMetrics(
             total_cost=energy_cost + emission_cost,
             total_emission=total_emission,
@@ -1557,6 +1620,7 @@ class LegacyWeightedUtilityMaritimePassengerLogic(
             year,
             country=agent.operator_country,
             primary_energy_carrier=clean_scope_value(technology_row["primary_energy_carrier"]),
+            technology_name=clean_scope_value(technology_row["technology_name"]),
             default=0.0,
         )
         secondary_price = agent.scenario_value(
@@ -1593,7 +1657,14 @@ class LegacyWeightedUtilityMaritimePassengerLogic(
             technology_row["secondary_energy_emission_factor"],
         )
         total_emission = primary_emission + secondary_emission
-        reported_emission = total_emission * self.current_reported_emission_share(
+        # EU ETS zero-rates a compliant drop-in fuel's biomass/RFNBO share
+        # for allowance-surrender purposes, even though its true lifecycle
+        # emissions are nonzero. total_emission (used for reporting) stays
+        # the real figure; only the ETS-chargeable base excludes it.
+        ets_relevant_emission = (
+            primary_emission if is_ets_zero_rated_secondary(technology_row) else total_emission
+        )
+        reported_emission = ets_relevant_emission * self.current_reported_emission_share(
             agent,
             technology_row,
             year,
@@ -1611,7 +1682,12 @@ class LegacyWeightedUtilityMaritimePassengerLogic(
         energy_cost = primary_energy_quantity * float(
             primary_price
         ) + secondary_energy_quantity * float(secondary_price)
-        emission_cost = chargeable_emission * carbon_price
+        # carbon_price is EUR/tonne CO2 (scenario unit: eur_per_tco2), but
+        # chargeable_emission is kg CO2 (emission factors are kg CO2/kWh --
+        # e.g. kerosene's 0.2636 matches the real ~3.15 kgCO2/kg fuel figure
+        # at ~12 kWh/kg). Convert kg -> tonnes before pricing; multiplying
+        # kg directly by a EUR/tonne price overstated emission cost 1000x.
+        emission_cost = (chargeable_emission / 1000.0) * carbon_price
         return OperationMetrics(
             total_cost=energy_cost + emission_cost,
             total_emission=total_emission,

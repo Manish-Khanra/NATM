@@ -227,7 +227,13 @@ def test_openap_trip_outputs_and_activity_profile_aggregation(
 
 def test_stock_matching_enriches_registration_icao24_and_german_flag(tmp_path: Path) -> None:
     repo_root = _repo_root()
-    stock_path = _passenger_case_dir() / "aviation_fleet_stock.csv"
+    stock_path = (
+        repo_root
+        / "data"
+        / "raw"
+        / "aviation_preprocessing"
+        / "toy_aviation_fleet_stock.csv"
+    )
     raw_opensky_path = (
         repo_root
         / "data"
@@ -406,8 +412,17 @@ def test_zero_activity_profile_values_fall_back_to_fleet_defaults() -> None:
     case_dir = _passenger_case_dir()
     case_data = AviationPassengerCaseData.from_directory(case_dir)
     technology_catalog = TechnologyCatalog.from_csv(case_dir / "aviation_technology_catalog.csv")
+
+    # All real fleet rows already carry populated activity data, so the
+    # fallback-to-technology-defaults path is exercised here by zeroing it
+    # out on a copy, rather than relying on a real operator that needs it.
+    rows = case_data.fleet.loc[case_data.fleet["operator_name"] == "TUIfly"].copy()
+    rows["annual_distance_km_base"] = 0.0
+    rows["mean_stage_length_km_base"] = 0.0
+    rows["annual_flights_base"] = 0.0
+
     fleet = Fleet(
-        case_data.fleet.loc[case_data.fleet["operator_name"] == "Ryanair"].copy(),
+        rows,
         technology_catalog=technology_catalog,
         start_year=2025,
     )

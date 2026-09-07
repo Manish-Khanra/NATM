@@ -1,7 +1,7 @@
 # NATM Dashboard Guide
 
 This document explains how to use the Solara/Mesa dashboards included in
-`dashboard_examples/`.
+`analysis/`.
 
 ## 1. What The Dashboards Are For
 
@@ -13,7 +13,7 @@ NATM dashboards support two ways of exploring model behavior:
 
 2. `Saved results`
    The dashboard reads previously generated CSV outputs from a folder under
-   `simulation_results/` and visualizes those results without rerunning the
+   `data/output/` and visualizes those results without rerunning the
    model.
 
 This gives NATM both:
@@ -44,7 +44,7 @@ python -m pip install "starlette<1" "solara-server[starlette]>=1.40"
 ### Common case dashboard
 
 ```powershell
-solara run dashboard_examples/common_case_dashboard.py
+solara run analysis/common_case_dashboard.py
 ```
 
 Use the `Live case` selector in the browser to choose aviation passenger,
@@ -53,13 +53,13 @@ aviation cargo, maritime cargo, or maritime passenger cases.
 ### Cartographic (deck.gl)
 
 ```powershell
-solara run dashboard_examples/cartographic_dashboard.py
+solara run analysis/cartographic_dashboard.py
 ```
 
 If the `solara` command is not recognized, use:
 
 ```powershell
-python -m solara run dashboard_examples/common_case_dashboard.py
+python -m solara run analysis/common_case_dashboard.py
 ```
 
 and use the browser controls to choose the case you want.
@@ -93,7 +93,7 @@ If you already generated outputs using `run.py` or the CLI, and those outputs
 exist under:
 
 ```text
-simulation_results/<your-run-name>/
+data/output/<your-run-name>/
 ```
 
 then you can visualize them without rerunning the model.
@@ -109,7 +109,7 @@ Steps:
 The dashboard will then read the saved CSV files from that folder.
 
 The standalone cartographic dashboard also reads folders under
-`simulation_results/`, but it does not use the `Dashboard Source` live/saved
+`data/output/`, but it does not use the `Dashboard Source` live/saved
 toggle. It always visualizes saved result folders when present, and falls back
 to processed aviation sample data when no saved results exist.
 
@@ -251,32 +251,32 @@ python run.py
 This writes a run folder into:
 
 ```text
-simulation_results/<selected_example>/
+data/output/<selected_example>/
 ```
 
 ### Open the common case dashboard
 
 ```powershell
-solara run dashboard_examples/common_case_dashboard.py
+solara run analysis/common_case_dashboard.py
 ```
 
 For the standalone cartographic map:
 
 ```powershell
-solara run dashboard_examples/cartographic_dashboard.py
+solara run analysis/cartographic_dashboard.py
 ```
 
 To generate dedicated map-ready fuel allocation files before opening the map:
 
 ```powershell
-natm-airport-fuel-allocation --results simulation_results/<selected_example>
+natm-airport-fuel-allocation --results data/output/<selected_example>
 ```
 
 If the new console command is not recognized before reinstalling the editable
 package, use:
 
 ```powershell
-python -m navaero_transition_model.postprocessing.airport_fuel_allocation_cli --results simulation_results/<selected_example>
+python -m navaero_transition_model.postprocessing.airport_fuel_allocation_cli --results data/output/<selected_example>
 ```
 
 ### Switch to saved results
@@ -286,11 +286,72 @@ In the browser:
 - `Dashboard Source` -> `Saved results`
 - choose the run folder from the dropdown
 
+### Explore results in the notebook
+
+```powershell
+python -m pip install -e .[notebook]
+jupyter lab analysis/results_analysis.ipynb
+```
+
+Or open it directly in VS Code's Jupyter extension (no `jupyter lab` needed --
+just select the project's `.venv` as the kernel).
+
+Charts render via a `show()` helper (defined in the first code cell) that
+emits both the native `application/vnd.vegalite.v5+json` mimetype -- which
+VS Code's and JupyterLab's Jupyter renderers draw with their own bundled
+Vega-Lite, no JavaScript execution required -- and a fully self-contained
+HTML fallback (via `vl-convert`, no CDN fetch) for other frontends. This
+matters because many notebook frontends sandbox/strip `<script>` tags from
+raw HTML output for security, which otherwise shows as "cell ran, no error,
+but no chart appears." If you see that symptom, confirm `vl-convert-python`
+is installed in the kernel you're actually running (`pip install -e
+.[notebook]` covers it) and re-run the cell.
+
+Interactive Altair charts (technology diffusion over time, technology
+adoption per year, energy demand by carrier over time, energy demand by
+port/hub, fleet transition summary, operator-level fleet stock, financial
+analysis -- capex, NPV, and risk-adjusted decision metrics from the
+ambiguity-aware framework, real-shape hourly demand profile) with
+segment/year filtering. Point the `RESULTS_DIR` variable in the first code
+cell at the run you want to explore.
+
+### Generate the hourly energy timeseries (optional)
+
+The core simulation only computes one energy total per asset per simulated
+year -- there is no native hourly signal. This command derives a real
+hour-of-week activity shape from historical OpenSky flight timestamps
+(aviation) or Global Fishing Watch AIS port-visit timestamps (maritime), then
+spreads each asset-year's annual energy total across that year's real
+calendar hours in proportion to that shape:
+
+```powershell
+natm-hourly-timeseries --results data/output/<selected_example>
+```
+
+If the console command is not recognized before reinstalling the editable
+package, use:
+
+```powershell
+python -m navaero_transition_model.postprocessing.hourly_timeseries_cli --results data/output/<selected_example>
+```
+
+Writes `hourly_energy_timeseries.parquet` into the results folder: one row
+per (aircraft/vessel, hour, energy type), with `region` set to the asset's
+real hub airport/port (`main_hub_base`). Summing any asset's hourly values
+back up reproduces its annual total exactly. This file is large (tens of
+millions of rows for a single sector/run, more for the full real fleet across
+2025-2050), so it is Parquet rather than CSV -- read it with column/row-group
+filters (see the notebook's "Hourly energy timeseries" section) rather than
+loading it whole. The derived weekly shape is cached under
+`data/processed/aviation/aviation_weekly_activity_shape.npy` and
+`data/processed/maritime/maritime_weekly_activity_shape.npy`; pass
+`--refresh-shape-cache` to recompute it.
+
 ## 10. Current Design
 
 The standard live/saved-results dashboard is maintained as one script:
 
-- `dashboard_examples/common_case_dashboard.py`
+- `analysis/common_case_dashboard.py`
 
 This file provides:
 
@@ -303,7 +364,7 @@ This file provides:
 
 ## 11. Cartographic Dashboard Architecture
 
-`dashboard_examples/cartographic_dashboard.py` provides a browser-native
+`analysis/cartographic_dashboard.py` provides a browser-native
 cartographic dashboard with Solara + deck.gl (no QGIS Desktop required).
 
 Pipeline:
@@ -350,13 +411,13 @@ result folder:
 These files can be generated after a simulation run with:
 
 ```powershell
-natm-airport-fuel-allocation --results simulation_results/<your-run-name>
+natm-airport-fuel-allocation --results data/output/<your-run-name>
 ```
 
 or:
 
 ```powershell
-python -m navaero_transition_model.postprocessing.airport_fuel_allocation_cli --results simulation_results/<your-run-name>
+python -m navaero_transition_model.postprocessing.airport_fuel_allocation_cli --results data/output/<your-run-name>
 ```
 
 The allocation command is a postprocessor. It first tries to use

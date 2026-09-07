@@ -120,14 +120,13 @@ def _ensure_columns(
 def normalize_aviation_fleet_stock(path: str | Path) -> pd.DataFrame:
     normalized = AviationStockCleaner().clean(path)
     _ensure_columns(normalized, FLEET_REQUIRED_COLUMNS, "aviation fleet stock")
-    normalized["is_passenger"] = (
-        normalized.get("config_type", "Pax")
-        .astype(str)
-        .str.lower()
-        .eq(
-            "pax",
-        )
-    )
+    # Real fleet data has "Pax" for confirmed-passenger rows, but many real rows
+    # (284/474 in the installed passenger fleet) leave Config (Pax/Con) blank
+    # entirely - since this file is already a passenger-sector-specific fleet
+    # stock, blank/unset config_type defaults to passenger rather than being
+    # silently excluded from capacity-planning validation.
+    is_passenger_text = normalized.get("config_type", "Pax").astype(str).str.strip().str.lower()
+    normalized["is_passenger"] = is_passenger_text.isin(["", "nan", "pax"])
     if "investment_logic" not in normalized.columns:
         normalized["investment_logic"] = "legacy_weighted_utility"
     else:

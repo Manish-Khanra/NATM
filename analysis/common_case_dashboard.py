@@ -29,7 +29,7 @@ from navaero_transition_model.core.scenario import NATMScenario
 
 KWH_PER_TWH = 1_000_000_000.0
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-RESULTS_ROOT = PROJECT_ROOT / "simulation_results"
+RESULTS_ROOT = PROJECT_ROOT / "data" / "output"
 PROCESSED_AVIATION_ROOT = PROJECT_ROOT / "data" / "processed" / "aviation"
 EMISSION_COLUMN_METADATA = {
     "total_emission": {"label": "Total emissions", "unit": "tonnes"},
@@ -466,7 +466,7 @@ def _dashboard_bindings_for_sector(sector_name: str) -> dict[str, object]:
 
 
 def _available_live_case_names() -> list[str]:
-    data_root = PROJECT_ROOT / "data"
+    data_root = PROJECT_ROOT / "data" / "input"
     if not data_root.exists():
         return []
 
@@ -588,7 +588,7 @@ def build_case_dashboard(
             airport_metadata_path = (
                 PROJECT_ROOT
                 / "data"
-                / "examples"
+                / "raw"
                 / "aviation_preprocessing"
                 / "airports_sample.csv"
             )
@@ -1148,7 +1148,7 @@ def build_case_dashboard(
                     f"- Carbon price: `{carbon_price:.2f}`",
                     f"- Operators: `{operator_count}`",
                     f"- Total fleet stock: `{total_assets}`",
-                    f"- Source: `simulation_results/{folder_name}`",
+                    f"- Source: `data/output/{folder_name}`",
                 ],
             ),
         )
@@ -2434,7 +2434,7 @@ def build_case_dashboard(
             if uses_allocated_outputs:
                 solara.Markdown(
                     "Using postprocessed airport fuel allocation outputs from "
-                    f"`simulation_results/{result_folder}`.",
+                    f"`data/output/{result_folder}`.",
                 )
             solara.Select(
                 "Map metric",
@@ -2759,7 +2759,7 @@ def build_case_dashboard(
                         )
                     else:
                         solara.Markdown(
-                            "No compatible folders were found in `simulation_results/`.",
+                            "No compatible folders were found in `data/output/`.",
                         )
 
             if mode == "Live case":
@@ -2808,4 +2808,4 @@ def Page():
 
 
 if __name__ == "__main__":
-    print("Run this dashboard with: solara run dashboard_examples/common_case_dashboard.py")
+    print("Run this dashboard with: solara run analysis/common_case_dashboard.py")

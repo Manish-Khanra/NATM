@@ -73,8 +73,8 @@ In the current codebase, the active end-to-end path is:
   Detailed output exporters.
 - [sqlite_store.py](C:/Manish_REPO/NATM/navaero_transition_model/core/database/sqlite_store.py:1)
   SQLite persistence for inputs and outputs.
-- [dashboard_examples](C:/Manish_REPO/NATM/dashboard_examples)
-  Solara/Mesa dashboards for live cases and saved results.
+- [analysis](C:/Manish_REPO/NATM/analysis)
+  Solara/Mesa dashboards and notebook for live cases and saved results.
 
 ## 3. Runtime Flow
 
@@ -87,7 +87,7 @@ There are two supported launch paths:
 
 `run.py` is the more user-friendly launcher for daily work. It resolves a named
 example to a case folder under `data/`, runs the model, and writes outputs to
-`simulation_results/<selected_example>/`.
+`data/output/<selected_example>/`.
 
 ### 3.2 Case loading
 
@@ -552,7 +552,7 @@ selection tables are exported separately as `ambiguity_decision_scores.csv`,
 ## 10. Dashboard Layer
 
 NATM also includes a Solara/Mesa dashboard layer under
-`dashboard_examples/`.
+`analysis/`.
 
 The dashboards support two modes:
 
@@ -572,7 +572,7 @@ In live mode, the dashboard:
 
 In saved-results mode, the dashboard:
 
-- reads previously generated CSV outputs from `simulation_results/<run-name>/`
+- reads previously generated CSV outputs from `data/output/<run-name>/`
 - does not rerun the model
 - visualizes the stored outputs directly
 
@@ -585,7 +585,7 @@ This makes the dashboard useful both for:
 
 The standard live/saved-results dashboard is one shared entrypoint:
 
-- `dashboard_examples/common_case_dashboard.py`
+- `analysis/common_case_dashboard.py`
 
 That shared dashboard provides:
 

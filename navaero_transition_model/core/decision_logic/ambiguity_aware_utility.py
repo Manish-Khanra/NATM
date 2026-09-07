@@ -146,10 +146,15 @@ class AmbiguityAwareSelectionMixin:
             agent._active_decision_year = previous_year
 
     def _decision_score(self, evaluation: CandidateEvaluation) -> float:
-        # The ambiguity-aware v1 selection criterion intentionally uses economic
-        # utility as the dominant score; legacy environmental/policy components
-        # remain available through legacy calculations and output diagnostics.
-        return float(evaluation.economic_utility)
+        # The ambiguity-aware selection criterion is net present value: a real,
+        # properly-discounted EUR figure (see calc_payback_year/
+        # evaluate_continue_current), not the normalized payback-year heuristic.
+        # This makes _weighted_expected_score genuinely "expected NPV" across
+        # scenarios, and the worst-case/expected-shortfall robust metrics
+        # genuine NPV-based risk measures rather than payback-based ones.
+        # economic_utility/environmental_utility remain available through
+        # legacy calculations and output diagnostics.
+        return float(evaluation.net_present_value)
 
     def _weighted_expected_score(self, outcomes: Iterable[ScenarioCandidateOutcome]) -> float:
         return sum(outcome.probability * outcome.score for outcome in outcomes)

@@ -91,7 +91,7 @@ def _set_scenario_value(
         long_frame = pd.concat([long_frame, pd.DataFrame([row])], ignore_index=True)
 
     scenario_table._long = long_frame.reset_index(drop=True)
-    scenario_table._cache.clear()
+    scenario_table.invalidate_cache()
 
 
 def _set_capacity_matched_demand(model: NATMModel, year: int) -> None:
@@ -138,7 +138,22 @@ def _set_capacity_matched_demand(model: NATMModel, year: int) -> None:
     )
     long_frame.loc[delivery_mask, "value"] = 0.0
     scenario_table._long = long_frame.reset_index(drop=True)
-    scenario_table._cache.clear()
+    scenario_table.invalidate_cache()
+
+
+def _neutralize_due_replacements(model: NATMModel, year: int) -> None:
+    """Push every real aircraft's replacement_year safely past `year`.
+
+    The real fleet has aircraft genuinely due for replacement in any given
+    planning year (unlike the old small toy fixture, which was too young to
+    ever trigger this). `step()` replaces due aircraft before checking growth,
+    which can shift segment capacity between a pre-step snapshot and the
+    actual growth check. Tests that isolate the growth-vs-demand mechanic
+    call this to remove that confound.
+    """
+    far_future = year + 100
+    for agent in model.agents_by_type[AviationPassengerAirlineAgent]:
+        agent.fleet.frame["replacement_year"] = far_future
 
 
 def _clone_case_directory(tmp_path: Path) -> Path:
@@ -175,11 +190,11 @@ def test_default_scenario_runs_end_to_end() -> None:
     assert maritime_path is None
     assert countries_path is not None and countries_path.exists()
     assert corridors_path is not None and corridors_path.exists()
-    assert len(model.agents) == 4
+    assert len(model.agents) == 11
     assert all(isinstance(agent, mesa.Agent) for agent in model.agents)
     assert all(isinstance(agent, BaseOperatorAgent) for agent in model.agents)
     assert all(isinstance(agent, AviationPassengerAirlineAgent) for agent in model.agents)
-    assert len(model.agents_by_type[AviationPassengerAirlineAgent]) == 4
+    assert len(model.agents_by_type[AviationPassengerAirlineAgent]) == 11
     assert len(model.get_sector_agents("maritime")) == 0
     assert history[0].aviation_alternative_share < history[-1].aviation_alternative_share
     assert all(snapshot.maritime_alternative_share == 0.0 for snapshot in history)
@@ -229,12 +244,18 @@ def test_aviation_fleet_stock_is_aggregated_by_operator() -> None:
     assert {operator_name for operator_name, _ in grouped} == {
         "Lufthansa",
         "Eurowings",
-        "Air France",
-        "Ryanair",
+        "Condor",
+        "Eurowings Discover",
+        "TUIfly",
+        "Lufthansa CityLine",
+        "German Airways",
+        "Universal Sky Carrier",
+        "Sundair",
+        "LEAV Aviation",
+        "Arcus-Air GmbH & Co. KG",
     }
     assert ("Lufthansa", "Germany") in grouped
-    assert ("Air France", "France") in grouped
-    assert ("Ryanair", "Ireland") in grouped
+    assert ("Eurowings", "Germany") in grouped
     assert set(grouped[("Lufthansa", "Germany")]["main_hub"].unique()) == {"Frankfurt"}
 
 
@@ -305,10 +326,18 @@ def test_stronger_policy_accelerates_adoption(tmp_path: Path) -> None:
         "value",
     ] = 0.001
     stronger_table._long = stronger_long
-    stronger_table._cache.clear()
+    stronger_table.invalidate_cache()
 
-    baseline_final = baseline_model.run()[-1]
-    stronger_final = stronger_model.run()[-1]
+    baseline_history = baseline_model.run()
+    stronger_history = stronger_model.run()
+    # Both runs fully replace the fleet's single aircraft well before the
+    # (now much longer, 2025-2050) horizon ends, so comparing at the final
+    # year would compare two saturated 1.0 values. Compare a few years in,
+    # while the stronger-policy run has already converted but baseline
+    # hasn't -- this is the actual "accelerates adoption" signal.
+    comparison_index = min(4, len(baseline_history) - 1)
+    baseline_final = baseline_history[comparison_index]
+    stronger_final = stronger_history[comparison_index]
 
     assert stronger_final.aviation_alternative_share > baseline_final.aviation_alternative_share
     assert stronger_final.maritime_alternative_share == baseline_final.maritime_alternative_share
@@ -332,7 +361,7 @@ def test_aviation_passenger_case_loader_reads_three_file_structure() -> None:
     assert "service_entry_year" in case_inputs.technology_catalog.to_frame().columns
     assert {"ambiguity_aware_utility"} == set(case_inputs.fleet["investment_logic"].unique())
     assert case_inputs.scenario_long["year"].min() == 2025
-    assert case_inputs.scenario_long["year"].max() == 2035
+    assert case_inputs.scenario_long["year"].max() == 2050
     assert "primary_energy_price" in set(case_inputs.scenario_long["variable_name"])
     assert "technology_availability" in set(case_inputs.scenario_long["variable_name"])
     assert "saf_availability" in set(case_inputs.scenario_long["variable_name"])
@@ -440,6 +469,7 @@ def test_constant_demand_without_planned_deliveries_adds_no_growth_aircraft() ->
     model = NATMModel(scenario, seed=42)
     planning_year = model.current_year + 1
     _set_capacity_matched_demand(model, planning_year)
+    _neutralize_due_replacements(model, planning_year)
     before_counts = {
         agent.operator_name: len(agent.fleet.frame)
         for agent in model.agents_by_type[AviationPassengerAirlineAgent]
@@ -459,6 +489,7 @@ def test_higher_market_share_gets_more_growth_aircraft() -> None:
     model = NATMModel(scenario, seed=42)
     planning_year = model.current_year + 1
     _set_capacity_matched_demand(model, planning_year)
+    _neutralize_due_replacements(model, planning_year)
 
     lufthansa = next(
         agent
@@ -490,11 +521,18 @@ def test_higher_market_share_gets_more_growth_aircraft() -> None:
         operator_name="Eurowings",
         segment="medium",
     )
+    # Real medium-segment capacity is far larger than the old toy fleet's, so
+    # the demand target has to be set well above today's combined real
+    # capacity to force a growth gap at all.
+    combined_medium_capacity = lufthansa.segment_passenger_km_capacity(
+        "medium",
+        planning_year,
+    ) + eurowings.segment_passenger_km_capacity("medium", planning_year)
     _set_scenario_value(
         scenario_table,
         "passenger_km_demand",
         planning_year,
-        3_000_000_000.0,
+        combined_medium_capacity * 1.5,
         country="Germany",
         segment="medium",
     )
@@ -515,6 +553,7 @@ def test_planned_deliveries_cover_gap_before_endogenous_growth() -> None:
     model = NATMModel(scenario, seed=42)
     planning_year = model.current_year + 1
     _set_capacity_matched_demand(model, planning_year)
+    _neutralize_due_replacements(model, planning_year)
 
     lufthansa = next(
         agent
@@ -612,6 +651,40 @@ def test_sqlite_store_writes_inputs_and_outputs(tmp_path: Path) -> None:
         assert run_count == 1
 
 
+def test_sqlite_store_widens_existing_table_for_new_columns(tmp_path: Path) -> None:
+    """Regression test: appending a DataFrame with a column an on-disk table
+    lacks (e.g. after an input CSV gains a new field between runs) must widen
+    the table instead of raising `sqlite3.OperationalError`."""
+    database_path = tmp_path / "natm_run.sqlite"
+    store = SQLiteSimulationStore(database_path)
+
+    with store._connect() as connection:
+        pd.DataFrame({"run_id": ["r1"], "value": [1.0]}).to_sql(
+            "input_maritime_cargo_fleet", connection, if_exists="append", index=False,
+        )
+
+    with store._connect() as connection:
+        frame = pd.DataFrame(
+            {"run_id": ["r2"], "value": [2.0], "main_hub_match_method": ["ais_port_visits"]},
+        )
+        store._ensure_columns(connection, "input_maritime_cargo_fleet", frame)
+        frame.to_sql("input_maritime_cargo_fleet", connection, if_exists="append", index=False)
+
+    with sqlite3.connect(database_path) as connection:
+        rows = connection.execute(
+            "SELECT run_id, value, main_hub_match_method "
+            "FROM input_maritime_cargo_fleet ORDER BY run_id",
+        ).fetchall()
+        # A widened column must be declared just like one from a fresh create,
+        # not left typeless.
+        types = {
+            row[1]: row[2]
+            for row in connection.execute("PRAGMA table_info(input_maritime_cargo_fleet)")
+        }
+    assert rows == [("r1", 1.0, None), ("r2", 2.0, "ais_port_visits")]
+    assert types["main_hub_match_method"] == "TEXT"
+
+
 def test_cargo_scenario_runs_end_to_end() -> None:
     scenario = load_cargo_scenario()
     model = NATMModel(scenario, seed=42)
@@ -623,7 +696,7 @@ def test_cargo_scenario_runs_end_to_end() -> None:
     assert scenario.enabled_sectors == ("aviation",)
     assert scenario.applications_for_sector("aviation") == ("cargo",)
     assert len(history) == scenario.steps
-    assert len(model.agents) == 2
+    assert len(model.agents) == 3
     assert all(isinstance(agent, AviationCargoAirlineAgent) for agent in model.agents)
     assert "application_name" in aircraft_summary.columns
     assert set(aircraft_summary["application_name"].dropna().unique()) == {"cargo"}
@@ -644,7 +717,7 @@ def test_maritime_cargo_scenario_runs_end_to_end() -> None:
     assert scenario.enabled_sectors == ("maritime",)
     assert scenario.applications_for_sector("maritime") == ("cargo",)
     assert len(history) == scenario.steps
-    assert len(model.agents) == 2
+    assert len(model.agents) == 77
     assert all(isinstance(agent, MaritimeCargoShiplineAgent) for agent in model.agents)
     assert {"cargo"} == set(aircraft_summary["application_name"].dropna().unique())
     assert {"maritime"} == set(aircraft_summary["sector_name"].dropna().unique())

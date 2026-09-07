@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-OUTPUT_ROOT = PROJECT_ROOT / "simulation_results"
+OUTPUT_ROOT = PROJECT_ROOT / "data" / "output"
 
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -68,12 +68,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--case",
         default=None,
-        help="Optional direct case folder override under data/.",
+        help="Optional direct case folder override under data/input/.",
     )
     parser.add_argument(
         "--output-name",
         default=None,
-        help="Optional custom output folder name under simulation_results/.",
+        help="Optional custom output folder name under data/output/.",
     )
     parser.add_argument(
         "--no-summary",

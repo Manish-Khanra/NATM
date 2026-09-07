@@ -171,10 +171,11 @@ class Fleet:
         )
 
     def _needs_positive_activity_fallback(self, row_index: int, column: str) -> bool:
-        value = pd.to_numeric(
-            pd.Series([self._frame.loc[row_index, column]]),
-            errors="coerce",
-        ).iloc[0]
+        # pd.to_numeric accepts a scalar directly -- no need to wrap it in a
+        # throwaway pd.Series just to coerce and unwrap it again, which is
+        # meaningfully slower at the call volumes this hits during a full
+        # ambiguity-aware candidate evaluation sweep.
+        value = pd.to_numeric(self._frame.loc[row_index, column], errors="coerce")
         return pd.isna(value) or float(value) <= 0.0
 
     def apply_activity_fallbacks(self) -> None:
@@ -223,9 +224,9 @@ class Fleet:
     def estimate_baseline_energy_demand(self) -> None:
         for row_index, aircraft in self._frame.iterrows():
             existing_energy = pd.to_numeric(
-                pd.Series([self._frame.loc[row_index, "baseline_energy_demand"]]),
+                self._frame.loc[row_index, "baseline_energy_demand"],
                 errors="coerce",
-            ).iloc[0]
+            )
             if pd.notna(existing_energy) and float(existing_energy) > 0.0:
                 if self._needs_positive_activity_fallback(row_index, "fuel_burn_per_year_base"):
                     self._frame.loc[row_index, "fuel_burn_per_year_base"] = self._frame.loc[
@@ -237,9 +238,9 @@ class Fleet:
                 technology_name=str(aircraft["current_technology"]),
             )
             annual_distance = pd.to_numeric(
-                pd.Series([self._frame.loc[row_index, "annual_distance_km_base"]]),
+                self._frame.loc[row_index, "annual_distance_km_base"],
                 errors="coerce",
-            ).iloc[0]
+            )
             if pd.isna(annual_distance):
                 continue
             kilometer_per_kwh = max(float(technology_row["kilometer_per_kwh"]), 1e-6)
@@ -269,28 +270,29 @@ class Fleet:
                 )
 
     def annual_flights_for(self, aircraft: pd.Series, technology_row: pd.Series) -> float:
-        annual_flights = pd.to_numeric(
-            pd.Series([aircraft.get("annual_flights_base", pd.NA)]),
-            errors="coerce",
-        ).iloc[0]
+        # pd.to_numeric accepts a scalar directly; wrapping it in a
+        # single-element pd.Series just to unwrap it again is a well-known
+        # pandas anti-pattern and a measurable cost at the call volumes this
+        # hits during a full ambiguity-aware candidate evaluation sweep
+        # (every candidate technology x every scenario x every year of its
+        # lifetime).
+        annual_flights = pd.to_numeric(aircraft.get("annual_flights_base", pd.NA), errors="coerce")
         if pd.notna(annual_flights):
             return float(annual_flights)
         return float(technology_row["trip_days_per_year"])
 
     def mean_stage_length_km_for(self, aircraft: pd.Series, technology_row: pd.Series) -> float:
         stage_length = pd.to_numeric(
-            pd.Series([aircraft.get("mean_stage_length_km_base", pd.NA)]),
-            errors="coerce",
-        ).iloc[0]
+            aircraft.get("mean_stage_length_km_base", pd.NA), errors="coerce",
+        )
         if pd.notna(stage_length):
             return float(stage_length)
         return float(technology_row["trip_length_km"])
 
     def annual_distance_km_for(self, aircraft: pd.Series, technology_row: pd.Series) -> float:
         annual_distance = pd.to_numeric(
-            pd.Series([aircraft.get("annual_distance_km_base", pd.NA)]),
-            errors="coerce",
-        ).iloc[0]
+            aircraft.get("annual_distance_km_base", pd.NA), errors="coerce",
+        )
         if pd.notna(annual_distance):
             return float(annual_distance)
         return self.annual_flights_for(aircraft, technology_row) * self.mean_stage_length_km_for(
@@ -298,11 +300,33 @@ class Fleet:
             technology_row,
         )
 
+    def representative_row(
+        self,
+        rows: pd.DataFrame,
+        *,
+        activity_column: str = "annual_distance_km_base",
+    ) -> pd.Series:
+        """Returns the row closest to `rows`'s median `activity_column` value.
+
+        Used to pick a growth template: an arbitrary row (e.g. the first)
+        risks landing on a real but extreme data-quality outlier -- e.g. an
+        aircraft with only 1 tracked flight in the base year, driven by
+        limited OpenSky coverage for that tail number -- and then silently
+        undersizing every new asset added to that segment from then on,
+        since the template's activity fields are copied onto each of them.
+        """
+        if activity_column in rows.columns:
+            activity = pd.to_numeric(rows[activity_column], errors="coerce")
+            if activity.notna().any():
+                median_activity = activity.median()
+                closest_index = (activity - median_activity).abs().idxmin()
+                return rows.loc[closest_index].copy()
+        return rows.iloc[0].copy()
+
     def baseline_energy_demand_for(self, aircraft: pd.Series, technology_row: pd.Series) -> float:
         baseline_energy = pd.to_numeric(
-            pd.Series([aircraft.get("baseline_energy_demand", pd.NA)]),
-            errors="coerce",
-        ).iloc[0]
+            aircraft.get("baseline_energy_demand", pd.NA), errors="coerce",
+        )
         if pd.notna(baseline_energy):
             return float(baseline_energy)
         kilometer_per_kwh = max(float(technology_row["kilometer_per_kwh"]), 1e-6)

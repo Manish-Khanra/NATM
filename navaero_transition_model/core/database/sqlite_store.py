@@ -45,6 +45,58 @@ class SQLiteSimulationStore:
             fallback_path = self._fallback_database_path()
             return self._connect_path(fallback_path)
 
+    @staticmethod
+    def _quote_identifier(name: str) -> str:
+        return '"' + name.replace('"', '""') + '"'
+
+    @staticmethod
+    def _sql_type(series: pd.Series) -> str:
+        """The column type pandas' own sqlite writer would declare for `series`.
+
+        Keeps a widened column indistinguishable from one created by the
+        original `to_sql`, rather than leaving it typeless (which SQLite
+        gives no affinity at all).
+        """
+        dtype = series.dtype
+        if pd.api.types.is_bool_dtype(dtype) or pd.api.types.is_integer_dtype(dtype):
+            return "INTEGER"
+        if pd.api.types.is_float_dtype(dtype):
+            return "REAL"
+        if pd.api.types.is_datetime64_any_dtype(dtype):
+            return "TIMESTAMP"
+        return "TEXT"
+
+    def _ensure_columns(
+        self,
+        connection: sqlite3.Connection,
+        table_name: str,
+        frame: pd.DataFrame,
+    ) -> None:
+        """Widens an existing on-disk table to cover every column in `frame`.
+
+        Runs accumulate into the same database over time via
+        `if_exists="append"` (e.g. repeated `risk-attitudes-comparison`
+        runs); if a later run's DataFrame gains a column an earlier run's
+        on-disk table doesn't have, appending fails with `no column named
+        ...` rather than writing the row. Adding the missing column first
+        (existing rows simply read NULL for it) keeps append-based
+        accumulation working across schema changes, without touching
+        `if_exists="append"`'s intentional multi-run behavior.
+        """
+        quoted_table = self._quote_identifier(table_name)
+        existing = {
+            row[1] for row in connection.execute(f"PRAGMA table_info({quoted_table})")
+        }
+        if not existing:
+            return  # Table doesn't exist yet; to_sql below creates it with a matching schema.
+        for column in frame.columns:
+            if column not in existing:
+                connection.execute(
+                    f"ALTER TABLE {quoted_table} "
+                    f"ADD COLUMN {self._quote_identifier(str(column))} "
+                    f"{self._sql_type(frame[column])}",
+                )
+
     def write_run(self, model, scenario) -> str:
         run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
         with self._connect() as connection:
@@ -71,6 +123,7 @@ class SQLiteSimulationStore:
                 },
             ],
         )
+        self._ensure_columns(connection, "runs", metadata)
         metadata.to_sql("runs", connection, if_exists="append", index=False)
 
     def _write_input_tables(self, connection: sqlite3.Connection, run_id: str, model) -> None:
@@ -134,6 +187,7 @@ class SQLiteSimulationStore:
         for table_name, dataframe in input_tables.items():
             frame = dataframe.copy()
             frame.insert(0, "run_id", run_id)
+            self._ensure_columns(connection, table_name, frame)
             frame.to_sql(table_name, connection, if_exists="append", index=False)
 
     def _write_output_tables(self, connection: sqlite3.Connection, run_id: str, model) -> None:
@@ -166,4 +220,5 @@ class SQLiteSimulationStore:
                 continue
             frame = dataframe.copy()
             frame.insert(0, "run_id", run_id)
+            self._ensure_columns(connection, table_name, frame)
             frame.to_sql(table_name, connection, if_exists="append", index=False)

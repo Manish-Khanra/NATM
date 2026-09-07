@@ -89,7 +89,7 @@ data/processed/aviation/
 This keeps observed and derived baseline data separate from:
 
 - case folders in `data/<case-name>/`
-- simulation result folders in `simulation_results/`
+- simulation result folders in `data/output/`
 
 ## 4. Core Outputs
 

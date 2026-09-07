@@ -422,7 +422,7 @@ capex, so `evaluate_continue_current` is unaffected.
 6. Run the model:
 
 ```powershell
-natm --case <case-name> --details-dir simulation_results/<run-name>
+natm --case <case-name> --details-dir data/output/<run-name>
 ```
 
 7. Inspect `ambiguity_decision_scores.csv`,
@@ -431,5 +431,5 @@ natm --case <case-name> --details-dir simulation_results/<run-name>
 8. Open the common dashboard to view robust frontier and loss diagnostics:
 
 ```powershell
-solara run dashboard_examples/common_case_dashboard.py
+solara run analysis/common_case_dashboard.py
 ```

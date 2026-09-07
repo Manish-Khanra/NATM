@@ -56,6 +56,34 @@ def clean_scope_value(value: Any) -> str:
     return str(value).strip()
 
 
+# EU ETS zero-rates emissions from a fuel's biomass/RFNBO/RCF/synthetic
+# low-carbon content when it meets RED sustainability/GHG-savings criteria:
+# aircraft/ship operators do not surrender allowances for that share, even
+# though its true lifecycle emissions are nonzero (which technology_row's
+# {primary,secondary}_energy_emission_factor still correctly reflects for
+# reporting). Covers SAF (saf/hefa), e-kerosene (e_kerosene/ptl, an RFNBO),
+# maritime biofuel (biofuel/fame), and renewable/green hydrogen used directly
+# as a fuel (hydrogen, also an RFNBO when it meets RED criteria -- confirmed
+# via Dutch Emissions Authority / EU Climate Action guidance: renewable
+# hydrogen gets the same zero-rating as SAF/e-kerosene, not just when used as
+# e-kerosene feedstock). Applies whichever carrier (primary or secondary) it
+# appears as -- our hydrogen technologies use it as the primary carrier, but
+# a blend where it's secondary would qualify identically. Fossil pilot fuels
+# (LNG/methanol's small marine_diesel blend) and non-combustion carriers
+# (battery/electricity, ~0 factor already) are not eligible and are left out.
+ETS_ZERO_RATED_CARRIERS = frozenset({"saf", "e_kerosene", "biofuel", "hydrogen"})
+
+
+def is_ets_zero_rated_secondary(technology_row: pd.Series) -> bool:
+    carrier = clean_scope_value(technology_row.get("secondary_energy_carrier", "")).lower()
+    return carrier in ETS_ZERO_RATED_CARRIERS
+
+
+def is_ets_zero_rated_primary(technology_row: pd.Series) -> bool:
+    carrier = clean_scope_value(technology_row.get("primary_energy_carrier", "")).lower()
+    return carrier in ETS_ZERO_RATED_CARRIERS
+
+
 @dataclass(frozen=True)
 class CandidateEvaluation:
     technology_name: str

@@ -38,7 +38,7 @@ pytest
 For dashboard changes, also launch the relevant dashboard manually:
 
 ```powershell
-solara run dashboard_examples/aviation_passenger_baseline_dashboard.py
+solara run analysis/aviation_passenger_baseline_dashboard.py
 ```
 
 ## Contribution Guidelines

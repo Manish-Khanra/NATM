@@ -98,6 +98,7 @@ class NATMModel(mesa.Model):
         self._ambiguity_worst_case_probability_rows: list[dict[str, object]] = []
         self._selected_ambiguity_decision_rows: list[dict[str, object]] = []
         self._ambiguity_excluded_candidate_rows: list[dict[str, object]] = []
+        self._policy_signal_cache: dict[int, PolicySignal] = {}
 
         for sector_name in self.enabled_sectors:
             if sector_name == "aviation":
@@ -220,6 +221,21 @@ class NATMModel(mesa.Model):
 
     @property
     def current_policy_signal(self):
+        # _aviation_scenario_value/_maritime_scenario_value below are called
+        # with no active per-agent decision-scenario context, so this is a
+        # pure function of self.current_year alone -- safe to memoize per
+        # year. Without this, it gets recomputed identically on every one of
+        # the hundreds of thousands of calendar_price/mandate lookups made
+        # per candidate-technology evaluation across a full ambiguity-aware
+        # sweep, for a year that hasn't changed since the previous call.
+        cached = self._policy_signal_cache.get(self.current_year)
+        if cached is not None:
+            return cached
+        computed = self._compute_policy_signal()
+        self._policy_signal_cache[self.current_year] = computed
+        return computed
+
+    def _compute_policy_signal(self):
         if (
             self.aviation_passenger_inputs is not None
             or self.aviation_cargo_inputs is not None

@@ -167,7 +167,14 @@ class NATMDecisionScorer:
                 "invest",
             )
 
-        evaluations.sort(key=lambda item: item[1].total_utility, reverse=True)
+        # `total_utility`'s economic axis is clamp()ed to 1.0, so a fast enough
+        # payback (common with real revenue figures) ties `invest` with
+        # `continue_current`'s fixed 1.0. Break ties with net_present_value,
+        # the un-clamped economic ground truth, rather than insertion order.
+        evaluations.sort(
+            key=lambda item: (item[1].total_utility, item[1].net_present_value),
+            reverse=True,
+        )
         return evaluations[0]
 
     def _add_growth_assets(self, agent, year: int) -> None:
@@ -177,12 +184,18 @@ class NATMDecisionScorer:
             if template is None:
                 continue
 
-            residual_demand_gap = max(
-                self._allocated_demand(agent, str(segment), year)
-                - self._segment_capacity(agent, str(segment), year),
-                0.0,
-            )
-            if residual_demand_gap <= 0.0:
+            allocated_demand = self._allocated_demand(agent, str(segment), year)
+            segment_capacity = self._segment_capacity(agent, str(segment), year)
+            # Demand is derived as national_demand * operator_market_share, a
+            # division-then-remultiplication round trip that can leave a
+            # floating-point-noise-level residual (relative ~1e-16) even when
+            # demand and capacity are meant to be exactly equal. At real-world,
+            # multi-billion-scale magnitudes that noise floor is well above
+            # zero, so a strict `> 0` check would spuriously add a whole extra
+            # aircraft over a gap with no economic meaning.
+            noise_floor = max(abs(allocated_demand), abs(segment_capacity)) * 1e-9
+            residual_demand_gap = max(allocated_demand - segment_capacity, 0.0)
+            if residual_demand_gap <= noise_floor:
                 continue
 
             planned_rows = agent.planned_delivery_rows(str(segment), year)

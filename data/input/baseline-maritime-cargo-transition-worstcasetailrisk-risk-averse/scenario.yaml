@@ -1,6 +1,6 @@
 name: baseline-maritime-cargo-transition
 start_year: 2025
-end_year: 2035
+end_year: 2050
 
 sectors:
   maritime:
@@ -16,4 +16,5 @@ ambiguity_aware_decision:
     - hohenachfrage
     - niedrigenachfrage
   probability_table: ambiguity_probabilities.csv
+  realized_scenario_id: aktuellepolitiken
   robust_metric: worst_case_expected_shortfall
