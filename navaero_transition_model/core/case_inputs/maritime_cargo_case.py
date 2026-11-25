@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pandas as pd
@@ -7,6 +8,14 @@ import pandas as pd
 from navaero_transition_model.core.case_inputs.scenario_table import ScenarioTable
 from navaero_transition_model.core.case_inputs.technology_catalog import TechnologyCatalog
 from navaero_transition_model.core.decision_logic.base import DECISION_ATTITUDES, DECISION_MODES
+
+log = logging.getLogger(__name__)
+
+# A per-vessel annual distance below this fraction of its segment median is
+# treated as an EU MRV/AIS coverage artifact (observed: 59.5 km/yr) rather than
+# a real operating profile, and floored to the segment median -- see
+# _floor_implausible_annual_distance.
+_ANNUAL_DISTANCE_FLOOR_FRACTION = 0.10
 
 FLEET_COLUMN_ALIASES = {
     "ID": "aircraft_id",
@@ -116,7 +125,49 @@ def normalize_maritime_cargo_fleet_stock(path: str | Path) -> pd.DataFrame:
         + "::"
         + normalized["operator_country"].astype(str).str.strip()
     )
+    _floor_implausible_annual_distance(normalized)
     return normalized.reset_index(drop=True)
+
+
+def _floor_implausible_annual_distance(normalized: pd.DataFrame) -> None:
+    """Floor implausibly-low per-vessel ``annual_distance_km_base`` in place.
+
+    EU MRV/AIS coverage can leave a real vessel with an implausibly tiny
+    recorded annual distance (observed: 59.5 km/yr). Because a growth newbuild is
+    templated from a representative existing vessel and copies its activity
+    fields, such an outlier -- when it is the template -- under-sizes every
+    newbuild's capacity ~1000x, and the capacity-based growth loop then adds
+    thousands of phantom vessels to close the demand gap. Any value below
+    ``_ANNUAL_DISTANCE_FLOOR_FRACTION`` of its segment median is replaced by that
+    median. This touches only vessel activity; scenario tonne-km demand is
+    untouched.
+    """
+    column = "annual_distance_km_base"
+    if column not in normalized.columns:
+        return
+    distance = pd.to_numeric(normalized[column], errors="coerce")
+    for segment, index in normalized.groupby("segment").groups.items():
+        segment_distance = distance.loc[index]
+        positive = segment_distance[segment_distance > 0]
+        if positive.empty:
+            continue
+        median = float(positive.median())
+        if median <= 0.0:
+            continue
+        implausible = index[segment_distance < median * _ANNUAL_DISTANCE_FLOOR_FRACTION]
+        for row in implausible:
+            log.warning(
+                "Maritime fleet-stock hygiene: %s (%s) annual_distance_km_base "
+                "%.1f km/yr is below %.0f%% of the segment median (%.0f km/yr); "
+                "flooring to the segment median.",
+                normalized.loc[row, "operator_name"],
+                segment,
+                float(distance.loc[row]),
+                _ANNUAL_DISTANCE_FLOOR_FRACTION * 100.0,
+                median,
+            )
+            distance.loc[row] = median
+    normalized[column] = distance
 
 
 class MaritimeCargoCaseData:
