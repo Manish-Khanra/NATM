@@ -83,6 +83,17 @@ class AviationPassengerAirlineAgent(BaseOperatorAgent):
 
     def step(self) -> None:
         year = self.current_year
+        # Cleared each real step: segment_utilization_factor is cached by
+        # (segment, year), but payback/NPV projections (calc_payback_year)
+        # evaluate many *future* years' worth of operation metrics using
+        # THIS step's fleet composition (a deliberate "assume today's fleet
+        # persists" simplification). Without clearing here, a future year
+        # projected hypothetically during an earlier real step would poison
+        # the cache for when the simulation actually reaches that year with
+        # its real, by-then-evolved fleet -- confirmed to cause every
+        # scenario's simulated energy to silently converge to the same
+        # value by ~2045, instead of tracking each scenario's own demand.
+        self.__dict__.pop("_utilization_factor_cache", None)
         self.decision_logic.step(self, year)
         self.refresh_summary()
 
@@ -254,6 +265,64 @@ class AviationPassengerAirlineAgent(BaseOperatorAgent):
             default=0.0,
         )
         return float(passenger_km_demand) * float(operator_market_share)
+
+    def segment_utilization_factor(self, segment: str, year: int) -> float:
+        """How much of this operator's existing fleet's real,
+        full-utilization capacity this year's exogenous scenario demand
+        actually calls for, in this segment -- capped at 1.0.
+
+        Rationale: previously, `allocated_passenger_km` (exogenous demand)
+        only ever decided *whether new aircraft get added*
+        (`_add_growth_assets`, triggered when demand exceeds capacity) --
+        it never affected how much the EXISTING fleet flies. Every
+        aircraft always flew its fixed, real `annual_distance_km_base`
+        every year regardless of whether scenario demand was rising or
+        falling, which decoupled simulated energy/cost/emissions entirely
+        from the demand scenario (confirmed directly: total aviation
+        passenger energy demand came out byte-identical across all 8
+        scenarios, even though allocated demand differs by up to ~19%
+        across those same scenarios).
+
+        This scales each aircraft's annual distance flown -- and hence its
+        energy, cost, emissions and revenue -- by the ratio of actual
+        allocated demand to what the existing fleet could supply at its
+        real, full base-year utilization rate ("reference capacity",
+        computed via the unchanged `segment_passenger_km_capacity`, so the
+        fleet growth trigger itself -- demand vs. that same reference
+        capacity -- behaves exactly as before).
+
+        Capped at 1.0, never scaled up: demand exceeding full-utilization
+        capacity is met by growing the fleet, not by flying existing
+        aircraft beyond their real operational envelope. Not floored: if
+        a scenario's demand falls far below capacity, this factor is
+        allowed to fall correspondingly low -- an arbitrary minimum-
+        utilization floor would not be grounded in any real data this
+        project has.
+
+        Cached per (segment, year): this is called once per candidate
+        technology per aircraft per scenario context in the ambiguity-aware
+        decision logic (see _select_loss_law_robust_asset), and
+        segment_passenger_km_capacity itself is an O(fleet size) scan --
+        without caching this became an O(fleet^2) hot path that was
+        confirmed to blow up runtime by 2+ orders of magnitude on the
+        maritime cargo sector (same mechanism, larger fleet + more
+        candidates), so this cache is required for correctness of runtime,
+        not just a speed nicety.
+        """
+        cache: dict[tuple[str, int], float] = self.__dict__.setdefault(
+            "_utilization_factor_cache", {},
+        )
+        key = (segment, year)
+        if key in cache:
+            return cache[key]
+        reference_capacity = self.segment_passenger_km_capacity(segment, year)
+        if reference_capacity <= 0.0:
+            value = 1.0
+        else:
+            demand = self.allocated_passenger_km(segment, year)
+            value = min(1.0, max(0.0, float(demand) / float(reference_capacity)))
+        cache[key] = value
+        return value
 
     def planned_delivery_rows(self, segment: str, year: int) -> pd.DataFrame:
         return self.scenario_table.matching_rows(

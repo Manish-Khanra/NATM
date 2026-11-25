@@ -16,3 +16,6 @@ Thumbs.db
 data/processed/aviation/openap_flight_fuel_emissions.csv
 data/output/
 !data/output/.gitkeep
+# Large generated 15-min electricity demand/price series (exceed GitHub's file-size limit)
+data/processed/electricity_15min/
+*.csv.gz

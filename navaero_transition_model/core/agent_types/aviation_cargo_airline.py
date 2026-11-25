@@ -83,6 +83,11 @@ class AviationCargoAirlineAgent(BaseOperatorAgent):
 
     def step(self) -> None:
         year = self.current_year
+        # Cleared each real step -- see AviationPassengerAirlineAgent.step
+        # for why: without this, payback/NPV projections into future years
+        # (calc_payback_year) poison the utilization cache for when the
+        # simulation actually reaches those years with its real fleet.
+        self.__dict__.pop("_utilization_factor_cache", None)
         self.decision_logic.step(self, year)
         self.refresh_summary()
 
@@ -226,6 +231,33 @@ class AviationCargoAirlineAgent(BaseOperatorAgent):
             default=0.0,
         )
         return float(freight_tonne_km_demand) * float(operator_market_share)
+
+    def segment_utilization_factor(self, segment: str, year: int) -> float:
+        """Ratio of this operator's exogenous allocated demand to its
+        existing fleet's full-utilization capacity for this segment/year,
+        capped at 1.0. Same mechanism and rationale as
+        AviationPassengerAirlineAgent.segment_utilization_factor -- see
+        that docstring. Growth-trigger capacity (`segment_freight_tonne_km_capacity`)
+        is unchanged; only actual flown distance (energy/cost/emissions/
+        revenue) is scaled by this factor.
+
+        Cached per (segment, year) -- see AviationPassengerAirlineAgent's
+        docstring for why this cache is required, not optional.
+        """
+        cache: dict[tuple[str, int], float] = self.__dict__.setdefault(
+            "_utilization_factor_cache", {},
+        )
+        key = (segment, year)
+        if key in cache:
+            return cache[key]
+        reference_capacity = self.segment_freight_tonne_km_capacity(segment, year)
+        if reference_capacity <= 0.0:
+            value = 1.0
+        else:
+            demand = self.allocated_freight_tonne_km(segment, year)
+            value = min(1.0, max(0.0, float(demand) / float(reference_capacity)))
+        cache[key] = value
+        return value
 
     def planned_delivery_rows(self, segment: str, year: int) -> pd.DataFrame:
         return self.scenario_table.matching_rows(

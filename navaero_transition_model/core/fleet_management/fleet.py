@@ -300,6 +300,40 @@ class Fleet:
             technology_row,
         )
 
+    def real_annual_energy_kwh_for(
+        self, aircraft: pd.Series, technology_row: pd.Series,
+    ) -> float | None:
+        # Real per-vessel EU MRV/AIS-derived annual energy consumption, used
+        # in place of technology_row's kilometer_per_kwh when this vessel is
+        # still operating the same technology this real data was recorded
+        # for. Checked against real_data_technology_base because
+        # kilometer_per_kwh and carbondioxide_factor were found independently
+        # miscalibrated (6-170x) against this same data, so a technology
+        # switch away from the real-data technology has no valid real
+        # baseline to reuse and must fall back to the catalog formula.
+        recorded_technology = aircraft.get("real_data_technology_base", pd.NA)
+        if pd.isna(recorded_technology) or str(recorded_technology) != str(
+            technology_row["technology_name"],
+        ):
+            return None
+        energy = pd.to_numeric(aircraft.get("annual_energy_kwh_base", pd.NA), errors="coerce")
+        if pd.notna(energy):
+            return float(energy)
+        return None
+
+    def real_annual_emission_kg_for(
+        self, aircraft: pd.Series, technology_row: pd.Series,
+    ) -> float | None:
+        recorded_technology = aircraft.get("real_data_technology_base", pd.NA)
+        if pd.isna(recorded_technology) or str(recorded_technology) != str(
+            technology_row["technology_name"],
+        ):
+            return None
+        emission = pd.to_numeric(aircraft.get("annual_emission_kg_base", pd.NA), errors="coerce")
+        if pd.notna(emission):
+            return float(emission)
+        return None
+
     def representative_row(
         self,
         rows: pd.DataFrame,

@@ -129,10 +129,13 @@ class LegacyWeightedUtilityLogic(NATMDecisionScorer, AviationPassengerDecisionLo
         free_ets_balance: float | None = None,
     ) -> OperationMetrics:
         kilometer_per_kwh = max(float(technology_row["kilometer_per_kwh"]), 1e-6)
-        total_distance = agent.fleet.annual_distance_km_for(aircraft, technology_row)
+        operation_segment = clean_scope_value(aircraft["segment"])
+        utilization_factor = agent.segment_utilization_factor(operation_segment, year)
+        total_distance = (
+            agent.fleet.annual_distance_km_for(aircraft, technology_row) * utilization_factor
+        )
         total_energy = total_distance / kilometer_per_kwh
 
-        operation_segment = clean_scope_value(aircraft["segment"])
         secondary_share = self.effective_secondary_share(
             agent,
             technology_row,
@@ -226,8 +229,12 @@ class LegacyWeightedUtilityLogic(NATMDecisionScorer, AviationPassengerDecisionLo
         technology_row: pd.Series,
         year: int,
     ) -> float:
-        annual_distance = agent.fleet.annual_distance_km_for(aircraft, technology_row)
-        annual_flights = agent.fleet.annual_flights_for(aircraft, technology_row)
+        operation_segment = clean_scope_value(aircraft["segment"])
+        utilization_factor = agent.segment_utilization_factor(operation_segment, year)
+        annual_distance = (
+            agent.fleet.annual_distance_km_for(aircraft, technology_row) * utilization_factor
+        )
+        annual_flights = agent.fleet.annual_flights_for(aircraft, technology_row) * utilization_factor
         economy_occupancy = agent.scenario_value(
             "economy_occupancy",
             year,
@@ -586,10 +593,13 @@ class LegacyWeightedUtilityCargoLogic(NATMDecisionScorer, AviationCargoDecisionL
         free_ets_balance: float | None = None,
     ) -> OperationMetrics:
         kilometer_per_kwh = max(float(technology_row["kilometer_per_kwh"]), 1e-6)
-        total_distance = agent.fleet.annual_distance_km_for(aircraft, technology_row)
+        operation_segment = clean_scope_value(aircraft["segment"])
+        utilization_factor = agent.segment_utilization_factor(operation_segment, year)
+        total_distance = (
+            agent.fleet.annual_distance_km_for(aircraft, technology_row) * utilization_factor
+        )
         total_energy = total_distance / kilometer_per_kwh
 
-        operation_segment = clean_scope_value(aircraft["segment"])
         secondary_share = self.effective_secondary_share(
             agent,
             technology_row,
@@ -683,7 +693,11 @@ class LegacyWeightedUtilityCargoLogic(NATMDecisionScorer, AviationCargoDecisionL
         technology_row: pd.Series,
         year: int,
     ) -> float:
-        annual_distance = agent.fleet.annual_distance_km_for(aircraft, technology_row)
+        operation_segment = clean_scope_value(aircraft["segment"])
+        utilization_factor = agent.segment_utilization_factor(operation_segment, year)
+        annual_distance = (
+            agent.fleet.annual_distance_km_for(aircraft, technology_row) * utilization_factor
+        )
         load_factor = agent.scenario_value(
             "load_factor",
             year,
@@ -1038,13 +1052,35 @@ class LegacyWeightedUtilityMaritimeCargoLogic(NATMDecisionScorer, MaritimeCargoD
         year: int,
         free_ets_balance: float | None = None,
     ) -> OperationMetrics:
-        trip_length = float(technology_row["trip_length_km"])
-        trip_days = float(technology_row["trip_days_per_year"])
-        kilometer_per_kwh = max(float(technology_row["kilometer_per_kwh"]), 1e-6)
-        total_distance = trip_length * trip_days
-        total_energy = total_distance / kilometer_per_kwh
-
         operation_segment = clean_scope_value(vessel["segment"])
+        utilization_factor = agent.segment_utilization_factor(operation_segment, year)
+        # Real per-vessel annual distance when available (see
+        # vessel_freight_tonne_km_capacity for why trip_length_km *
+        # trip_days_per_year alone is wrong -- confirmed up to ~36x too high
+        # against a real vessel's actual MRV-reported distance).
+        total_distance = agent.fleet.annual_distance_km_for(vessel, technology_row) * utilization_factor
+        # Real per-vessel EU MRV-reported annual energy/CO2 (for this exact
+        # technology, i.e. the vessel hasn't since switched away from it) --
+        # used directly instead of kilometer_per_kwh/carbondioxide_factor,
+        # which were checked against this same real data and found
+        # independently miscalibrated by 6-170x (kilometer_per_kwh too
+        # optimistic) and ~10x (carbondioxide_factor too low), in opposite
+        # directions, so patching only the distance formula above actually
+        # made reported emissions worse, not better, for these vessels.
+        # Both real_energy and real_emission are this vessel's REAL,
+        # observed-at-full-utilization annual totals, so they are scaled by
+        # the same utilization_factor as the catalog-formula branch below --
+        # otherwise the ~95% of this fleet using real per-vessel MRV data
+        # would stay completely unresponsive to declining/rising scenario
+        # demand while only the small catalog-fallback minority responded.
+        real_energy = agent.fleet.real_annual_energy_kwh_for(vessel, technology_row)
+        real_emission = agent.fleet.real_annual_emission_kg_for(vessel, technology_row)
+        uses_real_data = real_energy is not None and real_emission is not None
+        if uses_real_data:
+            total_energy = real_energy * utilization_factor
+        else:
+            kilometer_per_kwh = max(float(technology_row["kilometer_per_kwh"]), 1e-6)
+            total_energy = total_distance / kilometer_per_kwh
         secondary_share = self.effective_secondary_share(
             agent,
             technology_row,
@@ -1091,7 +1127,16 @@ class LegacyWeightedUtilityMaritimeCargoLogic(NATMDecisionScorer, MaritimeCargoD
         carbondioxide_factor = float(technology_row.get("carbondioxide_factor", 0.0) or 0.0)
         zero_rated = is_ets_zero_rated_secondary(technology_row)
         zero_rated_primary = is_ets_zero_rated_primary(technology_row)
-        if carbondioxide_factor > 0.0:
+        if uses_real_data:
+            total_emission = real_emission * utilization_factor
+            # No real fuel-mix breakdown to split zero-rated share from;
+            # approximate it the same way the carbondioxide_factor branch
+            # below does, by the modeled secondary carrier's share of energy.
+            if zero_rated and total_energy > 0.0:
+                ets_relevant_emission = total_emission * (primary_energy_quantity / total_energy)
+            else:
+                ets_relevant_emission = total_emission
+        elif carbondioxide_factor > 0.0:
             total_emission = carbondioxide_factor * total_energy
             # carbondioxide_factor blends primary+secondary into one factor,
             # so there is no direct primary/secondary emission split to
@@ -1168,7 +1213,10 @@ class LegacyWeightedUtilityMaritimeCargoLogic(NATMDecisionScorer, MaritimeCargoD
         agent: MaritimeCargoShiplineAgent,
         technology_row: pd.Series,
         year: int,
+        operation_segment: str,
     ) -> float:
+        segment = clean_scope_value(operation_segment)
+        utilization_factor = agent.segment_utilization_factor(segment, year)
         trip_length = float(technology_row["trip_length_km"])
         trip_days = float(technology_row["trip_days_per_year"])
         load_factor = agent.scenario_value(
@@ -1189,6 +1237,7 @@ class LegacyWeightedUtilityMaritimeCargoLogic(NATMDecisionScorer, MaritimeCargoD
             * float(load_factor or 0.0)
             * trip_length
             * trip_days
+            * utilization_factor
             * float(freight_rate or 0.0)
         )
 
@@ -1345,8 +1394,7 @@ class LegacyWeightedUtilityMaritimeCargoLogic(NATMDecisionScorer, MaritimeCargoD
         technology_row: pd.Series,
         year: int,
     ) -> float:
-        del asset
-        return self.annual_revenue(agent, technology_row, year)
+        return self.annual_revenue(agent, technology_row, year, str(asset["segment"]))
 
     def _additional_operating_costs(self, revenue: float, technology_row: pd.Series) -> float:
         maintenance_cost = revenue * float(technology_row["maintenance_cost_share"])

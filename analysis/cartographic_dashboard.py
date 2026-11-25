@@ -39,18 +39,30 @@ METRIC_METADATA = {
         "large_factor": 1_000_000.0,
         "large_threshold": 1_000.0,
     },
+    # kWh, not MWh: primary/secondary_energy_consumption are in kWh, confirmed
+    # against the technology catalog's emission factors, which are defined per
+    # kWh (kerosene 0.2636 kg CO2/kWh reproduces total_emission exactly for
+    # aircraft burning only primary fuel). These were previously labelled MWh,
+    # which overstated every displayed energy figure by 1000x.
     "energy_demand": {
         "label": "Energy demand",
-        "unit": "MWh",
+        "unit": "kWh",
         "large_unit": "TWh",
-        "large_factor": 1_000_000.0,
-        "large_threshold": 1_000.0,
+        "large_factor": 1_000_000_000.0,
+        "large_threshold": 1_000_000.0,
     },
     "fuel_uplift_kg": {
         "label": "Fuel uplift mass",
         "unit": "kg",
         "large_unit": "tonnes",
         "large_factor": 1_000.0,
+    },
+    "electricity_demand": {
+        "label": "Electricity demand",
+        "unit": "kWh",
+        "large_unit": "TWh",
+        "large_factor": 1_000_000_000.0,
+        "large_threshold": 1_000_000.0,
     },
     "trips": {"label": "Trips", "unit": "trips"},
     "co2": {
@@ -132,6 +144,67 @@ CATEGORICAL_PALETTE = (
     "#4a3aa7",  # violet
     "#e34948",  # red
 )
+# Which modelled energy carriers are made from electricity, and how much
+# electricity each takes to make.
+#
+# The efficiencies are an ASSUMPTION LAYERED ON TOP OF THE MODEL, not a model
+# output: the technology catalog carries vehicle efficiency (kilometer_per_kwh)
+# and emission factors, but nothing about upstream conversion, so the run
+# results cannot answer "how much power does this need" on their own. The
+# defaults below are conventional literature values and are adjustable in the
+# UI; every electricity figure shown scales directly with them.
+#
+# `field` is the consumption column the carrier's energy is recorded in, and
+# `efficiency` is fuel energy out per unit of electricity in (both kWh).
+ELECTRICITY_SOURCES = {
+    "e_kerosene": {
+        "label": "E-kerosene (PtL)",
+        "carrier_column": "secondary_energy_carrier",
+        "field": "secondary_energy_consumption",
+        "efficiency": 0.48,
+        "note": "power-to-liquid, electricity to finished jet fuel",
+    },
+    "hydrogen": {
+        "label": "Renewable hydrogen",
+        "carrier_column": "primary_energy_carrier",
+        "field": "primary_energy_consumption",
+        "efficiency": 0.68,
+        "note": "electrolysis, LHV basis",
+    },
+    "electricity": {
+        "label": "Direct electricity",
+        "carrier_column": "primary_energy_carrier",
+        "field": "primary_energy_consumption",
+        "efficiency": 0.95,
+        "note": "grid to battery, charging losses only",
+    },
+    "battery": {
+        "label": "Direct electricity (battery)",
+        "carrier_column": "secondary_energy_carrier",
+        "field": "secondary_energy_consumption",
+        "efficiency": 0.95,
+        "note": "grid to battery, charging losses only",
+    },
+    # Maritime hybrid propulsion (hybrid_regional/_deepsea) records its
+    # battery-assist energy as secondary_energy_carrier == "electricity" --
+    # the same carrier *string* as the "electricity" entry above, but that
+    # entry is scoped to primary_energy_carrier (a battery-electric vessel's
+    # only fuel). A dict can't hold two keys both named "electricity", and
+    # matching was previously done by treating the dict key itself as the
+    # carrier string to look up, so this combination fell through both
+    # existing entries silently. `match_value` decouples the two: the key is
+    # a unique identifier, `match_value` is the actual string compared
+    # against the column.
+    "hybrid_electricity": {
+        "label": "Hybrid propulsion electricity",
+        "carrier_column": "secondary_energy_carrier",
+        "match_value": "electricity",
+        "field": "secondary_energy_consumption",
+        "efficiency": 0.95,
+        "note": "grid to battery, charging losses only (hybrid assist)",
+    },
+}
+
 CHART_SURFACE = "#fcfcfb"
 CHART_GRID = "#e1e0d9"
 CHART_AXIS = "#c3c2b7"
@@ -672,6 +745,95 @@ def _metric_year_totals(folder: str, metric: str) -> pd.Series:
         total = values if total is None else total + values
     frame = frame.assign(_value=total)
     return frame.groupby("year")["_value"].sum()
+
+
+@functools.lru_cache(maxsize=128)
+def electricity_fuel_energy(folder: str) -> pd.DataFrame:
+    """Fuel energy (kWh) per year and electricity-derived carrier for one run.
+
+    Deliberately stops at the *fuel* energy rather than the electricity: the
+    conversion efficiencies are user-adjustable, and keeping them out of the
+    cached step means changing one re-scales the result without re-reading any
+    CSV.
+    """
+    path = RESULTS_ROOT / folder / "aircraft.csv"
+    if not path.exists():
+        return pd.DataFrame(columns=["year", "source", "fuel_kwh"])
+
+    columns = ["year", "primary_energy_carrier", "secondary_energy_carrier"]
+    columns += ["primary_energy_consumption", "secondary_energy_consumption"]
+    try:
+        frame = pd.read_csv(path, usecols=lambda column: column in columns)
+    except Exception:
+        return pd.DataFrame(columns=["year", "source", "fuel_kwh"])
+    if "year" not in frame.columns:
+        return pd.DataFrame(columns=["year", "source", "fuel_kwh"])
+
+    rows = []
+    for source, spec in ELECTRICITY_SOURCES.items():
+        carrier_column = spec["carrier_column"]
+        field = spec["field"]
+        if carrier_column not in frame.columns or field not in frame.columns:
+            continue
+        match_value = spec.get("match_value", source)
+        matched = frame.loc[
+            frame[carrier_column].astype(str).str.strip().str.lower().eq(match_value)
+        ]
+        if matched.empty:
+            continue
+        totals = (
+            pd.to_numeric(matched[field], errors="coerce")
+            .fillna(0.0)
+            .groupby(matched["year"])
+            .sum()
+        )
+        totals = totals.loc[totals > 0]
+        if totals.empty:
+            continue
+        rows.append(
+            pd.DataFrame(
+                {
+                    "year": totals.index.astype(int),
+                    "fuel_kwh": totals.to_numpy(dtype=float),
+                    "source": source,
+                }
+            )
+        )
+    if not rows:
+        return pd.DataFrame(columns=["year", "source", "fuel_kwh"])
+    return pd.concat(rows, ignore_index=True)
+
+
+def electricity_demand(folder: str, efficiencies: dict[str, float]) -> pd.DataFrame:
+    """Electricity (kWh) needed per year and source to make that run's fuels."""
+    fuel = electricity_fuel_energy(folder)
+    if fuel.empty:
+        return pd.DataFrame(columns=["year", "source", "electricity_kwh"])
+    frame = fuel.copy()
+    frame["efficiency"] = (
+        frame["source"]
+        .map(lambda source: efficiencies.get(source, ELECTRICITY_SOURCES[source]["efficiency"]))
+        .astype(float)
+        .clip(lower=0.01)
+    )
+    frame["electricity_kwh"] = frame["fuel_kwh"] / frame["efficiency"]
+    return frame[["year", "source", "electricity_kwh", "fuel_kwh"]]
+
+
+def electricity_trajectories(folder: str, efficiencies: dict[str, float]) -> pd.DataFrame:
+    """Total electricity demand per year for every sibling scenario."""
+    frames = []
+    for sibling in scenario_sibling_folders(folder):
+        demand = electricity_demand(sibling, efficiencies)
+        if demand.empty:
+            continue
+        totals = demand.groupby("year", as_index=False)["electricity_kwh"].sum()
+        totals = totals.rename(columns={"electricity_kwh": "value"})
+        totals["scenario"] = _scenario_name(sibling)
+        frames.append(totals)
+    if not frames:
+        return pd.DataFrame(columns=["year", "value", "scenario"])
+    return pd.concat(frames, ignore_index=True)
 
 
 def scenario_trajectories(folder: str, metric: str) -> pd.DataFrame:
@@ -1372,6 +1534,137 @@ _MAP_SHELL_HTML = _build_map_shell_html()
 def CartographicMap(shell_html: str, map_data: dict): ...
 
 
+def _electricity_panel(
+    collapsed: tuple[pd.DataFrame, dict[str, list[str]]],
+    fuel_by_source: pd.DataFrame,
+    efficiency_state: dict,
+    efficiencies: dict[str, float],
+    folder: str,
+) -> None:
+    """Electricity needed to make this run's electricity-derived fuels."""
+    trajectories, membership = collapsed
+    present = (
+        sorted(fuel_by_source["source"].unique().tolist()) if not fuel_by_source.empty else []
+    )
+
+    solara.Markdown("### Electricity demand")
+    if not present:
+        solara.Markdown(
+            "This case uses no electricity-derived energy carrier "
+            "(no e-fuel, hydrogen or direct electricity), so it needs no electricity. "
+            "The maritime cases run on LNG, marine diesel and biofuel; "
+            "aviation cases pick up e-kerosene as the SAF mandate tightens."
+        )
+        return
+
+    solara.Markdown(
+        "Electricity required *upstream* to produce the fuels burned -- not energy burned "
+        "in flight. The model has no conversion-efficiency parameter, so the figures below "
+        "rest on the assumptions set here and scale directly with them."
+    )
+    for source in present:
+        spec = ELECTRICITY_SOURCES[source]
+        state = efficiency_state[source]
+        solara.SliderFloat(
+            label=f"{spec['label']} efficiency ({spec['note']})",
+            value=state,
+            min=0.10,
+            max=1.0,
+            step=0.01,
+        )
+        solara.Markdown(
+            f"&nbsp;&nbsp;`{state.value:.2f}` -> "
+            f"**{1.0 / max(state.value, 0.01):.2f} kWh electricity per kWh of fuel**"
+        )
+
+    chart = trajectory_chart(trajectories, "electricity_demand")
+    if chart is None:
+        return
+
+    scenario_count = sum(len(members) for members in membership.values())
+    solara.Markdown(f"#### Electricity demand over time, all {scenario_count} scenario runs")
+    solara.FigureAltair(chart)
+
+    identical = {label: members for label, members in membership.items() if len(members) > 1}
+    if identical:
+        merged = "; ".join(
+            f"**{label}** = {', '.join(members)}" for label, members in sorted(identical.items())
+        )
+        solara.Markdown(
+            f"Scenarios drawn as one line because their values are identical: {merged}."
+        )
+
+    # The year x scenario grid.
+    factor, unit = _display_scale(float(trajectories["value"].abs().max()), "electricity_demand")
+    table = (
+        trajectories.assign(value=trajectories["value"] / factor)
+        .pivot_table(index="year", columns="series", values="value", aggfunc="first")
+        .reset_index()
+    )
+    table = table.loc[table["year"].mod(5).eq(0) | table["year"].eq(table["year"].max())]
+    table.columns.name = None
+    value_columns = [column for column in table.columns if column != "year"]
+    table[value_columns] = table[value_columns].round(3)
+    table = table.rename(
+        columns={
+            "year": "Year",
+            **{c: f"{c}{f' ({unit})' if unit else ''}" for c in value_columns},
+        }
+    )
+    _show_table(table, max_rows=12)
+
+    # Which carrier the demand comes from, for the selected run.
+    breakdown = electricity_demand(folder, efficiencies)
+    if not breakdown.empty:
+        # Year x fuel-type grid: which technology's electricity need this is
+        # (e-kerosene, hydrogen, hybrid-assist battery, ...), not just the
+        # combined total the chart/table above show.
+        by_year_source = (
+            breakdown.assign(
+                label=breakdown["source"].map(lambda s: ELECTRICITY_SOURCES[s]["label"]),
+                value=breakdown["electricity_kwh"] / factor,
+            )
+            .pivot_table(index="year", columns="label", values="value", aggfunc="sum")
+            .reset_index()
+        )
+        last_year = by_year_source["year"].max()
+        by_year_source = by_year_source.loc[
+            by_year_source["year"].mod(5).eq(0) | by_year_source["year"].eq(last_year)
+        ]
+        by_year_source.columns.name = None
+        fuel_columns = [c for c in by_year_source.columns if c != "year"]
+        by_year_source[fuel_columns] = by_year_source[fuel_columns].fillna(0.0).round(3)
+        by_year_source = by_year_source.rename(
+            columns={"year": "Year", **{c: f"{c} ({unit})" for c in fuel_columns}}
+        )
+        solara.Markdown(f"#### Electricity demand by fuel type -- `{_scenario_name(folder)}`")
+        _show_table(by_year_source, max_rows=12)
+
+        by_source = breakdown.groupby("source", as_index=False)[
+            ["electricity_kwh", "fuel_kwh"]
+        ].sum()
+        by_source["Carrier"] = by_source["source"].map(
+            lambda s: ELECTRICITY_SOURCES[s]["label"]
+        )
+        by_source[f"Electricity over horizon ({unit})"] = (
+            by_source["electricity_kwh"] / factor
+        ).round(3)
+        by_source[f"Fuel energy produced ({unit})"] = (by_source["fuel_kwh"] / factor).round(3)
+        solara.Markdown(
+            f"#### Where the electricity goes (total over horizon) -- `{_scenario_name(folder)}`"
+        )
+        _show_table(
+            by_source[
+                [
+                    "Carrier",
+                    f"Electricity over horizon ({unit})",
+                    f"Fuel energy produced ({unit})",
+                ]
+            ],
+            max_rows=8,
+        )
+
+
 @solara.component
 def Page() -> None:
     folders = list_result_folders()
@@ -1437,6 +1730,24 @@ def Page() -> None:
     if metric.value not in metric_options:
         metric.value = metric_options[0]
     display_unit = solara.use_reactive(AUTO_UNIT_OPTION)
+    # Conversion efficiencies for the electricity panel. Reactive state has to
+    # be created on every render (hooks rule), so these live up here with the
+    # other reactives rather than beside the panel that uses them.
+    efficiency_state = {
+        source: solara.use_reactive(spec["efficiency"])
+        for source, spec in ELECTRICITY_SOURCES.items()
+    }
+    efficiencies = {source: float(state.value) for source, state in efficiency_state.items()}
+    electricity_by_scenario = solara.use_memo(
+        lambda: collapse_identical_trajectories(
+            electricity_trajectories(selected.value, efficiencies)
+        ),
+        [_scenario_family(selected.value), tuple(sorted(efficiencies.items()))],
+    )
+    electricity_sources_present = solara.use_memo(
+        lambda: electricity_fuel_energy(selected.value),
+        [selected.value],
+    )
     # Computed here, above the early return below, because hooks must run on
     # every render in the same order. Keyed on the scenario family rather than
     # the folder, so switching between siblings reuses the same trajectories.
@@ -1593,6 +1904,14 @@ def Page() -> None:
             }
         )
         _show_table(table, max_rows=12)
+
+    _electricity_panel(
+        electricity_by_scenario,
+        electricity_sources_present,
+        efficiency_state,
+        efficiencies,
+        selected.value,
+    )
 
     if not robust_frontier.empty:
         if year_value.value is not None and "year" in robust_frontier.columns:

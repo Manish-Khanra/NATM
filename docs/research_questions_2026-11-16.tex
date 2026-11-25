@@ -1,0 +1,266 @@
+% Record of research-paper questions and answers from the conversation on
+% 2026-11-16. Answers are traced to specific files/functions in the NATM
+% codebase as of that date; re-verify against the code if it changes later.
+% No LaTeX compiler was available in the environment that produced this
+% file, so it has NOT been compiled/verified -- please compile it yourself
+% and report back if anything breaks.
+
+\documentclass{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{hyperref}
+
+\title{NATM Framework --- Research Questions and Answers}
+\date{2026-11-16}
+
+\begin{document}
+\maketitle
+
+\section*{Questions}
+
+\begin{enumerate}[leftmargin=*]
+  \item When can an aircraft or vessel be replaced? Is replacement triggered
+    by age or technical lifetime? Can operators replace or retrofit assets
+    early? If transport activity grows, how does the model decide whether to
+    use existing assets more intensively or add new ones?
+
+  \item Which technologies and fuels were actually available? Please give
+    the options enabled for passenger aviation, air cargo and maritime
+    transport. What makes an option feasible for a specific asset or route,
+    such as range, vessel class, commercial availability or access to fuel?
+    Were fuel mandates applied as constraints or reflected in costs?
+
+  \item What enters the NPV, and what varies across the six Ariadne
+    pathways? Which costs and revenues are included for aircraft and
+    vessels? In particular, which of the electricity, fuel and carbon
+    prices, activity projections and policy assumptions vary by pathway, and
+    which are shared?
+
+  \item How does the 2025 activity baseline grow into future route
+    activity? The baseline comes from observed flights and sailings. Are
+    Ariadne growth rates applied uniformly to those routes, or do they
+    differ by segment, route or vessel class? Can fleet renewal change which
+    routes an asset serves?
+
+  \item How are fleet choices converted into the demand profile passed to
+    the market assessment? What determines energy use per flight or voyage,
+    how is it attributed to airports or ports, and which output becomes the
+    single profile used across all six market pathways? If the fleet model
+    produces pathway-specific operating demand, which trajectory is passed
+    onward?
+\end{enumerate}
+
+\section*{Answers}
+
+Every claim below is traced to a specific file or function in the
+codebase, not reconstructed from memory. Where something is a documented
+limitation rather than a finding, that is stated explicitly.
+
+\subsection*{1. Replacement: age-triggered, with a narrow early-replacement
+window; growth favors existing assets first}
+
+\textbf{The trigger is technical lifetime, not calendar age.} On creation,
+each asset is given \verb|replacement_year = start_year + (lifetime_years|
+\verb|- current_age)| (\texttt{fleet.py::\_initial\_replacement\_year}); after
+any technology swap, \verb|replacement_year = year + lifetime_years| of the
+newly chosen technology (\texttt{fleet.py::apply\_technology}, line 475).
+Replacement becomes ``due'' purely when
+\verb|replacement_year <= current_year|
+(\texttt{fleet.py::due\_replacement\_indices}, line 442).
+
+\textbf{Early replacement is possible, but narrowly.} It is available only
+for assets still on a \emph{conventional} technology, only within an
+\verb|acceleration_window| computed from policy pressure ---
+\verb|acceleration_window = int((adoption_mandate + clean_fuel_subsidy) * 5)|
+(\texttt{scorer.py::replacement\_row\_indices}) --- and only once a
+\verb|minimum_holding_period| has elapsed since the asset's last investment.
+Retrofitting is therefore driven by policy/subsidy strength, not operator
+discretion, and is bounded by a minimum ownership period.
+
+\textbf{Growth favors intensifying existing assets before adding new
+ones, and this is capped, not elastic.} Each year,
+\verb|segment_utilization_factor = min(1.0, allocated_demand / full_capacity)|
+scales how much of the \emph{existing} fleet's real baseline distance is
+actually flown (\texttt{aviation\_passenger\_airline.py}, line 269, mirrored
+in the cargo and maritime agents) --- demand below full fleet capacity is
+absorbed by flying the existing fleet \emph{less}, never more than its real
+base-year rate. Only when demand exceeds full existing capacity does
+\verb|_add_growth_assets| (\texttt{scorer.py}, line 180) add new assets,
+sized to close exactly that gap.
+
+This utilization-factor mechanism has a documented history worth citing
+directly: the code comment records that before it existed, ``every aircraft
+always flew its fixed, real \verb|annual_distance_km_base| every year
+regardless of\ldots scenario,'' which the comment states was
+\emph{confirmed} to make total passenger energy demand byte-identical
+across all 8 scenarios despite demand differing by up to $\sim$19\%. That is
+a concrete, verifiable before/after in the model's own development history,
+worth citing if the paper discusses model validation.
+
+\subsection*{2. Technology and fuel options, feasibility, and mandates}
+
+Full enabled catalog, current state (service-entry year in parentheses):
+
+\begin{longtable}{p{2.6cm}p{3.4cm}p{3.4cm}p{5.6cm}}
+\textbf{Sector} & \textbf{Conventional} & \textbf{Bio/drop-in} & \textbf{Synthetic/alternative} \\
+\hline
+\endhead
+Passenger aviation &
+  kerosene short/medium/long (1995--2000); efficient turbofan short/medium (2035) &
+  drop-in SAF (HEFA) short/medium/long (2025) &
+  e-kerosene (PtL) short/medium/long (2028); hydrogen short (2035); hybrid-electric short (2031) \\
+Cargo aviation &
+  kerosene freight medium/long (2005--2008) &
+  drop-in SAF (HEFA) freight medium/long (2025) &
+  e-kerosene freight medium/long (2028); hydrogen freight medium (2030) \\
+Maritime cargo &
+  marine diesel regional/deepsea (2010--2011) &
+  biofuel (FAME) regional/deepsea (2025) &
+  LNG (2015); methanol (2023); ammonia (2030--2031); hydrogen regional (2032); battery regional (2022); hybrid regional/deepsea (2018); wind-assist (2015); plus ``ready'' (retrofit-prepared, still-diesel) variants of methanol/ammonia \\
+\end{longtable}
+
+\textbf{Feasibility is three independent gates}, applied in this order
+(\texttt{technology\_catalog.py::candidates\_for\_operation}, then
+\texttt{legacy\_weighted\_utility.py::is\_candidate\_available}):
+\begin{enumerate}
+  \item \textbf{Segment and range}: a candidate's \verb|trip_length_km| must
+    meet the asset's required stage length for its segment; if \emph{no}
+    candidate in the catalog clears that bar, the filter is skipped entirely
+    rather than leaving zero candidates.
+  \item \textbf{Service-entry year}: a hard cutoff --- unavailable before its
+    \verb|service_entry_year|, no exception.
+  \item \textbf{Scenario-driven availability flags}: \verb|technology_availability|,
+    \verb|infrastructure_availability|, and (only for blended/drop-in fuels)
+    \verb|saf_availability| --- each defaults to available (1.0) when the
+    scenario file carries no explicit row for that technology/segment/year.
+\end{enumerate}
+
+\textbf{One point worth flagging precisely}: the catalog carries
+\verb|minimum_airport_class|/\verb|minimum_port_class| columns, but these are
+confirmed to be \textbf{never read anywhere in the decision logic} ---
+descriptive metadata only, not an active constraint. If the paper references
+vessel-class or airport-class feasibility, that gate does not currently
+exist in the code, only in the data schema.
+
+\textbf{Mandates are a hard physical constraint, not a cost nudge.}
+\verb|effective_secondary_share| sets the actual blend fraction burned to
+\verb|min(technology_max_share, mandate_share)| once a mandate is active
+(\texttt{legacy\_weighted\_utility.py::effective\_secondary\_share}, line
+120) --- this directly sets \verb|primary_energy_quantity| and
+\verb|secondary_energy_quantity| in \verb|annual_operation_metrics|, which is
+what cost and emissions are computed from. The mandate does not compete for
+selection via utility scoring; it mechanically forces the fuel split, and
+cost follows from that. (A separate, smaller \verb|policy_bonus| term exists
+in the \emph{legacy} weighted-utility scorer, but it is not part of the NPV
+figure the ambiguity-aware selection --- which is what every one of the 24
+simulated cases actually uses --- optimizes on; see Question 3.)
+
+\subsection*{3. What enters NPV, and the pathway-variation table}
+
+NPV (\texttt{scorer.py::calc\_payback\_year}) equals $-$CAPEX at decision
+time, plus the discounted sum over the technology's lifetime of (revenue
+$-$ operating cost $-$ additional costs $-$ depreciation), plus a discounted
+residual value at the end. Concretely:
+\begin{itemize}
+  \item \textbf{Revenue}: payload/seat capacity $\times$ load factor
+    $\times$ distance flown $\times$ fare/freight rate (sector-specific
+    \verb|annual_revenue|).
+  \item \textbf{Operating cost}: \verb|energy_cost| (primary $+$ secondary
+    fuel quantity $\times$ scenario price) $+$ \verb|emission_cost|
+    (chargeable emissions $\times$ carbon price, net of free ETS
+    allocation).
+  \item \textbf{Additional costs}: maintenance
+    (\verb|maintenance_cost_share| $\times$ revenue) plus fixed operational
+    overheads as a percentage of revenue --- crew/port-fees/cargo-handling
+    for maritime, wages/landing-fees for aviation.
+  \item \textbf{Depreciation}: \verb|depreciation_cost_share| $\times$
+    CAPEX, charged every year of the holding period.
+\end{itemize}
+
+Economic/environmental ``utility'' and the policy bonus are computed and
+recorded for diagnostics, but are \textbf{not part of the NPV figure
+itself} --- confirmed directly in
+\texttt{ambiguity\_aware\_utility.py::\_decision\_score}, whose comment
+states the ambiguity-aware selection criterion is net present value, ``not
+the normalized payback-year heuristic.''
+
+Pathway variation, verified directly across all three sectors' scenario
+files --- an identical pattern in every one:
+
+\begin{longtable}{p{7.5cm}p{7.5cm}}
+\textbf{Varies by pathway (6 distinct values)} & \textbf{Shared across all 6 pathways} \\
+\hline
+\endhead
+Primary energy price, secondary energy price (maritime also: tertiary energy price) &
+  Carbon price/tax, clean fuel subsidy, ETS allocation factor, freight rate, load factor, technology/infrastructure availability, operator market share, planned delivery count \\
+Demand (passenger-km / freight-tonne-km) & --- \\
+SAF/biofuel mandate (aviation only --- maritime's \texttt{biofuel\_mandate} is shared, not pathway-varying) & --- \\
+\end{longtable}
+
+\textbf{One caveat to state precisely in the paper}: cargo aviation's
+\verb|freight_tonne_km_demand| technically has six separate rows (one per
+pathway) but --- confirmed directly, and confirmed as an intentional design
+choice rather than a data bug --- the six rows carry \textbf{identical
+values}. For cargo aviation specifically, demand does not actually
+differentiate the six pathways even though the data schema allows it to;
+passenger aviation's and maritime's demand do genuinely differ by pathway.
+
+\subsection*{4. Baseline growth: segment-level, not route-level; fleet
+renewal never reassigns routes}
+
+\textbf{Growth rates differ by segment, not by individual route or vessel
+class.} Demand is scenario-scoped at country $\times$ segment only
+(\texttt{short}/\texttt{medium}/\texttt{long} for aviation,
+\texttt{regional}/\texttt{deepsea} for maritime) --- confirmed directly
+against the scenario files; there is no per-route or per-operator demand
+row. Within a segment, growth is uniform across every route/asset in that
+segment; across segments, trajectories differ (e.g.\ passenger
+short/medium/long diverge by several percentage points by 2050 under the
+same pathway).
+
+\textbf{Fleet renewal never changes which route or hub an asset serves.}
+\verb|apply_technology| (\texttt{fleet.py}, line 457) updates technology,
+carrier, replacement year, age, and financial/emissions fields --- it does
+\textbf{not} touch \verb|main_hub_base|, \verb|segment|, or any
+route-identifying field. A technology swap changes \emph{what} an asset
+burns, never \emph{where} it flies. Growth additions are seeded from the
+same segment's template, so even new aircraft inherit that segment's
+characteristic route profile rather than being freely routable.
+
+\subsection*{5. Fleet $\to$ demand profile $\to$ market assessment: one
+important limitation to flag}
+
+Energy use per flight/voyage is \verb|annual_operation_metrics|'s
+\[
+\text{total\_energy} = \frac{\text{real baseline distance} \times \text{utilization\_factor}}{\text{technology efficiency}},
+\]
+split into primary/secondary by the (mandate-determined) blend share. This
+is attributed to a single real hub per asset (\verb|main_hub_base|) --- not
+a multi-airport route network; that is the basis for every per-airport
+total in the dashboard and the 15-minute export. Energy per route (not just
+per hub) \emph{is} separately available via the OpenAP-derived route
+summary, but that is an external post-processing join, not something the
+simulation itself attributes.
+
+\textbf{On ``which single profile gets passed to the market
+assessment''}: precision over speculation here. A search of this
+repository's documentation found no ``market assessment'' component, no
+Ariadne-coupling description, and no aggregation step that merges
+pathway-specific outputs into one. What exists is the
+\verb|realized_scenario_id| mechanism: each \emph{case} (e.g.\
+\texttt{fokusH2-risk-neutral}) is configured with one
+\verb|realized_scenario_id|, and that case's \texttt{aircraft.csv} /
+\texttt{*\_energy\_emissions.csv} contains the single simulated trajectory
+under that one realized pathway --- not six parallel trajectories merged
+into one. There is no NATM-internal step that picks ``the'' profile out of
+six; \textbf{there are six (or eight, counting the two risk-averse cases)
+separate single-pathway output sets}, one per case, and whichever one feeds
+``the market assessment'' is a choice made outside this codebase --- most
+likely by running the case whose \verb|realized_scenario_id| matches the
+pathway the market assessment is evaluating. Stating precisely how that
+handoff happens would describe an external process not visible from this
+repository alone.
+
+\end{document}
